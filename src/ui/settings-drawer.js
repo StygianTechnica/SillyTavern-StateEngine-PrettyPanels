@@ -2,9 +2,11 @@
 // for every global Pretty Panels control. Rendered from settings.html
 // and appended to #extensions_settings2, the same way State Engine's own
 // drawer is. Toggles write through panel-manager.js, which updates the
-// registry and the page immediately.
+// registry and the page immediately. The Layout Library and Panel
+// Library sections are wired in src/ui/library-drawer.js.
 
 import { getState, onStateChange, setEnabled, setEditingMode } from '../panels/panel-manager.js';
+import { initLibraryDrawer } from './library-drawer.js';
 
 // SillyTavern resolves extension templates relative to
 // public/scripts/extensions/, i.e. "third-party/<folder name>". Derived
@@ -42,4 +44,6 @@ export async function addSettingsDrawer() {
 
     renderState(getState());
     onStateChange(renderState);
+
+    initLibraryDrawer();
 }

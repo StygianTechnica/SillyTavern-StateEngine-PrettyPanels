@@ -1,12 +1,13 @@
 // Properties popup for ONE panel. Each Panel owns its own instance
 // (created on open, discarded on close), so several panels' popups can
-// be open at once without sharing state. MVP contents only: name,
-// position and size (read-only), lock toggle, delete, close.
+// be open at once without sharing state. Contents: name, position and
+// size (read-only), lock toggle, delete, close, and the Panel Library
+// actions for THIS instance - save as a template, export as a template.
 
 const POPUP_GAP = 8;
 
 export class PanelPropertiesPopup {
-    // hooks: { onLockToggle(locked), onDelete(), onClose() }
+    // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(), onClose() }
     constructor(panel, hooks) {
         this.panel = panel;
         this.hooks = hooks;
@@ -72,6 +73,15 @@ export class PanelPropertiesPopup {
                     <i class="fa-solid fa-trash-can"></i><span>Delete</span>
                 </button>
             </div>
+            <div class="pp-properties-section-label">Panel Library</div>
+            <div class="pp-properties-actions">
+                <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library">
+                    <i class="fa-solid fa-floppy-disk"></i><span>Save</span>
+                </button>
+                <button type="button" class="menu_button pp-properties-button" data-action="export-template" title="Export this panel as a template file">
+                    <i class="fa-solid fa-file-export"></i><span>Export</span>
+                </button>
+            </div>
         `;
         // Keep clicks inside the popup from reaching SillyTavern's own
         // outside-click handlers (which would close open drawers/menus).
@@ -81,6 +91,8 @@ export class PanelPropertiesPopup {
             this.hooks.onLockToggle(!this.panel.record.locked);
         });
         el.querySelector('[data-action="delete"]').addEventListener('click', () => this.hooks.onDelete());
+        el.querySelector('[data-action="save-template"]').addEventListener('click', () => this.hooks.onSaveTemplate());
+        el.querySelector('[data-action="export-template"]').addEventListener('click', () => this.hooks.onExportTemplate());
         return el;
     }
 

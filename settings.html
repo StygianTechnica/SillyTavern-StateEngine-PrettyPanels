@@ -23,6 +23,42 @@
             <!-- Future global settings go here. -->
             <div id="pp_global_settings" class="pp-settings-section"></div>
 
+            <hr class="sysHR" />
+
+            <div class="pp-library">
+                <div class="pp-library-heading">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <b>Layout Library</b>
+                </div>
+                <small class="pp-library-hint">Complete HUD designs, shared across all chats. Only the active layout is shown and edited.</small>
+                <select id="pp_layout_select" class="text_pole" title="Active layout"></select>
+                <div class="pp-library-actions">
+                    <div class="menu_button fa-solid fa-plus" data-layout-action="new" title="New layout"></div>
+                    <div class="menu_button fa-solid fa-clone" data-layout-action="duplicate" title="Duplicate active layout"></div>
+                    <div class="menu_button fa-solid fa-pen" data-layout-action="rename" title="Rename active layout"></div>
+                    <div class="menu_button fa-solid fa-file-export" data-layout-action="export" title="Export active layout"></div>
+                    <div class="menu_button fa-solid fa-file-import" data-layout-action="import" title="Import a layout"></div>
+                    <div class="menu_button fa-solid fa-trash-can" data-layout-action="delete" title="Delete active layout"></div>
+                </div>
+            </div>
+
+            <hr class="sysHR" />
+
+            <div class="pp-library">
+                <div class="pp-library-heading">
+                    <i class="fa-solid fa-shapes"></i>
+                    <b>Panel Library</b>
+                </div>
+                <small class="pp-library-hint">Reusable panel templates. Save them from a panel's properties; add them to a layout from the Magic Wand.</small>
+                <div id="pp_template_list" class="pp-template-list"></div>
+                <div class="pp-library-actions">
+                    <div id="pp_template_import" class="menu_button menu_button_icon" title="Import a panel template">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>Import Template</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>

@@ -8,6 +8,10 @@
 // all) and Editing Mode (editing chrome visible). Disabling only tears
 // down the DOM - saved records are untouched, and re-enabling rebuilds
 // every panel from the registry.
+//
+// Only the active layout's panels are ever mounted. Switching or
+// deleting the active layout goes through switchLayout()/removeLayout()
+// here so the screen follows the Layout Library.
 
 import { Panel } from './panel.js';
 import {
@@ -19,9 +23,12 @@ import {
     setEnabledFlag,
     isEditingMode,
     setEditingModeFlag,
-    DEFAULT_PANEL_WIDTH,
-    DEFAULT_PANEL_HEIGHT,
 } from './panel-registry.js';
+import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
+import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
+import { getTemplate } from '../library/panel-library.js';
+import { confirmYesNo } from '../ui/dialogs.js';
+import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
 
 // Panels sit above the chat but below SillyTavern's own popups/drawers.
 const BASE_Z_INDEX = 2900;
@@ -52,6 +59,12 @@ const hooks = {
     onFocus(panel) {
         bringToFront(panel);
     },
+    onSaveTemplateRequest(panel) {
+        void saveInstanceToLibrary(panel.record);
+    },
+    onExportTemplateRequest(panel) {
+        exportInstanceTemplate(panel.record);
+    },
 };
 
 function bringToFront(panel) {
@@ -80,17 +93,12 @@ function defaultPlacement() {
     };
 }
 
-async function confirmYesNo(message) {
-    try {
-        const { callGenericPopup, POPUP_TYPE, POPUP_RESULT } = SillyTavern.getContext();
-        if (typeof callGenericPopup === 'function' && POPUP_TYPE) {
-            const result = await callGenericPopup(message, POPUP_TYPE.CONFIRM);
-            return result === (POPUP_RESULT?.AFFIRMATIVE ?? 1);
-        }
-    } catch {
-        // Fall through to the native dialog.
+// True if a mounted panel already sits (almost) exactly at x, y.
+function isOccupied(x, y) {
+    for (const panel of panels.values()) {
+        if (Math.abs(panel.record.x - x) < 4 && Math.abs(panel.record.y - y) < 4) return true;
     }
-    return window.confirm(message);
+    return false;
 }
 
 async function confirmAndDelete(id) {
@@ -110,6 +118,12 @@ function mountAllPanels() {
 function unmountAllPanels() {
     for (const panel of panels.values()) panel.destroy();
     panels.clear();
+}
+
+// Rebuilds the screen from the (possibly newly) active layout.
+function reloadPanels() {
+    unmountAllPanels();
+    if (isEnabled()) mountAllPanels();
 }
 
 // Restores every panel stored in the registry (if enabled). Idempotent.
@@ -137,6 +151,40 @@ export function createPanel() {
     if (!isEnabled() || !isEditingMode()) return null;
     const record = createPanelRecord(defaultPlacement());
     return mountPanel(record);
+}
+
+// Inserts a new instance of a Panel Library template into the active
+// layout. The instance is independent: the template is only read.
+export function insertTemplate(templateId) {
+    if (!isEnabled() || !isEditingMode()) return null;
+    const template = getTemplate(templateId);
+    if (!template) return null;
+    const design = pickDesign(template);
+    // Don't land exactly on top of an instance already at the template's
+    // saved spot, or the insert looks like it did nothing.
+    for (let i = 0; i < CASCADE_SLOTS && isOccupied(design.x, design.y); i++) {
+        design.x += CASCADE_STEP;
+        design.y += CASCADE_STEP;
+    }
+    const record = createPanelRecord({ ...design, name: template.name });
+    return mountPanel(record);
+}
+
+// Makes `id` the active layout and swaps the on-screen panels to it.
+export function switchLayout(id) {
+    if (id === getActiveLayoutId()) return true;
+    if (!setActiveLayoutId(id)) return false;
+    reloadPanels();
+    return true;
+}
+
+// Deletes a layout from the Layout Library; if it was the active one,
+// the screen switches to whichever layout became active instead.
+export function removeLayout(id) {
+    const wasActive = id === getActiveLayoutId();
+    if (!deleteLayout(id)) return false;
+    if (wasActive) reloadPanels();
+    return true;
 }
 
 export function deletePanel(id) {

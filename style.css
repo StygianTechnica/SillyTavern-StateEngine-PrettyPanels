@@ -215,3 +215,176 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
 .pp-settings-row .checkbox_label.disabled {
     opacity: 0.5;
 }
+
+.pp-properties-section-label {
+    margin: 8px 0 4px;
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+/* ---------- Layout Library / Panel Library (drawer) ---------- */
+
+.pp-library {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 4px 0;
+}
+
+.pp-library-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pp-library-hint {
+    opacity: 0.7;
+}
+
+.pp-library-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pp-library-actions .menu_button {
+    margin: 0;
+}
+
+.pp-template-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.pp-template-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    border-radius: 5px;
+}
+
+.pp-template-row:hover {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
+}
+
+.pp-template-row .menu_button {
+    margin: 0;
+    padding: 4px 6px;
+}
+
+.pp-template-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-template-size {
+    flex: 0 0 auto;
+    opacity: 0.6;
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-template-empty {
+    opacity: 0.6;
+    font-style: italic;
+    padding: 2px 0;
+}
+
+/* ---------- List picker modal ---------- */
+
+.pp-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background-color: color-mix(in srgb, var(--SmartThemeShadowColor, #000) 45%, transparent);
+}
+
+.pp-modal {
+    box-sizing: border-box;
+    width: min(360px, 100%);
+    max-height: min(70vh, 520px);
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px 10px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.5));
+}
+
+.pp-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.pp-modal-title {
+    font-weight: 600;
+}
+
+.pp-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+}
+
+.pp-modal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pp-modal-item:hover,
+.pp-modal-item:focus-visible {
+    border-color: var(--SmartThemeBorderColor);
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
+    outline: none;
+}
+
+.pp-modal-item i {
+    flex: 0 0 auto;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.pp-modal-item-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-modal-item-detail {
+    flex: 0 0 auto;
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+
+.pp-modal-empty {
+    padding: 8px 2px;
+    opacity: 0.7;
+}

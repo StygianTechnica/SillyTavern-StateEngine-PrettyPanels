@@ -7,7 +7,7 @@
 // committed geometry changes back through `hooks` rather than writing
 // to the registry itself, so persistence stays in one place.
 
-import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from './panel-registry.js';
+import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 
 // Keep at least this much of a panel on-screen so it can always be
@@ -24,6 +24,8 @@ export class Panel {
     //   onLockChange(panel, locked),
     //   onDeleteRequest(panel),
     //   onFocus(panel),
+    //   onSaveTemplateRequest(panel),
+    //   onExportTemplateRequest(panel),
     // }
     constructor(record, hooks) {
         this.record = { ...record };
@@ -82,6 +84,8 @@ export class Panel {
             this.popup = new PanelPropertiesPopup(this, {
                 onLockToggle: (locked) => this.hooks.onLockChange(this, locked),
                 onDelete: () => this.hooks.onDeleteRequest(this),
+                onSaveTemplate: () => this.hooks.onSaveTemplateRequest(this),
+                onExportTemplate: () => this.hooks.onExportTemplateRequest(this),
                 onClose: () => { this.popup = null; },
             });
         }
