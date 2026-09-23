@@ -1,0 +1,219 @@
+/* Pretty Panels - all colours come from SillyTavern's theme variables so
+   panels follow whatever UI theme the user has active. Editing chrome
+   (drag strip, resize grip, edit affordance) only exists visually while
+   body.pp-editing is set. */
+
+.pp-panel {
+    position: fixed;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    box-shadow: 0 2px 10px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.35));
+    z-index: 2900;
+}
+
+.pp-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 10px;
+}
+
+/* ---------- Editing chrome (hidden unless Editing Mode is on) ---------- */
+
+.pp-panel-drag-handle,
+.pp-panel-resize-handle,
+.pp-panel-edit {
+    display: none;
+}
+
+body.pp-editing .pp-panel {
+    outline: 1px dashed color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent);
+    outline-offset: 2px;
+}
+
+body.pp-editing .pp-panel-drag-handle {
+    display: block;
+    flex: 0 0 auto;
+    height: 10px;
+    cursor: move;
+    touch-action: none;
+    background:
+        radial-gradient(circle, color-mix(in srgb, var(--SmartThemeBodyColor) 45%, transparent) 1px, transparent 1.5px)
+        center / 6px 6px repeat-x;
+    opacity: 0.6;
+}
+
+body.pp-editing .pp-panel-drag-handle:hover {
+    opacity: 1;
+}
+
+body.pp-editing .pp-panel-resize-handle {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    touch-action: none;
+    background: linear-gradient(135deg,
+        transparent 50%,
+        color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent) 50%, color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent) 60%,
+        transparent 60%, transparent 70%,
+        color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent) 70%, color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent) 80%,
+        transparent 80%);
+    opacity: 0.7;
+}
+
+/* The edit affordance: a tiny theme-coloured dot in the top-right corner. */
+body.pp-editing .pp-panel-edit {
+    display: block;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--SmartThemeQuoteColor);
+    opacity: 0.55;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+body.pp-editing .pp-panel-edit:hover,
+body.pp-editing .pp-panel-edit:focus-visible {
+    opacity: 1;
+    transform: scale(1.25);
+    animation: pp-edit-pulse 1.2s ease-out infinite;
+    outline: none;
+}
+
+@keyframes pp-edit-pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent); }
+    100% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Locked panels keep the affordance (so they can be unlocked) but lose
+   the move/resize chrome. */
+body.pp-editing .pp-panel.pp-locked .pp-panel-drag-handle,
+body.pp-editing .pp-panel.pp-locked .pp-panel-resize-handle {
+    display: none;
+}
+
+body.pp-editing .pp-panel.pp-locked {
+    outline-style: solid;
+    outline-color: color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+}
+
+body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
+    background-color: var(--SmartThemeEmColor, var(--SmartThemeBorderColor));
+}
+
+.pp-panel.pp-interacting {
+    user-select: none;
+    opacity: 0.92;
+}
+
+/* ---------- Properties popup ---------- */
+
+.pp-properties {
+    position: fixed;
+    z-index: 3100;
+    box-sizing: border-box;
+    width: 220px;
+    padding: 8px 10px 10px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.45));
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
+}
+
+.pp-properties-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.pp-properties-title {
+    font-weight: 600;
+}
+
+.pp-properties-close {
+    padding: 2px 6px;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.pp-properties-close:hover {
+    opacity: 1;
+}
+
+.pp-properties-fields {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 10px;
+    margin: 0 0 8px;
+}
+
+.pp-properties-fields dt {
+    opacity: 0.7;
+}
+
+.pp-properties-fields dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-properties-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.pp-properties-button {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0;
+}
+
+.pp-properties-button.pp-active {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.pp-properties-button.pp-danger:hover {
+    color: var(--warning, #e0605a);
+}
+
+/* ---------- Wand menu ---------- */
+
+#pp-wand-editing-mode .pp-wand-state {
+    margin-left: auto;
+    opacity: 0.6;
+}
+
+#pp-wand-editing-mode.pp-wand-active .pp-wand-state {
+    color: var(--SmartThemeQuoteColor);
+    opacity: 1;
+}

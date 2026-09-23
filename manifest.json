@@ -1,0 +1,14 @@
+{
+    "name": "SillyTavern-StateEngine-PrettyPanels",
+    "display_name": "State Engine Pretty Panels",
+    "description": "Free-floating, theme-aware HUD panels you can create, move, resize, and lock. Built on the State Engine API.",
+    "version": "0.1.0",
+    "js": "src/index.js",
+    "css": "style.css",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "author": "StygianTechnica",
+    "homePage": "https://github.com/StygianTechnica/SillyTavern-StateEngine-PrettyPanels",
+    "auto_update": false
+}
