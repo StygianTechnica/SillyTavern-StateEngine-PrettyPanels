@@ -3,6 +3,11 @@
 // here, writes the registry (which persists), then updates the DOM.
 // Designed for any number of panels - nothing here assumes there is
 // only one.
+//
+// Also owns the two global switches: Enabled (panels exist on screen at
+// all) and Editing Mode (editing chrome visible). Disabling only tears
+// down the DOM - saved records are untouched, and re-enabling rebuilds
+// every panel from the registry.
 
 import { Panel } from './panel.js';
 import {
@@ -10,6 +15,8 @@ import {
     createPanelRecord,
     updatePanelRecord,
     deletePanelRecord,
+    isEnabled,
+    setEnabledFlag,
     isEditingMode,
     setEditingModeFlag,
     DEFAULT_PANEL_WIDTH,
@@ -22,7 +29,7 @@ const CASCADE_STEP = 24;
 const CASCADE_SLOTS = 8;
 
 const panels = new Map();
-const editingModeListeners = new Set();
+const stateListeners = new Set();
 let zCounter = BASE_Z_INDEX;
 let initialized = false;
 
@@ -93,13 +100,28 @@ async function confirmAndDelete(id) {
     if (ok) deletePanel(id);
 }
 
-// Restores every panel stored in the registry. Idempotent.
+function mountAllPanels() {
+    for (const record of listPanels()) {
+        if (!panels.has(record.id)) mountPanel(record);
+    }
+}
+
+// Removes every panel from the DOM without touching the registry.
+function unmountAllPanels() {
+    for (const panel of panels.values()) panel.destroy();
+    panels.clear();
+}
+
+// Restores every panel stored in the registry (if enabled). Idempotent.
 export function initPanels() {
     if (initialized) return;
     initialized = true;
 
-    for (const record of listPanels()) mountPanel(record);
-    applyEditingMode(isEditingMode());
+    // Editing Mode can never be on while the extension is disabled, even
+    // if a stale saved setting says otherwise.
+    if (!isEnabled() && isEditingMode()) setEditingModeFlag(false);
+    if (isEnabled()) mountAllPanels();
+    applyState();
 
     // Re-clamp on-screen positions when the window changes size; stored
     // geometry is untouched (see Panel.applyRecord()).
@@ -108,13 +130,13 @@ export function initPanels() {
     });
 }
 
-// Creates a new panel at the default placement, persists it, and turns
-// Editing Mode on so the user can move/resize it straight away.
+// Creates a new panel at the default placement and persists it. Only
+// possible while enabled and in Editing Mode (the only state in which
+// the wand entry is shown).
 export function createPanel() {
+    if (!isEnabled() || !isEditingMode()) return null;
     const record = createPanelRecord(defaultPlacement());
-    const panel = mountPanel(record);
-    if (!isEditingMode()) setEditingMode(true);
-    return panel;
+    return mountPanel(record);
 }
 
 export function deletePanel(id) {
@@ -130,27 +152,45 @@ export function getPanels() {
     return [...panels.values()];
 }
 
-function applyEditingMode(enabled) {
-    document.body.classList.toggle('pp-editing', enabled);
-    if (!enabled) {
+// Pushes the current Enabled/Editing Mode state to the page and to
+// every listener (wand menu, settings drawer).
+function applyState() {
+    const enabled = isEnabled();
+    const editing = enabled && isEditingMode();
+    document.body.classList.toggle('pp-editing', editing);
+    if (!editing) {
         for (const panel of panels.values()) panel.closeProperties();
     }
-    for (const listener of editingModeListeners) listener(enabled);
+    const state = { enabled, editingMode: editing };
+    for (const listener of stateListeners) listener(state);
 }
 
+export function setEnabled(enabled) {
+    enabled = enabled === true;
+    setEnabledFlag(enabled);
+    if (enabled) {
+        mountAllPanels();
+    } else {
+        if (isEditingMode()) setEditingModeFlag(false);
+        unmountAllPanels();
+    }
+    applyState();
+}
+
+// Ignored while the extension is disabled.
 export function setEditingMode(enabled) {
-    setEditingModeFlag(enabled);
-    applyEditingMode(isEditingMode());
+    setEditingModeFlag(enabled === true && isEnabled());
+    applyState();
 }
 
-export function toggleEditingMode() {
-    setEditingMode(!isEditingMode());
+export function getState() {
+    const enabled = isEnabled();
+    return { enabled, editingMode: enabled && isEditingMode() };
 }
 
-export { isEditingMode };
-
-// Lets UI (e.g. the wand menu) reflect the current Editing Mode state.
-export function onEditingModeChange(listener) {
-    editingModeListeners.add(listener);
-    return () => editingModeListeners.delete(listener);
+// Lets UI (wand menu, settings drawer) follow Enabled/Editing Mode.
+// The listener is called with { enabled, editingMode } on every change.
+export function onStateChange(listener) {
+    stateListeners.add(listener);
+    return () => stateListeners.delete(listener);
 }

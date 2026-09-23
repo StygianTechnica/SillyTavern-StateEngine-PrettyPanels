@@ -5,8 +5,11 @@ Free-floating, theme-aware HUD panels for SillyTavern. Requires the
 
 ## Usage (MVP)
 
-- **Magic Wand → New Pretty Panel** creates a panel and turns Editing Mode on.
-- **Magic Wand → Panel Editing Mode** toggles editing chrome. When off, panels are a clean HUD.
+- **Extensions → Pretty Panels** drawer holds the global controls:
+  - **Enable Pretty Panels** - when off, every panel and the wand entry are hidden and
+    Editing Mode is turned off. Saved panels are kept and come back when re-enabled.
+  - **Editing Mode** - shows editing chrome and the wand entry. When off, panels are a clean HUD.
+- **Magic Wand → New Pretty Panel** (only in Editing Mode) creates a panel.
 - In Editing Mode:
   - drag the dotted strip at the top of a panel to move it;
   - drag the bottom-right grip to resize it;
@@ -23,5 +26,6 @@ Free-floating, theme-aware HUD panels for SillyTavern. Requires the
 | `src/panels/panel-manager.js` | Live `Panel` instances; routes every change through the registry |
 | `src/panels/panel.js` | One independent panel element: drag, resize, edit affordance |
 | `src/panels/properties-popup.js` | Per-panel properties popup |
-| `src/ui/wand-menu.js` | Magic Wand menu entries |
+| `src/ui/wand-menu.js` | Magic Wand "New Pretty Panel" entry |
+| `src/ui/settings-drawer.js` + `settings.html` | Extensions-drawer global settings |
 | `src/api/*` | Thin State Engine API wrappers (namespace, registration, capabilities) |

@@ -3,8 +3,8 @@
 // discovery, and declares its capabilities - the things every State
 // Engine extension must do before it can create presets, variables, or
 // anything else. Once that succeeds, it restores saved panels and adds
-// the Magic Wand menu entries. Panel logic itself lives in src/panels/,
-// wand wiring in src/ui/.
+// the Magic Wand entry and the settings drawer. Panel logic itself
+// lives in src/panels/, UI wiring in src/ui/.
 
 import { ensureStateEngineAvailable, warnStateEngineMissing } from './api/dependency-check.js';
 import { claimNamespace } from './api/namespace.js';
@@ -12,6 +12,7 @@ import { registerWithStateEngine } from './api/registration.js';
 import { declareCapabilities } from './api/capabilities.js';
 import { initPanels } from './panels/panel-manager.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
+import { addSettingsDrawer } from './ui/settings-drawer.js';
 
 // ---------------------------------------------------------------------
 // EXTENSION IDENTITY
@@ -75,4 +76,5 @@ export async function initExtension() {
 
     initPanels();
     addWandMenuItems();
+    await addSettingsDrawer();
 }

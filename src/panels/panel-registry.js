@@ -19,6 +19,7 @@ export const MIN_PANEL_HEIGHT = 48;
 function defaultSettings() {
     return {
         version: SCHEMA_VERSION,
+        enabled: true,
         editingMode: false,
         nextPanelNumber: 1,
         panels: {},
@@ -115,6 +116,15 @@ export function deletePanelRecord(id) {
     delete store.panels[id];
     save();
     return true;
+}
+
+export function isEnabled() {
+    return getStore().enabled !== false;
+}
+
+export function setEnabledFlag(enabled) {
+    getStore().enabled = enabled === true;
+    save();
 }
 
 export function isEditingMode() {

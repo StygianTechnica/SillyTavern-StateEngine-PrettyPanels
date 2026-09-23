@@ -206,14 +206,12 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
     color: var(--warning, #e0605a);
 }
 
-/* ---------- Wand menu ---------- */
+/* ---------- Settings drawer ---------- */
 
-#pp-wand-editing-mode .pp-wand-state {
-    margin-left: auto;
-    opacity: 0.6;
+.pp-settings-row {
+    margin: 4px 0;
 }
 
-#pp-wand-editing-mode.pp-wand-active .pp-wand-state {
-    color: var(--SmartThemeQuoteColor);
-    opacity: 1;
+.pp-settings-row .checkbox_label.disabled {
+    opacity: 0.5;
 }
