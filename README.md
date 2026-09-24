@@ -38,15 +38,36 @@ selecting a panel or element expands its section.
   (background colour and opacity, border colour/thickness/radius, drop shadow, padding, and
   margin - the visible panel is inset by the margin inside its stored bounds). Anything left
   unset follows the SillyTavern theme; ↺ resets a colour.
-- **Element Properties** - Role, Binding (search, pick or type a variable name), Position
-  X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
-  Shift+↑/↓ = one grid step), Show Label, Label override, Format (by variable type),
+- **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
+  Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
+  Shift+↑/↓ = one grid step); for **Text** elements: Show Label, Label override, Format and
   **Element Styling** (font size, weight and family, text/label colour, alignment, a Font
   Awesome icon left of the value with its colour and size, and one conditional colour rule:
-  "if value < threshold, colour the value"), a live Preview, and delete.
+  "if value < threshold, colour the value"); for **widgets**: **Widget Properties** (below);
+  then a live Preview, and delete. Only the fields that apply to the element's type are shown.
 - **Variables** - every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag one onto a panel to add an element, onto an element to rebind it, or click
   it to add it to this panel.
+
+### Element types
+
+| Type | Draws | Widget Properties |
+| --- | --- | --- |
+| Text | label, optional icon, formatted value | (Element Styling) |
+| Horizontal Bar | a fill inside a track, left to right | track/fill colour, corners, bar height, animate |
+| Vertical Bar | the same, bottom to top | track/fill colour, corners, bar width, animate |
+| Circular Gauge | an SVG ring, value in the middle | radius (blank = fit), stroke, track/fill colour, show value, animate |
+| Semi-Circular Gauge | a 180° SVG arc, value underneath | as Circular Gauge |
+| Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
+
+- Widgets show the bound variable as a percentage: relative to its min/max when the
+  variable defines them (12 of max 20 = 60%), otherwise the value itself, clamped to 0-100.
+- Animate Changes (on by default) eases width/height/arc changes over 200ms.
+- Composite Bar: an icon alone shows just the icon; icon and label text show both; with
+  neither, the variable's label is shown.
+- Switching an element's type resizes it to the new type's default size only if it was still
+  at the old type's default size.
+- Elements saved before types existed load as Text.
 
 ## Chats, layouts and State Engine
 
@@ -94,6 +115,7 @@ selecting a panel or element expands its section.
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
 | `src/elements/formats.js` | Value formats per variable type |
 | `src/elements/element-style.js` | Element Styling: typography, icon, conditional colour |
+| `src/elements/widgets.js` | Bars, gauges and composite bars; Widget Properties |
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, live refresh |
 | `src/chat/variable-service.js` | Variable catalog and current values |

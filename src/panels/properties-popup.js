@@ -4,9 +4,11 @@
 //   - Panel Properties: name, position and size (read-only), lock toggle,
 //     delete, Layering (z-index), Panel Library (save/export template),
 //     and the collapsible Panel Styling subsection
-//   - Element Properties: the selected element's Role, Binding, X/Y,
-//     Width/Height, Show Label, Label Override, Format, the collapsible
-//     Element Styling subsection, a live Preview, and delete
+//   - Element Properties: the selected element's Type, Role, Binding, X/Y,
+//     Width/Height, then per type: Show Label, Label Override, Format and
+//     Element Styling (text), or Widget Properties (bars/gauges); a live
+//     Preview, and delete. Rows carry data-for-types / data-widget-field
+//     and are hidden when they don't apply to the element's type.
 //   - Variables: the variable picker (src/ui/variable-picker.js)
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
@@ -14,7 +16,10 @@
 
 import { VariablePicker } from '../ui/variable-picker.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
-import { ROLE_SUGGESTIONS, elementLabel, localName, clampElementGeometry } from '../elements/element-model.js';
+import {
+    ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, elementLabel, localName, clampElementGeometry,
+} from '../elements/element-model.js';
+import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS } from '../elements/widgets.js';
 import { formatsFor } from '../elements/formats.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, clampStyleNumber } from './panel-style.js';
@@ -65,6 +70,28 @@ function numberRow(label, scope, key, [min, max], unit = 'px') {
                 <span class="pp-style-unit">${unit}</span>
             </div>
         </div>`;
+}
+
+function textRow(label, scope, key, placeholder) {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <input type="text" class="text_pole" data-style="${scope}:${key}" placeholder="${placeholder}" autocomplete="off" />
+            </div>
+        </div>`;
+}
+
+function checkRow(label, scope, key) {
+    return `
+        <label class="checkbox_label pp-field-check">
+            <input type="checkbox" data-style="${scope}:${key}" /><span>${label}</span>
+        </label>`;
+}
+
+const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text').join(' ');
+
+function widgetField(key, markup) {
+    return `<div data-widget-field="${key}">${markup}</div>`;
 }
 
 function selectRow(label, scope, key, options) {
@@ -243,6 +270,8 @@ export class PanelPropertiesPopup {
             if (field !== document.activeElement) apply(field);
         };
         const def = this.#def(element);
+        set('type', (f) => { f.value = element.type; });
+        this.#applyTypeVisibility(element.type);
         set('role', (f) => { f.value = element.role; });
         set('binding', (f) => { f.value = element.binding?.name ?? ''; });
         set('showLabel', (f) => { f.checked = element.showLabel; });
@@ -262,6 +291,36 @@ export class PanelPropertiesPopup {
         this.refreshElementPreview();
         // After the preview renders: unset colours show what's on screen.
         this.#fillElementStyle(element);
+        this.#fillWidget(element);
+    }
+
+    // Shows only the rows that apply to the element's type.
+    #applyTypeVisibility(type) {
+        for (const node of this.el.querySelectorAll('[data-for-types]')) {
+            node.hidden = !node.dataset.forTypes.split(' ').includes(type);
+        }
+        const fields = WIDGET_FIELDS[type] ?? [];
+        for (const node of this.el.querySelectorAll('[data-widget-field]')) {
+            node.hidden = !fields.includes(node.dataset.widgetField);
+        }
+    }
+
+    #fillWidget(element) {
+        const widget = element.widget ?? {};
+        const find = (selector, prop) => {
+            const node = this.preview.querySelector(selector);
+            return node ? getComputedStyle(node)[prop] : '#888888';
+        };
+        const bar = this.preview.querySelector('.pp-bar');
+        this.#fillColor('widget', 'trackColor', widget.trackColor, bar ? getComputedStyle(bar).backgroundColor : find('.pp-gauge-track', 'stroke'));
+        this.#fillColor('widget', 'fillColor', widget.fillColor, bar ? find('.pp-bar-fill', 'backgroundColor') : find('.pp-gauge-fill', 'stroke'));
+        this.#fillColor('widget', 'labelColor', widget.labelColor, find('.pp-widget-label', 'color'));
+        this.#fillColor('widget', 'iconColor', widget.iconColor, find('.pp-widget-icon', 'color'));
+        for (const key of Object.keys(WIDGET_LIMITS)) this.#fillValue('widget', key, widget[key]);
+        this.#fillValue('widget', 'labelText', widget.labelText ?? '');
+        this.#fillValue('widget', 'icon', widget.icon ?? '');
+        this.#fillValue('widget', 'animate', widget.animate ?? WIDGET_DEFAULTS.animate);
+        this.#fillValue('widget', 'showValue', widget.showValue ?? WIDGET_DEFAULTS.showValue);
     }
 
     // ---- Styling ----------------------------------------------------------
@@ -328,6 +387,13 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
+        if (scope === 'widget') {
+            const widget = { ...element.widget };
+            if (value === null || value === '' || value === undefined) delete widget[key];
+            else widget[key] = value;
+            this.hooks.onElementChange(element.id, { widget });
+            return;
+        }
         const style = { ...element.style };
         if (key === 'conditionThreshold' || key === 'conditionColor') {
             const current = style.condition ?? {};
@@ -344,6 +410,7 @@ export class PanelPropertiesPopup {
 
     #numberLimits(scope, key) {
         if (scope === 'panel') return PANEL_STYLE_LIMITS[key];
+        if (scope === 'widget') return WIDGET_LIMITS[key];
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         return null; // conditionThreshold: any number
@@ -494,6 +561,11 @@ export class PanelPropertiesPopup {
         `, `
             <div class="pp-element-none">Click an element on the panel to edit it.</div>
             <div class="pp-element-fields">
+                <label class="pp-field"><span>Type</span>
+                    <select class="text_pole" data-el="type">
+                        ${ELEMENT_TYPES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                    </select>
+                </label>
                 <label class="pp-field"><span>Role</span>
                     <input type="text" class="text_pole" data-el="role" placeholder="optional, e.g. health" />
                 </label>
@@ -509,15 +581,34 @@ export class PanelPropertiesPopup {
                     <label><span>W</span><input type="number" class="text_pole" data-geo="width" min="1" step="1" /></label>
                     <label><span>H</span><input type="number" class="text_pole" data-geo="height" min="1" step="1" /></label>
                 </div>
-                <label class="checkbox_label pp-field-check">
+                <label class="checkbox_label pp-field-check" data-for-types="text">
                     <input type="checkbox" data-el="showLabel" /><span>Show label</span>
                 </label>
-                <label class="pp-field"><span>Label</span>
+                <label class="pp-field" data-for-types="text"><span>Label</span>
                     <input type="text" class="text_pole" data-el="labelOverride" />
                 </label>
-                <label class="pp-field"><span>Format</span>
+                <label class="pp-field" data-for-types="text gauge-circle gauge-semicircle"><span>Format</span>
                     <select class="text_pole" data-el="format"></select>
                 </label>
+                <div data-for-types="${WIDGET_TYPES}">
+                ${sectionMarkup('widget', 'Widget Properties', '', `
+                    ${widgetField('labelText', textRow('Label text', 'widget', 'labelText', 'variable label'))}
+                    ${widgetField('labelColor', colorRow('Label color', 'widget', 'labelColor'))}
+                    ${widgetField('icon', textRow('Icon', 'widget', 'icon', 'e.g. heart'))}
+                    ${widgetField('iconColor', colorRow('Icon color', 'widget', 'iconColor'))}
+                    ${widgetField('iconSize', numberRow('Icon size', 'widget', 'iconSize', WIDGET_LIMITS.iconSize))}
+                    ${widgetField('gaugeRadius', numberRow('Radius', 'widget', 'gaugeRadius', WIDGET_LIMITS.gaugeRadius))}
+                    ${widgetField('strokeWidth', numberRow('Stroke', 'widget', 'strokeWidth', WIDGET_LIMITS.strokeWidth))}
+                    ${widgetField('trackColor', colorRow('Track', 'widget', 'trackColor'))}
+                    ${widgetField('fillColor', colorRow('Fill', 'widget', 'fillColor'))}
+                    ${widgetField('cornerRadius', numberRow('Corners', 'widget', 'cornerRadius', WIDGET_LIMITS.cornerRadius))}
+                    ${widgetField('barHeight', numberRow('Bar height', 'widget', 'barHeight', WIDGET_LIMITS.barHeight))}
+                    ${widgetField('barWidth', numberRow('Bar width', 'widget', 'barWidth', WIDGET_LIMITS.barWidth))}
+                    ${widgetField('showValue', checkRow('Show value', 'widget', 'showValue'))}
+                    ${widgetField('animate', checkRow('Animate changes', 'widget', 'animate'))}
+                `, 'pp-subsection')}
+                </div>
+                <div data-for-types="text">
                 ${sectionMarkup('elementStyle', 'Element Styling', '', `
                     ${numberRow('Font size', 'element', 'fontSize', FONT_SIZE_LIMITS)}
                     ${selectRow('Weight', 'element', 'fontWeight', [['', 'Default'], ...FONT_WEIGHTS])}
@@ -539,6 +630,7 @@ export class PanelPropertiesPopup {
                         </div>
                     </div>
                 `, 'pp-subsection')}
+                </div>
                 <div class="pp-field-caption">Preview</div>
                 <div class="pp-element-preview-frame"></div>
             </div>
@@ -577,6 +669,7 @@ export class PanelPropertiesPopup {
         iconList.id = `pp-icon-options-${this.panel.id}`;
         iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));
         el.querySelector('[data-style="element:icon"]').setAttribute('list', iconList.id);
+        el.querySelector('[data-style="widget:icon"]').setAttribute('list', iconList.id);
 
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
         this.preview = buildElementContent();
@@ -616,6 +709,24 @@ export class PanelPropertiesPopup {
         }
 
         const field = (key) => el.querySelector(`[data-el="${key}"]`);
+        // Switching type: an element still at the old type's default size
+        // takes the new type's default size (a gauge in a 136x32 text box
+        // would be tiny); a hand-sized element keeps its size.
+        field('type').addEventListener('change', (e) => {
+            const element = this.#selected();
+            if (!element) return;
+            const type = e.target.value;
+            const patch = { type };
+            const [oldW, oldH] = DEFAULT_TYPE_SIZES[element.type] ?? [];
+            const [newW, newH] = DEFAULT_TYPE_SIZES[type] ?? [];
+            if (newW && element.width === oldW && element.height === oldH) {
+                Object.assign(patch, clampElementGeometry(
+                    { x: element.x, y: element.y, width: newW, height: newH },
+                    this.panel.body.clientWidth, this.panel.body.clientHeight, 'width',
+                ));
+            }
+            this.hooks.onElementChange(element.id, patch);
+        });
         field('role').addEventListener('change', (e) => this.#change({ role: e.target.value.trim() }));
         field('binding').addEventListener('change', (e) => {
             const name = e.target.value.trim();

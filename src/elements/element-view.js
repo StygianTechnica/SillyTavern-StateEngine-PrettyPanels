@@ -8,7 +8,8 @@
 // Like Panel, it reports committed changes through its panel's hooks
 // rather than writing anything itself.
 
-import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, elementLabel } from './element-model.js';
+import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, elementLabel } from './element-model.js';
+import { renderWidget } from './widgets.js';
 import { formatValue } from './formats.js';
 import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
@@ -20,14 +21,28 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-// Fills `container` (built by buildElementContent()) with an element's
-// label, icon and formatted value, styled by its Element Styling.
-// `entry` is the variable service's { value, def } or undefined. Shared by
-// the on-panel view and the properties-pane preview.
+// Fills `container` (built by buildElementContent()) with an element: a
+// text element's label, icon and formatted value (styled by Element
+// Styling), or a bar/gauge widget (src/elements/widgets.js). `entry` is
+// the variable service's { value, def } or undefined. Shared by the
+// on-panel view and the properties-pane preview.
 export function renderElementContent(container, element, entry) {
     const labelEl = container.querySelector('.pp-element-label');
     const valueEl = container.querySelector('.pp-element-value');
     const def = entry?.def ?? null;
+
+    if (element.type !== ELEMENT_TYPE_TEXT) {
+        container.classList.add('pp-kind-widget');
+        applyElementStyle(container, {}); // text styling never applies to widgets
+        container.classList.toggle('pp-element-unbound', !element.binding);
+        container.classList.toggle('pp-element-missing', !!element.binding && entry === undefined);
+        container.title = !element.binding
+            ? 'Unbound - drag a variable onto this element to bind it'
+            : `${element.binding.name}${entry === undefined ? ': no value in this chat (is its preset active?)' : ''}`;
+        renderWidget(container, element, entry);
+        return;
+    }
+    container.classList.remove('pp-kind-widget');
 
     labelEl.textContent = elementLabel(element, def);
     labelEl.hidden = !element.showLabel;
@@ -63,7 +78,7 @@ export function renderElementContent(container, element, entry) {
 export function buildElementContent() {
     const el = document.createElement('div');
     el.className = 'pp-element';
-    el.innerHTML = '<span class="pp-element-label"></span><i class="pp-element-icon" hidden></i><span class="pp-element-value"></span>';
+    el.innerHTML = '<span class="pp-element-label"></span><i class="pp-element-icon" hidden></i><span class="pp-element-value"></span><div class="pp-widget"></div>';
     return el;
 }
 

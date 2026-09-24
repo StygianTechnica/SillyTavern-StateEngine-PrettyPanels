@@ -40,7 +40,7 @@ import {
     maxZIndex,
 } from './panel-registry.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
-import { ELEMENT_TYPE_VARIABLE, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
+import { isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
 import { getValue, onValuesChange } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
@@ -137,7 +137,7 @@ export function getBoundVariableNames() {
     const names = new Set();
     for (const record of listPanels()) {
         for (const widget of record.widgets) {
-            if (widget.type === ELEMENT_TYPE_VARIABLE && widget.binding) names.add(widget.binding.name);
+            if (isVariableElement(widget) && widget.binding) names.add(widget.binding.name);
         }
     }
     return [...names];
@@ -339,7 +339,8 @@ function saveWidgets(panel, widgets) {
 export function updateElement(panel, elementId, patch) {
     const current = panel.getElement(elementId);
     if (!current) return false;
-    const next = { ...current, ...patch, id: current.id, type: current.type };
+    // id is fixed; a new type is validated by the model (unknown -> 'text').
+    const next = { ...current, ...patch, id: current.id };
     const widgets = panel.record.widgets.map((w) => (w.id === elementId ? next : w));
     if (!saveWidgets(panel, widgets)) return false;
     const before = current.binding?.name ?? null;

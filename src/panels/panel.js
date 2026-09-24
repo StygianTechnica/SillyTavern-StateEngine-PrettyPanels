@@ -14,7 +14,7 @@
 //     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
 import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
-import { ELEMENT_TYPE_VARIABLE } from '../elements/element-model.js';
+import { isVariableElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
@@ -61,7 +61,7 @@ export class Panel {
         // Which properties sections are expanded - kept for as long as the
         // panel is on screen, so reopening its properties looks the same.
         // The styling subsections start collapsed to keep the pane short.
-        this.openSections = { panel: true, panelStyle: false, element: true, elementStyle: false, variables: true };
+        this.openSections = { panel: true, panelStyle: false, element: true, elementStyle: false, widget: true, variables: true };
         this.el = this.#build();
         // Where elements live and what they're positioned/clamped against.
         this.body = this.el.querySelector('.pp-panel-canvas');
@@ -187,7 +187,7 @@ export class Panel {
 
     // Keeps one ElementView per VariableElement, reusing existing views.
     #renderElements() {
-        const elements = this.record.widgets.filter((w) => w.type === ELEMENT_TYPE_VARIABLE);
+        const elements = this.record.widgets.filter(isVariableElement);
         const keep = new Set(elements.map((e) => e.id));
         for (const [id, view] of this.elementViews) {
             if (!keep.has(id)) {

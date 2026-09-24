@@ -164,7 +164,10 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
     position: fixed;
     z-index: 3100;
     box-sizing: border-box;
-    width: 280px;
+    /* Label column of every labelled row - in em, so it grows with
+       SillyTavern's font size instead of letting labels spill over. */
+    --pp-label-col: 6.4em;
+    width: 300px;
     max-height: calc(100vh - 16px);
     overflow-y: auto;
     padding: 8px 10px 10px;
@@ -547,7 +550,7 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 
 .pp-field {
     display: grid;
-    grid-template-columns: 58px 1fr;
+    grid-template-columns: var(--pp-label-col) 1fr;
     align-items: center;
     gap: 6px;
     margin: 0;
@@ -563,13 +566,13 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 }
 
 .pp-field-info {
-    margin-left: 64px;
+    margin-left: calc(var(--pp-label-col) + 6px);
     opacity: 0.6;
     font-size: 0.85em;
 }
 
 .pp-field-check {
-    margin: 0 0 0 64px;
+    margin: 0 0 0 calc(var(--pp-label-col) + 6px);
 }
 
 .pp-field-caption {
@@ -785,7 +788,7 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 
 .pp-geometry {
     display: grid;
-    grid-template-columns: 58px 1fr 1fr;
+    grid-template-columns: var(--pp-label-col) 1fr 1fr;
     align-items: center;
     gap: 4px 6px;
 }
@@ -912,7 +915,7 @@ body.pp-editing .pp-element.pp-element-outline {
 
 .pp-style-row {
     display: grid;
-    grid-template-columns: 58px 1fr;
+    grid-template-columns: var(--pp-label-col) 1fr;
     align-items: center;
     gap: 6px;
 }
@@ -965,5 +968,162 @@ body.pp-editing .pp-element.pp-element-outline {
 }
 
 .pp-style-controls .pp-style-reset[hidden] {
+    display: none;
+}
+
+/* Row labels never paint over their controls: wrap long words instead. */
+.pp-field > span,
+.pp-style-row > span,
+.pp-geometry-caption {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+/* ---------- Widget elements: bars, gauges, composite (src/elements/widgets.js) ---------- */
+
+.pp-widget {
+    display: none;
+}
+
+.pp-element.pp-kind-widget {
+    padding: 2px;
+}
+
+.pp-element.pp-kind-widget > .pp-element-label,
+.pp-element.pp-kind-widget > .pp-element-icon,
+.pp-element.pp-kind-widget > .pp-element-value {
+    display: none;
+}
+
+.pp-element.pp-kind-widget > .pp-widget {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    align-self: stretch;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 0;
+}
+
+.pp-element-unbound > .pp-widget,
+.pp-element-missing > .pp-widget,
+.pp-widget.pp-widget-nodata {
+    opacity: 0.45;
+}
+
+.pp-bar {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--pp-w-track, color-mix(in srgb, var(--SmartThemeBodyColor) 16%, transparent));
+    border-radius: var(--pp-w-radius, 4px);
+}
+
+.pp-bar-h {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: var(--pp-w-bar-h, 10px);
+    max-height: 100%;
+}
+
+.pp-bar-v {
+    width: var(--pp-w-bar-w, 12px);
+    max-width: 100%;
+    height: 100%;
+}
+
+.pp-bar-fill {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    background-color: var(--pp-w-fill, var(--SmartThemeQuoteColor));
+    border-radius: inherit;
+}
+
+.pp-bar-h .pp-bar-fill {
+    top: 0;
+    width: 0;
+}
+
+.pp-bar-v .pp-bar-fill {
+    right: 0;
+    height: 0;
+}
+
+.pp-animate .pp-bar-h .pp-bar-fill {
+    transition: width 200ms ease;
+}
+
+.pp-animate .pp-bar-v .pp-bar-fill {
+    transition: height 200ms ease;
+}
+
+.pp-gauge {
+    display: block;
+    flex: 0 0 auto;
+    overflow: visible;
+}
+
+.pp-gauge-track {
+    stroke: var(--pp-w-track, color-mix(in srgb, var(--SmartThemeBodyColor) 16%, transparent));
+}
+
+.pp-gauge-fill {
+    stroke: var(--pp-w-fill, var(--SmartThemeQuoteColor));
+    stroke-linecap: round;
+}
+
+.pp-gauge-fill.pp-gauge-empty {
+    stroke-opacity: 0;
+}
+
+.pp-animate .pp-gauge-fill {
+    transition: stroke-dashoffset 200ms ease;
+}
+
+.pp-gauge-value {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.pp-gauge-semi .pp-gauge-value {
+    top: auto;
+    bottom: 2px;
+    transform: none;
+}
+
+.pp-gauge-value[hidden],
+.pp-widget-icon[hidden],
+.pp-widget-label[hidden] {
+    display: none;
+}
+
+.pp-widget-icon {
+    flex: 0 0 auto;
+    color: var(--SmartThemeQuoteColor);
+    line-height: 1;
+}
+
+.pp-widget-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+/* Only the fields that apply to the selected element type are shown. */
+.pp-properties [data-for-types][hidden] {
     display: none;
 }

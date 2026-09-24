@@ -1,22 +1,56 @@
 // Element records: the widgets that live INSIDE a panel instance
 // (panel.widgets[]). Plain data only - src/elements/element-view.js
-// renders them. The only type in this pass is the VariableElement:
+// renders them. Every element is bound to one variable; its `type` picks
+// how it is drawn (see ELEMENT_TYPES):
 //
 //   {
-//     id, type: 'variable',
+//     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
+//                              'gauge-circle' | 'gauge-semicircle' | 'composite-bar'
 //     x, y, width, height,     position/size inside the panel body, px
 //     role,                    optional conceptual tag ("health", ...)
 //     binding: { name } | null fully-qualified State Engine variable name
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
-//     style,                   Element Styling (src/elements/element-style.js)
+//     style,                   Element Styling - text elements only
+//                              (src/elements/element-style.js)
+//     widget,                  Widget Properties - bars/gauges only
+//                              (src/elements/widgets.js)
 //   }
+//
+// Elements saved before types existed have type 'variable'; they load as
+// 'text'. Any other unknown type is kept untouched (and not drawn).
 //
 // Bindings live in the layout's panel instances (a chat chooses a layout
 // for what it shows) and are stripped from panel templates
 // (src/storage/design.js stripBindings()).
 
-export const ELEMENT_TYPE_VARIABLE = 'variable';
+export const ELEMENT_TYPE_TEXT = 'text';
+const LEGACY_TYPE_VARIABLE = 'variable';
+
+export const ELEMENT_TYPES = [
+    ['text', 'Text'],
+    ['bar-horizontal', 'Horizontal Bar'],
+    ['bar-vertical', 'Vertical Bar'],
+    ['gauge-circle', 'Circular Gauge'],
+    ['gauge-semicircle', 'Semi-Circular Gauge'],
+    ['composite-bar', 'Composite Bar'],
+];
+const TYPE_IDS = new Set(ELEMENT_TYPES.map(([id]) => id));
+
+// A new element's size, per type (text keeps DEFAULT_ELEMENT_*).
+export const DEFAULT_TYPE_SIZES = {
+    'text': [136, 32],
+    'bar-horizontal': [136, 16],
+    'bar-vertical': [24, 96],
+    'gauge-circle': [72, 72],
+    'gauge-semicircle': [96, 56],
+    'composite-bar': [160, 24],
+};
+
+// True for any element this version draws (every bound element type).
+export function isVariableElement(widget) {
+    return !!widget && TYPE_IDS.has(widget.type);
+}
 export const DEFAULT_ELEMENT_WIDTH = 136;
 export const DEFAULT_ELEMENT_HEIGHT = 32;
 export const MIN_ELEMENT_WIDTH = 24;
@@ -47,7 +81,7 @@ export function normalizeVariableElement(element) {
     return {
         ...element,
         id: typeof element.id === 'string' && element.id ? element.id : newElementId(),
-        type: ELEMENT_TYPE_VARIABLE,
+        type: TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT,
         x: Math.max(0, finite(element.x, 0)),
         y: Math.max(0, finite(element.y, 0)),
         width: Math.max(MIN_ELEMENT_WIDTH, finite(element.width, DEFAULT_ELEMENT_WIDTH)),
@@ -58,6 +92,7 @@ export function normalizeVariableElement(element) {
         labelOverride: text(element.labelOverride),
         format: typeof element.format === 'string' && element.format ? element.format : 'auto',
         style: element.style && typeof element.style === 'object' && !Array.isArray(element.style) ? element.style : {},
+        widget: element.widget && typeof element.widget === 'object' && !Array.isArray(element.widget) ? element.widget : {},
     };
 }
 
@@ -68,7 +103,9 @@ export function normalizeWidgets(widgets) {
     if (!Array.isArray(widgets)) return [];
     return widgets
         .filter((w) => w && typeof w === 'object' && !Array.isArray(w))
-        .map((w) => (w.type === ELEMENT_TYPE_VARIABLE ? normalizeVariableElement(w) : w));
+        .map((w) => (TYPE_IDS.has(w.type) || w.type === LEGACY_TYPE_VARIABLE || w.type === undefined
+            ? normalizeVariableElement(w)
+            : w));
 }
 
 export function createVariableElement(init = {}) {
