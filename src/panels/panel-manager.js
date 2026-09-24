@@ -206,7 +206,10 @@ const hooks = {
         showGuides(computeGuides(geometry, new Set(movingIds)));
         // Layout anchors: single-panel drags only (a group moves as one).
         if (movingIds.length !== 1 || !pointer) return;
-        dragZones ??= measureDropZones();
+        // A Free panel dropped in a side margin just floats there - the
+        // margins only dock panels whose Anchor mode is Anchored, so
+        // placing a floating panel never pushes the chat column aside.
+        dragZones ??= measureDropZones().filter((zone) => panel.record.anchorMode === 'anchored' || !isMarginAnchor(zone.id));
         pendingAnchor = zoneAt(dragZones, pointer.x, pointer.y);
         showAnchorOverlay(dragZones, pendingAnchor?.id ?? null);
     },

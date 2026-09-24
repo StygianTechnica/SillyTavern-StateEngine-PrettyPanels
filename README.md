@@ -130,7 +130,9 @@ selecting a panel or element expands its section.
   input area or sidebar span its width (their height is kept and can still be resized);
   margin columns are as wide as their widest panel. Several panels on one anchor stack.
   Dragging a docked panel away floats it again where you drop it. Anchor mode can also be set
-  in the panel's settings (Free, or Anchored + where). A Sidebar panel shows only while that
+  in the panel's settings (Free, or Anchored + where). The **Left/Right margin** anchors are
+  only offered while dragging a panel whose Anchor mode is Anchored: a Free panel dropped in a
+  margin simply floats there and the chat stays where it is. A Sidebar panel shows only while that
   sidebar is open. If SillyTavern's MovingUI has placed the chat column by hand, the margin
   anchors can't move it.
 - **Fonts**: ten bundled open-licence fonts (UI, fantasy, sci-fi, gothic, handwritten, HUD;
