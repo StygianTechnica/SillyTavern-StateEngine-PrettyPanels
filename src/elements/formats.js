@@ -5,7 +5,10 @@
 //
 // Datetime values are formatted through State Engine's calendar-aware
 // formatter (so fantasy calendars work), installed at startup with
-// setDateTimeFormatter().
+// setDateTimeFormatter(). 'auto' follows the variable's own datetimeMode
+// (a "Date only" variable shows its date, "Time only" its time); the other
+// datetime formats let one variable be shown several ways, and 'custom'
+// uses the element's own `formatPattern`.
 
 const FORMATS = {
     number: [
@@ -35,9 +38,17 @@ const FORMATS = {
         ['count', 'Item count'],
     ],
     datetime: [
-        ['auto', 'Date and time'],
+        ['auto', 'Automatic'],
+        ['full', 'Date and time'],
         ['date', 'Date only'],
         ['time', 'Time only'],
+        ['timeShort', 'Time (hours:minutes)'],
+        ['longDate', 'Long date'],
+        ['longDateTime', 'Long date and time'],
+        ['month', 'Month name'],
+        ['year', 'Year'],
+        ['season', 'Season'],
+        ['custom', 'Custom pattern…'],
     ],
     image: [
         ['auto', 'Image'],
@@ -53,7 +64,31 @@ const FORMATS = {
 };
 FORMATS.enum = FORMATS.string;
 
-const DATETIME_STYLES = { auto: 'full', date: 'date', time: 'time' };
+// Datetime format -> the Calendar API's formatDateTime() options. Brace
+// templates work for every calendar (Gregorian patterns have no unpadded
+// day token), and use the calendar's own month and season names.
+const DATETIME_OPTIONS = {
+    full: { style: 'full' },
+    date: { style: 'date' },
+    time: { style: 'time' },
+    timeShort: { style: 'custom', pattern: 'HH:mm' },
+    longDate: { style: 'custom', pattern: '{monthName} {day}, {year}' },
+    longDateTime: { style: 'custom', pattern: '{monthName} {day}, {year} {HH}:{mm}' },
+    month: { style: 'month' },
+    year: { style: 'year' },
+    season: { style: 'custom', pattern: '{season}' },
+};
+
+// What 'auto' means for a datetime variable, by its datetimeMode.
+const DATETIME_MODE_FORMATS = { dateOnly: 'date', timeOnly: 'time' };
+const DATETIME_AUTO_LABELS = { date: 'Automatic (date only)', time: 'Automatic (time only)', full: 'Automatic (date and time)' };
+
+function datetimeAuto(def) {
+    return DATETIME_MODE_FORMATS[def?.datetimeMode] ?? 'full';
+}
+
+// Shown under a Custom pattern field.
+export const DATETIME_PATTERN_HINT = 'Placeholders: {monthName} {month} {day} {year} {HH} {mm} {ss} {season} {era} {cycle}. Or tokens: YYYY MM DD HH mm ss MMM MMMM.';
 
 let formatDateTime = null;
 
@@ -73,7 +108,11 @@ export function formatType(def, value) {
 }
 
 export function formatsFor(def, value) {
-    return FORMATS[formatType(def, value)].map(([id, label]) => ({ id, label }));
+    const family = formatType(def, value);
+    return FORMATS[family].map(([id, label]) => ({
+        id,
+        label: family === 'datetime' && id === 'auto' ? DATETIME_AUTO_LABELS[datetimeAuto(def)] : label,
+    }));
 }
 
 function titleCase(text) {
@@ -88,7 +127,8 @@ function plain(value) {
 
 // Returns { text } or { image: url } for rendering. Never throws - a value
 // that can't be formatted as asked falls back to its plain text.
-export function formatValue(value, def, format = 'auto') {
+// `pattern` is the element's formatPattern, used by the 'custom' format.
+export function formatValue(value, def, format = 'auto', pattern = '') {
     const family = formatType(def, value);
     const known = FORMATS[family].some(([id]) => id === format);
     const fmt = known ? format : 'auto';
@@ -132,7 +172,12 @@ export function formatValue(value, def, format = 'auto') {
             }
             case 'datetime': {
                 if (formatDateTime && Number.isFinite(Number(value))) {
-                    return { text: formatDateTime(def?.calendar || 'gregorian', Number(value), { style: DATETIME_STYLES[fmt] }) };
+                    const key = fmt === 'auto' ? datetimeAuto(def) : fmt;
+                    const custom = typeof pattern === 'string' ? pattern.trim() : '';
+                    const options = key === 'custom'
+                        ? (custom ? { style: 'custom', pattern: custom } : DATETIME_OPTIONS.full)
+                        : DATETIME_OPTIONS[key];
+                    return { text: formatDateTime(def?.calendar || 'gregorian', Number(value), options) };
                 }
                 return { text: plain(value) };
             }

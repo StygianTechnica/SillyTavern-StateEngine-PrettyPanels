@@ -66,14 +66,19 @@ selecting a panel or element expands its section.
   0 too, the panel is fully invisible but still shows its elements.
 - **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
-  Shift+↑/↓ = one grid step); for **Text** elements: Show Label, Label override, Format and
-  **Element Styling** (font size, weight and family, text/label colour, alignment, a Font
+  Shift+↑/↓ = one grid step), Order (Send to Back / Backward / Forward / Bring to Front);
+  for **Text** elements: Show Label, Label override, Format and
+  **Element Styling** (font size, weight and family, text/label colour, alignment, a
+  **background colour** with its own opacity and corner rounding - for keeping text readable
+  over a background image - a Font
   Awesome icon left of the value with its colour and size, and one conditional colour rule:
   "if value < threshold, colour the value"); for **widgets**: **Widget Properties** (below);
+  for **shapes**: **Shape Properties** (below);
   then a live Preview, and delete. Only the fields that apply to the element's type are shown.
-- **Variables** - every State Engine variable, grouped by preset, searchable and filterable
-  by preset. Drag one onto a panel to add an element, onto an element to rebind it, or click
-  it to add it to this panel.
+- **Shapes & Variables** - a **Rectangle** and an **Ellipse** to drag onto a panel (or click
+  to add here), then every State Engine variable, grouped by preset, searchable and filterable
+  by preset. Drag a variable onto a panel to add an element, onto an element to rebind it, or
+  click it to add it to this panel.
 
 ### Element types
 
@@ -85,6 +90,7 @@ selecting a panel or element expands its section.
 | Circular Gauge | an SVG ring, value in the middle | radius (blank = fit), stroke, track/fill colour, show value, animate |
 | Semi-Circular Gauge | a 180° SVG arc, value underneath | as Circular Gauge |
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
+| Shape | a filled rectangle or ellipse, no variable | shape, fill colour/opacity, border colour/thickness, corners |
 
 - Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max
   Value left blank uses the variable's own range: its max if it defines one (12 of max 20 =
@@ -96,6 +102,16 @@ selecting a panel or element expands its section.
 - Switching an element's type resizes it to the new type's default size only if it was still
   at the old type's default size.
 - Elements saved before types existed load as Text.
+- Shapes are always drawn behind every other element in the panel, so a translucent
+  rectangle under a Text element makes a readable backdrop. Order moves an element among
+  its own kind (shapes among shapes, everything else among the rest).
+- **Datetime formats**: Automatic follows the variable's own State Engine datetime mode (a
+  "Date only" variable shows its date, "Time only" its time). Any datetime can also be shown
+  as Date and time, Date only, Time only, Time (hours:minutes), Long date, Long date and
+  time, Month name, Year, Season, or a **Custom pattern** such as
+  `{monthName} {day}, {year}` - so one variable dragged in twice can show its date in one
+  element and its time in another. Formats use the variable's calendar, so fantasy calendars
+  show their own month and season names.
 
 ## Chats, layouts and State Engine
 
@@ -145,6 +161,7 @@ selecting a panel or element expands its section.
 | `src/elements/formats.js` | Value formats per variable type |
 | `src/elements/element-style.js` | Element Styling: typography, icon, conditional colour |
 | `src/elements/widgets.js` | Bars, gauges and composite bars; Widget Properties |
+| `src/elements/shapes.js` | Shape elements; Shape Properties |
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, live refresh |
 | `src/chat/variable-service.js` | Variable catalog and current values |

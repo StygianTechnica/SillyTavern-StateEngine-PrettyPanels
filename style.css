@@ -545,7 +545,7 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 .pp-element.pp-drop-target {
     border-style: solid !important;
     border-color: var(--SmartThemeQuoteColor) !important;
-    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent) !important;
 }
 
 /* ---------- Properties: sections, element fields, preview ---------- */
@@ -859,6 +859,8 @@ body.pp-editing .pp-element.pp-element-outline {
 .pp-element {
     font-size: var(--pp-el-font-size, calc(var(--mainFontSize, 15px) * 0.9));
     font-family: var(--pp-el-font-family, inherit);
+    background-color: var(--pp-el-bg, transparent);
+    border-radius: var(--pp-el-radius, 5px);
 }
 
 .pp-element .pp-element-label {
@@ -1336,4 +1338,57 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
 .pp-toolbar-hint {
     opacity: 0.6;
     max-width: 330px;
+}
+
+/* ---------- Shape elements (src/elements/shapes.js) ---------- */
+
+.pp-shape {
+    display: none;
+}
+
+.pp-element.pp-kind-shape {
+    padding: 0;
+    border-radius: 0;
+}
+
+.pp-element.pp-kind-shape > .pp-element-label,
+.pp-element.pp-kind-shape > .pp-element-icon,
+.pp-element.pp-kind-shape > .pp-element-value,
+.pp-element.pp-kind-shape > .pp-widget {
+    display: none;
+}
+
+.pp-element.pp-kind-shape > .pp-shape {
+    display: block;
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    background-color: var(--pp-shape-fill);
+    border: var(--pp-shape-border-width, 0) solid var(--pp-shape-border-color, var(--SmartThemeBorderColor));
+    border-radius: var(--pp-shape-radius, 6px);
+    pointer-events: none;
+}
+
+/* ---------- Properties: shape palette, element order ---------- */
+
+.pp-shape-palette {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.pp-shape-palette-caption {
+    font-size: 0.85em;
+    opacity: 0.7;
+    margin-right: 2px;
+}
+
+.pp-shape-palette-item {
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+}
+
+.pp-element-order .pp-layering-buttons {
+    justify-content: flex-start;
 }

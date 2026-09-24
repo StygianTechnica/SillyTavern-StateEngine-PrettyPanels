@@ -164,7 +164,7 @@ function updateGauge(holder, element, entry, pct, semi) {
 
     const valueEl = holder.querySelector('.pp-gauge-value');
     valueEl.hidden = !flag(widget, 'showValue');
-    valueEl.textContent = entry === undefined ? '—' : formatValue(entry.value, entry.def, element.format).text;
+    valueEl.textContent = entry === undefined ? '—' : formatValue(entry.value, entry.def, element.format, element.formatPattern).text;
     valueEl.style.fontSize = `${Math.max(9, Math.round(r * (semi ? 0.42 : 0.5)))}px`;
     holder.classList.toggle('pp-gauge-semi', semi);
 }

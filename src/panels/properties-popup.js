@@ -5,26 +5,30 @@
 //     delete, Layering (z-index), Panel Library (save/export template),
 //     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
-//     Width/Height, then per type: Show Label, Label Override, Format and
-//     Element Styling (text), or Widget Properties (bars/gauges); a live
+//     Width/Height, Order, then per type: Show Label, Label Override,
+//     Format (+ Custom pattern) and Element Styling (text), Widget
+//     Properties (bars/gauges) or Shape Properties (shapes); a live
 //     Preview, and delete. Rows carry data-for-types / data-widget-field
 //     and are hidden when they don't apply to the element's type.
-//   - Variables: the variable picker (src/ui/variable-picker.js)
+//   - Shapes & Variables: the shape palette and the variable picker
+//     (src/ui/variable-picker.js)
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
 // through `hooks`; nothing is written here.
 
-import { VariablePicker } from '../ui/variable-picker.js';
+import { VariablePicker, ShapePalette } from '../ui/variable-picker.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
 import {
     ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, elementLabel, localName, clampElementGeometry,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
-import { formatsFor } from '../elements/formats.js';
+import { formatsFor, DATETIME_PATTERN_HINT } from '../elements/formats.js';
+import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS } from '../elements/shapes.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
     FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, FONT_WEIGHTS, FONT_FAMILIES, ALIGNMENTS, ICON_SUGGESTIONS,
+    BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
 } from '../elements/element-style.js';
 
 const POPUP_GAP = 8;
@@ -88,7 +92,11 @@ function checkRow(label, scope, key) {
         </label>`;
 }
 
-const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text').join(' ');
+const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== 'shape').join(' ');
+// Every type that shows a variable (all but shapes).
+const BOUND_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'shape').join(' ');
+// Types with a Format field.
+const FORMAT_TYPES = ['text', 'gauge-circle', 'gauge-semicircle'];
 
 function widgetField(key, markup) {
     return `<div data-widget-field="${key}">${markup}</div>`;
@@ -127,6 +135,7 @@ export class PanelPropertiesPopup {
     //          onZIndexChange(zIndex), onRestack(action), onPanelStyleChange(patch),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
+    //          onAddShape(kind), onDropShape(kind, x, y), onArrangeElement(elementId, action),
     //          getValue(name), onClose() }
     constructor(panel, hooks) {
         this.panel = panel;
@@ -134,6 +143,11 @@ export class PanelPropertiesPopup {
         this.picker = new VariablePicker({
             onPick: (name) => hooks.onAddVariable(name),
             onDrop: (name, x, y) => hooks.onDropVariable(name, x, y),
+            dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
+        });
+        this.shapes = new ShapePalette({
+            onPick: (kind) => hooks.onAddShape(kind),
+            onDrop: (kind, x, y) => hooks.onDropShape(kind, x, y),
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
         this.el = this.#build();
@@ -298,6 +312,9 @@ export class PanelPropertiesPopup {
             f.replaceChildren(...formats.map((fmt) => new Option(fmt.label, fmt.id)));
             f.value = formats.some((fmt) => fmt.id === element.format) ? element.format : 'auto';
         });
+        const format = section.querySelector('[data-el="format"]').value;
+        section.querySelector('[data-el="pattern-row"]').hidden = !(FORMAT_TYPES.includes(element.type) && format === 'custom');
+        set('formatPattern', (f) => { f.value = element.formatPattern ?? ''; });
         this.#fillGeometry(element);
 
         Object.assign(this.preview.style, { width: `${element.width}px`, height: `${element.height}px` });
@@ -305,6 +322,18 @@ export class PanelPropertiesPopup {
         // After the preview renders: unset colours show what's on screen.
         this.#fillElementStyle(element);
         this.#fillWidget(element);
+        this.#fillShape(element);
+    }
+
+    #fillShape(element) {
+        const shape = element.shape ?? {};
+        const kind = shape.kind ?? SHAPE_DEFAULTS.kind;
+        const body = this.preview.querySelector('.pp-shape');
+        this.#fillValue('shape', 'kind', kind);
+        this.#fillColor('shape', 'fillColor', shape.fillColor, getComputedStyle(document.body).getPropertyValue('--SmartThemeBlurTintColor') || '#000000');
+        this.#fillColor('shape', 'borderColor', shape.borderColor, body ? getComputedStyle(body).borderTopColor : '#888888');
+        for (const key of Object.keys(SHAPE_LIMITS)) this.#fillValue('shape', key, shape[key]);
+        this.#styleField('shape', 'cornerRadius').closest('.pp-style-row').hidden = kind === 'ellipse';
     }
 
     // Shows only the rows that apply to the element's type.
@@ -419,6 +448,9 @@ export class PanelPropertiesPopup {
         this.#fillValue('element', 'icon', style.icon ?? '');
         this.#fillColor('element', 'iconColor', style.iconColor, getComputedStyle(icon).color);
         this.#fillValue('element', 'iconSize', style.iconSize);
+        this.#fillColor('element', 'backgroundColor', style.backgroundColor, getComputedStyle(document.body).getPropertyValue('--SmartThemeBlurTintColor') || '#000000');
+        this.#fillValue('element', 'backgroundOpacity', style.backgroundOpacity);
+        this.#fillValue('element', 'backgroundRadius', style.backgroundRadius);
         this.#fillValue('element', 'conditionThreshold', style.condition?.threshold);
         const conditionColor = this.#styleField('element', 'conditionColor');
         if (conditionColor !== document.activeElement) conditionColor.value = toHex(style.condition?.color ?? '#e0605a');
@@ -432,11 +464,11 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
-        if (scope === 'widget') {
-            const widget = { ...element.widget };
-            if (value === null || value === '' || value === undefined) delete widget[key];
-            else widget[key] = value;
-            this.hooks.onElementChange(element.id, { widget });
+        if (scope === 'widget' || scope === 'shape') {
+            const settings = { ...element[scope] };
+            if (value === null || value === '' || value === undefined) delete settings[key];
+            else settings[key] = value;
+            this.hooks.onElementChange(element.id, { [scope]: settings });
             return;
         }
         const style = { ...element.style };
@@ -456,8 +488,11 @@ export class PanelPropertiesPopup {
     #numberLimits(scope, key) {
         if (scope === 'panel') return PANEL_STYLE_LIMITS[key];
         if (scope === 'widget') return WIDGET_LIMITS[key] ?? null;
+        if (scope === 'shape') return SHAPE_LIMITS[key] ?? null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
+        if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
+        if (key === 'backgroundRadius') return BACKGROUND_RADIUS_LIMITS;
         return null; // conditionThreshold: any number
     }
 
@@ -623,10 +658,10 @@ export class PanelPropertiesPopup {
                 <label class="pp-field"><span>Role</span>
                     <input type="text" class="text_pole" data-el="role" placeholder="optional, e.g. health" />
                 </label>
-                <label class="pp-field"><span>Binding</span>
+                <label class="pp-field" data-for-types="${BOUND_TYPES}"><span>Binding</span>
                     <input type="text" class="text_pole" data-el="binding" placeholder="search or type, e.g. se__hp" autocomplete="off" />
                 </label>
-                <small class="pp-field-info" data-el="binding-info"></small>
+                <small class="pp-field-info" data-el="binding-info" data-for-types="${BOUND_TYPES}"></small>
                 <div class="pp-geometry">
                     <span class="pp-geometry-caption">Position</span>
                     <label><span>X</span><input type="number" class="text_pole" data-geo="x" min="0" step="1" /></label>
@@ -635,15 +670,39 @@ export class PanelPropertiesPopup {
                     <label><span>W</span><input type="number" class="text_pole" data-geo="width" min="1" step="1" /></label>
                     <label><span>H</span><input type="number" class="text_pole" data-geo="height" min="1" step="1" /></label>
                 </div>
+                <div class="pp-field pp-element-order"><span>Order</span>
+                    <div class="pp-layering-buttons">
+                        <button type="button" class="menu_button" data-arrange="back" title="Send to Back (shapes always stay behind other elements)"><i class="fa-solid fa-angles-down"></i></button>
+                        <button type="button" class="menu_button" data-arrange="backward" title="Send Backward"><i class="fa-solid fa-angle-down"></i></button>
+                        <button type="button" class="menu_button" data-arrange="forward" title="Bring Forward"><i class="fa-solid fa-angle-up"></i></button>
+                        <button type="button" class="menu_button" data-arrange="front" title="Bring to Front"><i class="fa-solid fa-angles-up"></i></button>
+                    </div>
+                </div>
                 <label class="checkbox_label pp-field-check" data-for-types="text">
                     <input type="checkbox" data-el="showLabel" /><span>Show label</span>
                 </label>
                 <label class="pp-field" data-for-types="text"><span>Label</span>
                     <input type="text" class="text_pole" data-el="labelOverride" />
                 </label>
-                <label class="pp-field" data-for-types="text gauge-circle gauge-semicircle"><span>Format</span>
+                <label class="pp-field" data-for-types="${FORMAT_TYPES.join(' ')}"><span>Format</span>
                     <select class="text_pole" data-el="format"></select>
                 </label>
+                <div data-el="pattern-row" hidden>
+                    <label class="pp-field"><span>Pattern</span>
+                        <input type="text" class="text_pole" data-el="formatPattern" placeholder="{monthName} {day}, {year}" autocomplete="off" />
+                    </label>
+                    <small class="pp-field-info">${DATETIME_PATTERN_HINT}</small>
+                </div>
+                <div data-for-types="shape">
+                ${sectionMarkup('shape', 'Shape Properties', '', `
+                    ${selectRow('Shape', 'shape', 'kind', SHAPE_KINDS)}
+                    ${colorRow('Fill', 'shape', 'fillColor')}
+                    ${numberRow('Fill opacity', 'shape', 'fillOpacity', SHAPE_LIMITS.fillOpacity, '%')}
+                    ${colorRow('Border', 'shape', 'borderColor')}
+                    ${numberRow('Thickness', 'shape', 'borderWidth', SHAPE_LIMITS.borderWidth)}
+                    ${numberRow('Corners', 'shape', 'cornerRadius', SHAPE_LIMITS.cornerRadius)}
+                `, 'pp-subsection')}
+                </div>
                 <div data-for-types="${WIDGET_TYPES}">
                 ${sectionMarkup('widget', 'Widget Properties', '', `
                     ${widgetField('labelText', textRow('Label text', 'widget', 'labelText', 'variable label'))}
@@ -676,6 +735,9 @@ export class PanelPropertiesPopup {
                     ${selectRow('Align', 'element', 'align', [['', 'Default'], ...ALIGNMENTS])}
                     ${colorRow('Text', 'element', 'textColor')}
                     ${colorRow('Label', 'element', 'labelColor')}
+                    ${colorRow('Background', 'element', 'backgroundColor')}
+                    ${numberRow('Bg opacity', 'element', 'backgroundOpacity', BACKGROUND_OPACITY_LIMITS, '%')}
+                    ${numberRow('Bg corners', 'element', 'backgroundRadius', BACKGROUND_RADIUS_LIMITS)}
                     <div class="pp-style-row"><span>Icon</span>
                         <div class="pp-style-controls">
                             <input type="text" class="text_pole" data-style="element:icon" placeholder="e.g. heart" autocomplete="off" />
@@ -696,11 +758,11 @@ export class PanelPropertiesPopup {
             </div>
         `);
 
-        const variablesSection = sectionMarkup('variables', 'Variables', `
+        const variablesSection = sectionMarkup('variables', 'Shapes & Variables', `
             <button type="button" class="pp-properties-close" data-action="reload-variables" title="Reload the variable list">
                 <i class="fa-solid fa-rotate"></i>
             </button>
-        `, '<div class="pp-properties-picker"></div>');
+        `, '<div class="pp-properties-shapes"></div><div class="pp-properties-picker"></div>');
 
         el.innerHTML = `
             <div class="pp-properties-header">
@@ -731,6 +793,7 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-style="element:icon"]').setAttribute('list', iconList.id);
         el.querySelector('[data-style="widget:icon"]').setAttribute('list', iconList.id);
 
+        el.querySelector('.pp-properties-shapes').appendChild(this.shapes.el);
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
         this.preview = buildElementContent();
         this.preview.classList.add('pp-element-preview');
@@ -777,6 +840,9 @@ export class PanelPropertiesPopup {
             if (!element) return;
             const type = e.target.value;
             const patch = { type };
+            // Shapes show no variable - drop the binding so its preset
+            // isn't kept active for nothing.
+            if (type === 'shape') patch.binding = null;
             const [oldW, oldH] = DEFAULT_TYPE_SIZES[element.type] ?? [];
             const [newW, newH] = DEFAULT_TYPE_SIZES[type] ?? [];
             if (newW && element.width === oldW && element.height === oldH) {
@@ -795,6 +861,13 @@ export class PanelPropertiesPopup {
         field('showLabel').addEventListener('change', (e) => this.#change({ showLabel: e.target.checked }));
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));
         field('format').addEventListener('change', (e) => this.#change({ format: e.target.value }));
+        field('formatPattern').addEventListener('input', (e) => this.#change({ formatPattern: e.target.value }));
+        for (const button of el.querySelectorAll('[data-arrange]')) {
+            button.addEventListener('click', () => {
+                const element = this.#selected();
+                if (element) this.hooks.onArrangeElement(element.id, button.dataset.arrange);
+            });
+        }
         for (const input of el.querySelectorAll('[data-geo]')) this.#bindGeometryField(input);
         for (const input of el.querySelectorAll('[data-style]')) this.#bindStyleField(input);
         // State Engine doesn't announce new variable definitions, so the lists

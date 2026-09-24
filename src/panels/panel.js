@@ -14,7 +14,7 @@
 //     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
 import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
-import { isVariableElement } from '../elements/element-model.js';
+import { isVariableElement, isShapeElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
@@ -188,6 +188,9 @@ export class Panel {
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
                 onDropVariable: (name, x, y) => this.hooks.onDropVariable(name, x, y),
+                onAddShape: (kind) => this.hooks.onAddShape(this, kind),
+                onDropShape: (kind, x, y) => this.hooks.onDropShape(kind, x, y),
+                onArrangeElement: (elementId, action) => this.hooks.onArrangeElement(this, elementId, action),
                 dropTargetAt: (x, y) => this.hooks.dropTargetAt(x, y),
                 getValue: (name) => this.hooks.getValue(name),
                 onClose: () => {
@@ -215,8 +218,11 @@ export class Panel {
     }
 
     // Keeps one ElementView per VariableElement, reusing existing views.
+    // Shapes go first so they are drawn behind everything else; otherwise
+    // the stored order is the stacking order.
     #renderElements() {
-        const elements = this.record.widgets.filter(isVariableElement);
+        const all = this.record.widgets.filter(isVariableElement);
+        const elements = [...all.filter(isShapeElement), ...all.filter((e) => !isShapeElement(e))];
         const keep = new Set(elements.map((e) => e.id));
         for (const [id, view] of this.elementViews) {
             if (!keep.has(id)) {

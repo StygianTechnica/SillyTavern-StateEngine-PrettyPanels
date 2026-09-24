@@ -8,8 +8,9 @@
 // Like Panel, it reports committed changes through its panel's hooks
 // rather than writing anything itself.
 
-import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, elementLabel } from './element-model.js';
+import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, elementLabel } from './element-model.js';
 import { renderWidget } from './widgets.js';
+import { renderShape } from './shapes.js';
 import { formatValue } from './formats.js';
 import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
@@ -23,7 +24,8 @@ function clamp(value, min, max) {
 
 // Fills `container` (built by buildElementContent()) with an element: a
 // text element's label, icon and formatted value (styled by Element
-// Styling), or a bar/gauge widget (src/elements/widgets.js). `entry` is
+// Styling), a bar/gauge widget (src/elements/widgets.js), or a shape
+// (src/elements/shapes.js). `entry` is
 // the variable service's { value, def } or undefined. Shared by the
 // on-panel view and the properties-pane preview.
 export function renderElementContent(container, element, entry) {
@@ -31,6 +33,14 @@ export function renderElementContent(container, element, entry) {
     const valueEl = container.querySelector('.pp-element-value');
     const def = entry?.def ?? null;
 
+    container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
+    if (element.type === ELEMENT_TYPE_SHAPE) {
+        container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
+        applyElementStyle(container, {});
+        container.title = 'Shape';
+        renderShape(container, element);
+        return;
+    }
     if (element.type !== ELEMENT_TYPE_TEXT) {
         container.classList.add('pp-kind-widget');
         applyElementStyle(container, {}); // text styling never applies to widgets
@@ -63,7 +73,7 @@ export function renderElementContent(container, element, entry) {
         return;
     }
     container.title = element.role ? `${element.binding.name} (${element.role})` : element.binding.name;
-    const shown = formatValue(entry.value, def, element.format);
+    const shown = formatValue(entry.value, def, element.format, element.formatPattern);
     if (shown.image) {
         const img = document.createElement('img');
         img.src = shown.image;
@@ -78,7 +88,7 @@ export function renderElementContent(container, element, entry) {
 export function buildElementContent() {
     const el = document.createElement('div');
     el.className = 'pp-element';
-    el.innerHTML = '<span class="pp-element-label"></span><i class="pp-element-icon" hidden></i><span class="pp-element-value"></span><div class="pp-widget"></div>';
+    el.innerHTML = '<div class="pp-shape"></div><span class="pp-element-label"></span><i class="pp-element-icon" hidden></i><span class="pp-element-value"></span><div class="pp-widget"></div>';
     return el;
 }
 

@@ -52,7 +52,9 @@ import {
 } from './panel-registry.js';
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
-import { isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
+import {
+    isVariableElement, isShapeElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE, createVariableElement,
+} from '../elements/element-model.js';
 import { getValue, getImage, onValuesChange } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
@@ -162,6 +164,15 @@ const hooks = {
     },
     dropTargetAt(clientX, clientY) {
         return dropTargetAt(clientX, clientY);
+    },
+    onAddShape(panel, kind) {
+        addShapeElement(panel, kind);
+    },
+    onDropShape(kind, clientX, clientY) {
+        return dropShapeAt(kind, clientX, clientY);
+    },
+    onArrangeElement(panel, elementId, action) {
+        arrangeElement(panel, elementId, action);
     },
 };
 
@@ -635,15 +646,82 @@ export function addVariableElement(panel, name, at = null) {
     return element;
 }
 
+// Adds a shape element ('rectangle' | 'ellipse'). `at` ({ x, y } in body
+// coordinates, its top-left) defaults to the panel's top-left corner.
+// The new element is selected.
+export function addShapeElement(panel, kind, at = null) {
+    if (!panel.canEdit()) {
+        notify('warning', 'Unlock this panel (and turn on Editing Mode) to add elements to it.');
+        return null;
+    }
+    const grid = panel.gridSize() || 1;
+    const bodyWidth = panel.body.clientWidth || panel.record.width;
+    const bodyHeight = panel.body.clientHeight || panel.record.height;
+    const [defaultW, defaultH] = DEFAULT_TYPE_SIZES[ELEMENT_TYPE_SHAPE];
+    const width = Math.max(24, Math.min(defaultW, bodyWidth));
+    const height = Math.max(16, Math.min(defaultH, bodyHeight));
+    const x = Math.max(0, Math.min(Math.round(at ? softSnap(at.x, grid) : 0), bodyWidth - width));
+    const y = Math.max(0, Math.min(Math.round(at ? softSnap(at.y, grid) : 0), bodyHeight - height));
+    const element = createVariableElement({ type: ELEMENT_TYPE_SHAPE, x, y, width, height, shape: { kind } });
+    saveWidgets(panel, [...panel.record.widgets, element]);
+    panel.selectElement(element.id);
+    return element;
+}
+
+// Drops a shape from the palette onto a panel, centred on the pointer.
+export function dropShapeAt(kind, clientX, clientY) {
+    const target = dropTargetAt(clientX, clientY);
+    if (!target) return false;
+    const { panel } = target;
+    if (!panel.canEdit()) {
+        notify('warning', 'Unlock this panel to change its elements.');
+        return false;
+    }
+    const rect = panel.body.getBoundingClientRect();
+    const [w, h] = DEFAULT_TYPE_SIZES[ELEMENT_TYPE_SHAPE];
+    addShapeElement(panel, kind, {
+        x: clientX - rect.left + panel.body.scrollLeft - w / 2,
+        y: clientY - rect.top + panel.body.scrollTop - h / 2,
+    });
+    panel.openProperties('element');
+    return true;
+}
+
+// Moves an element within the panel's stacking order: 'back' | 'backward'
+// | 'forward' | 'front'. Shapes always stay behind other elements
+// (panel.js), so this orders shapes among shapes and the rest among the rest.
+export function arrangeElement(panel, elementId, action) {
+    const widgets = [...panel.record.widgets];
+    const index = widgets.findIndex((w) => w.id === elementId);
+    if (index < 0) return false;
+    const [element] = widgets.splice(index, 1);
+    const peers = widgets
+        .map((w, i) => ({ w, i }))
+        .filter(({ w }) => isVariableElement(w) && isShapeElement(w) === isShapeElement(element));
+    const before = peers.filter(({ i }) => i < index);
+    const after = peers.filter(({ i }) => i >= index);
+    let at = index;
+    if (action === 'back') at = before.length ? before[0].i : index;
+    else if (action === 'backward') at = before.length ? before[before.length - 1].i : index;
+    else if (action === 'forward') at = after.length ? after[0].i + 1 : index;
+    else if (action === 'front') at = after.length ? after[after.length - 1].i + 1 : index;
+    widgets.splice(at, 0, element);
+    if (at === index) return false;
+    saveWidgets(panel, widgets);
+    return true;
+}
+
 // What a variable dragged to (clientX, clientY) would land on:
 // { panel, elementId } (rebind) or { panel } (new element), or null.
+// A shape is never a rebind target - dropping on one adds an element.
 export function dropTargetAt(clientX, clientY) {
     const hit = document.elementFromPoint(clientX, clientY);
     const panelEl = hit?.closest?.('.pp-panel');
     const panel = panelEl ? panels.get(panelEl.dataset.panelId) : null;
     if (!panel) return null;
     const elementEl = hit.closest('.pp-element');
-    return elementEl && panel.el.contains(elementEl) ? { panel, elementId: elementEl.dataset.elementId } : { panel };
+    if (!elementEl || !panel.el.contains(elementEl) || elementEl.classList.contains('pp-kind-shape')) return { panel };
+    return { panel, elementId: elementEl.dataset.elementId };
 }
 
 // Drops a variable from the picker: onto an element it replaces that

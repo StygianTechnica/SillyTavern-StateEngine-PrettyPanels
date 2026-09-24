@@ -1,21 +1,29 @@
 // Element records: the widgets that live INSIDE a panel instance
 // (panel.widgets[]). Plain data only - src/elements/element-view.js
-// renders them. Every element is bound to one variable; its `type` picks
-// how it is drawn (see ELEMENT_TYPES):
+// renders them. Every element except a shape is bound to one variable;
+// its `type` picks how it is drawn (see ELEMENT_TYPES):
 //
 //   {
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
-//                              'gauge-circle' | 'gauge-semicircle' | 'composite-bar'
+//                              'gauge-circle' | 'gauge-semicircle' |
+//                              'composite-bar' | 'shape'
 //     x, y, width, height,     position/size inside the panel body, px
 //     role,                    optional conceptual tag ("health", ...)
 //     binding: { name } | null fully-qualified State Engine variable name
+//                              (always null for a shape)
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
+//     formatPattern,           the 'custom' datetime format's pattern
 //     style,                   Element Styling - text elements only
 //                              (src/elements/element-style.js)
 //     widget,                  Widget Properties - bars/gauges only
 //                              (src/elements/widgets.js)
+//     shape,                   Shape Properties - shapes only
+//                              (src/elements/shapes.js)
 //   }
+//
+// Shapes are drawn behind every other element (panel.js), so a coloured
+// rectangle can sit under text to keep it readable.
 //
 // Elements saved before types existed have type 'variable'; they load as
 // 'text'. Any other unknown type is kept untouched (and not drawn).
@@ -25,6 +33,7 @@
 // (src/storage/design.js stripBindings()).
 
 export const ELEMENT_TYPE_TEXT = 'text';
+export const ELEMENT_TYPE_SHAPE = 'shape';
 const LEGACY_TYPE_VARIABLE = 'variable';
 
 export const ELEMENT_TYPES = [
@@ -34,6 +43,7 @@ export const ELEMENT_TYPES = [
     ['gauge-circle', 'Circular Gauge'],
     ['gauge-semicircle', 'Semi-Circular Gauge'],
     ['composite-bar', 'Composite Bar'],
+    ['shape', 'Shape'],
 ];
 const TYPE_IDS = new Set(ELEMENT_TYPES.map(([id]) => id));
 
@@ -45,11 +55,16 @@ export const DEFAULT_TYPE_SIZES = {
     'gauge-circle': [72, 72],
     'gauge-semicircle': [96, 56],
     'composite-bar': [160, 24],
+    'shape': [120, 64],
 };
 
 // True for any element this version draws (every bound element type).
 export function isVariableElement(widget) {
     return !!widget && TYPE_IDS.has(widget.type);
+}
+
+export function isShapeElement(widget) {
+    return widget?.type === ELEMENT_TYPE_SHAPE;
 }
 export const DEFAULT_ELEMENT_WIDTH = 136;
 export const DEFAULT_ELEMENT_HEIGHT = 32;
@@ -78,21 +93,25 @@ function normalizeBinding(binding) {
 
 // Fills defaults on a VariableElement. Unknown fields are preserved.
 export function normalizeVariableElement(element) {
+    const type = TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT;
+    const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
     return {
         ...element,
         id: typeof element.id === 'string' && element.id ? element.id : newElementId(),
-        type: TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT,
+        type,
         x: Math.max(0, finite(element.x, 0)),
         y: Math.max(0, finite(element.y, 0)),
         width: Math.max(MIN_ELEMENT_WIDTH, finite(element.width, DEFAULT_ELEMENT_WIDTH)),
         height: Math.max(MIN_ELEMENT_HEIGHT, finite(element.height, DEFAULT_ELEMENT_HEIGHT)),
         role: text(element.role),
-        binding: normalizeBinding(element.binding),
+        binding: type === ELEMENT_TYPE_SHAPE ? null : normalizeBinding(element.binding),
         showLabel: element.showLabel !== false,
         labelOverride: text(element.labelOverride),
         format: typeof element.format === 'string' && element.format ? element.format : 'auto',
-        style: element.style && typeof element.style === 'object' && !Array.isArray(element.style) ? element.style : {},
-        widget: element.widget && typeof element.widget === 'object' && !Array.isArray(element.widget) ? element.widget : {},
+        formatPattern: text(element.formatPattern),
+        style: object(element.style),
+        widget: object(element.widget),
+        shape: object(element.shape),
     };
 }
 
@@ -121,6 +140,7 @@ export function localName(qualifiedName) {
 // The label an element shows (when showLabel is on): the override, else
 // the variable's own label, else its local name.
 export function elementLabel(element, def) {
+    if (element.type === ELEMENT_TYPE_SHAPE) return 'Shape';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
     return element.binding ? localName(element.binding.name) : 'Unbound';

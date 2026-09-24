@@ -12,6 +12,10 @@
 //                shown left of the value
 //   iconColor    CSS color
 //   iconSize     px, 8-72
+//   backgroundColor    CSS color behind the whole element, so text stays
+//                      readable over a panel's background image
+//   backgroundOpacity  %, 0-100 (default 100)
+//   backgroundRadius   px, 0-100 corner rounding of that background
 //   condition    { threshold, color }: when the value is a number below
 //                threshold, the value text takes `color`
 //
@@ -21,6 +25,8 @@ import { isColor } from '../panels/panel-style.js';
 
 export const FONT_SIZE_LIMITS = [8, 72];
 export const ICON_SIZE_LIMITS = [8, 72];
+export const BACKGROUND_OPACITY_LIMITS = [0, 100];
+export const BACKGROUND_RADIUS_LIMITS = [0, 100];
 
 export const FONT_WEIGHTS = [
     ['normal', 'Normal', '400'],
@@ -75,6 +81,11 @@ export function applyElementStyle(container, style = {}, value = undefined) {
     const family = FONT_FAMILIES.find(([id]) => id === style.fontFamily);
     set('--pp-el-font-family', family && family[0] !== 'inherit' ? family[2] : null);
     set('--pp-el-label-color', isColor(style.labelColor) ? style.labelColor : null);
+
+    const bgOpacity = clampNumber(style.backgroundOpacity, BACKGROUND_OPACITY_LIMITS) ?? 100;
+    set('--pp-el-bg', isColor(style.backgroundColor) ? `color-mix(in srgb, ${style.backgroundColor} ${bgOpacity}%, transparent)` : null);
+    const bgRadius = clampNumber(style.backgroundRadius, BACKGROUND_RADIUS_LIMITS);
+    set('--pp-el-radius', bgRadius === null ? null : `${bgRadius}px`);
 
     const n = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
     const condition = style.condition;

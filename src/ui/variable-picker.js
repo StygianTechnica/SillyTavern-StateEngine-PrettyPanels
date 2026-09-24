@@ -3,10 +3,91 @@
 // Drag an entry onto a panel to add a VariableElement there, or onto an
 // existing element to replace its binding; click an entry to add it to
 // this panel. Pointer-based drag (works with touch as well as a mouse).
+// ShapePalette offers the unbound shape elements the same way.
 
 import { localName } from '../elements/element-model.js';
+import { SHAPE_KINDS } from '../elements/shapes.js';
 
 const DRAG_THRESHOLD = 4;
+
+// Press-drag-release on a palette/picker entry. A release without moving
+// is a click (onClick); a drag shows a ghost labelled `ghostText`,
+// highlights what dropTargetAt(x, y) returns ({ panel, elementId? }) and
+// ends in onDrop(x, y).
+function bindPaletteDrag(item, ghostText, { onClick, onDrop, dropTargetAt }) {
+    item.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let ghost = null;
+        let highlighted = null;
+        item.setPointerCapture(e.pointerId);
+
+        const highlight = (target) => {
+            const el = target ? (target.elementId ? target.panel.el.querySelector(`[data-element-id="${target.elementId}"]`) : target.panel.el) : null;
+            if (el === highlighted) return;
+            highlighted?.classList.remove('pp-drop-target');
+            el?.classList.add('pp-drop-target');
+            highlighted = el;
+        };
+        const move = (ev) => {
+            if (!ghost) {
+                if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD) return;
+                ghost = document.createElement('div');
+                ghost.className = 'pp-picker-ghost';
+                ghost.textContent = ghostText;
+                document.body.appendChild(ghost);
+            }
+            ghost.style.left = `${ev.clientX + 10}px`;
+            ghost.style.top = `${ev.clientY + 10}px`;
+            highlight(dropTargetAt(ev.clientX, ev.clientY));
+        };
+        const end = (ev) => {
+            item.removeEventListener('pointermove', move);
+            item.removeEventListener('pointerup', end);
+            item.removeEventListener('pointercancel', end);
+            highlight(null);
+            if (ghost) {
+                ghost.remove();
+                if (ev.type === 'pointerup') onDrop(ev.clientX, ev.clientY);
+            } else if (ev.type === 'pointerup') {
+                onClick();
+            }
+        };
+        item.addEventListener('pointermove', move);
+        item.addEventListener('pointerup', end);
+        item.addEventListener('pointercancel', end);
+    });
+}
+
+// The Shapes row above the variable list: drag a shape onto a panel, or
+// click it to add it to this panel.
+export class ShapePalette {
+    // hooks: { onPick(kind), onDrop(kind, clientX, clientY), dropTargetAt(clientX, clientY) }
+    constructor(hooks) {
+        this.el = document.createElement('div');
+        this.el.className = 'pp-shape-palette';
+        this.el.innerHTML = '<span class="pp-shape-palette-caption">Shapes</span>';
+        for (const [kind, label, icon] of SHAPE_KINDS) {
+            const item = document.createElement('div');
+            item.className = 'pp-picker-item pp-shape-palette-item';
+            item.title = `${label}: drag onto a panel, or click to add it here. Shapes sit behind text and other elements.`;
+            item.innerHTML = `<i class="fa-solid ${icon}"></i><span></span>`;
+            item.querySelector('span').textContent = label;
+            bindPaletteDrag(item, label, {
+                onClick: () => hooks.onPick(kind),
+                onDrop: (x, y) => hooks.onDrop(kind, x, y),
+                // Shapes are always added, never dropped "onto" an element.
+                dropTargetAt: (x, y) => {
+                    const target = hooks.dropTargetAt(x, y);
+                    return target ? { panel: target.panel } : null;
+                },
+            });
+            this.el.appendChild(item);
+        }
+    }
+}
 
 export class VariablePicker {
     // hooks: { onPick(name), onDrop(name, clientX, clientY), dropTargetAt(clientX, clientY) }
@@ -75,55 +156,12 @@ export class VariablePicker {
         item.innerHTML = '<span class="pp-picker-label"></span><span class="pp-picker-type"></span>';
         item.querySelector('.pp-picker-label').textContent = def.label || localName(def.name);
         item.querySelector('.pp-picker-type').textContent = def.type ?? '';
-        this.#bindDrag(item, def);
-        return item;
-    }
-
-    #bindDrag(item, def) {
-        item.addEventListener('pointerdown', (e) => {
-            if (e.button !== 0) return;
-            e.preventDefault();
-            const startX = e.clientX;
-            const startY = e.clientY;
-            let ghost = null;
-            let highlighted = null;
-            item.setPointerCapture(e.pointerId);
-
-            const highlight = (target) => {
-                const el = target ? (target.elementId ? target.panel.el.querySelector(`[data-element-id="${target.elementId}"]`) : target.panel.el) : null;
-                if (el === highlighted) return;
-                highlighted?.classList.remove('pp-drop-target');
-                el?.classList.add('pp-drop-target');
-                highlighted = el;
-            };
-            const move = (ev) => {
-                if (!ghost) {
-                    if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < DRAG_THRESHOLD) return;
-                    ghost = document.createElement('div');
-                    ghost.className = 'pp-picker-ghost';
-                    ghost.textContent = def.label || localName(def.name);
-                    document.body.appendChild(ghost);
-                }
-                ghost.style.left = `${ev.clientX + 10}px`;
-                ghost.style.top = `${ev.clientY + 10}px`;
-                highlight(this.hooks.dropTargetAt(ev.clientX, ev.clientY));
-            };
-            const end = (ev) => {
-                item.removeEventListener('pointermove', move);
-                item.removeEventListener('pointerup', end);
-                item.removeEventListener('pointercancel', end);
-                highlight(null);
-                if (ghost) {
-                    ghost.remove();
-                    if (ev.type === 'pointerup') this.hooks.onDrop(def.name, ev.clientX, ev.clientY);
-                } else if (ev.type === 'pointerup') {
-                    this.hooks.onPick(def.name);
-                }
-            };
-            item.addEventListener('pointermove', move);
-            item.addEventListener('pointerup', end);
-            item.addEventListener('pointercancel', end);
+        bindPaletteDrag(item, def.label || localName(def.name), {
+            onClick: () => this.hooks.onPick(def.name),
+            onDrop: (x, y) => this.hooks.onDrop(def.name, x, y),
+            dropTargetAt: (x, y) => this.hooks.dropTargetAt(x, y),
         });
+        return item;
     }
 
     #build() {
