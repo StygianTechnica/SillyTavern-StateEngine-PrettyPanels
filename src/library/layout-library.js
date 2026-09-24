@@ -26,11 +26,13 @@ function layoutNames(store) {
     return Object.values(store.layouts).map((l) => l.name);
 }
 
-// The portable part of one panel instance.
+// The portable part of one panel instance (design plus its place in the
+// layout's stacking order).
 function instanceData(source) {
     return {
         name: typeof source?.name === 'string' && source.name ? source.name : 'Panel',
         locked: source?.locked === true,
+        ...(Number.isInteger(source?.zIndex) ? { zIndex: source.zIndex } : {}),
         ...pickDesign(source ?? {}),
     };
 }

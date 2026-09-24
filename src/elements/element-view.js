@@ -1,7 +1,9 @@
 // One VariableElement on screen, inside its panel's body. Owns its own
 // drag and resize (Editing Mode, unlocked panel only), with soft snap to
 // the panel grid. A press that doesn't move is a CLICK - it selects the
-// element and opens its properties; a drag never does.
+// element and opens its properties; a drag never does. While one element
+// is dragged, every OTHER element in the panel shows a faint outline, and
+// the live geometry is reported so the properties fields follow along.
 //
 // Like Panel, it reports committed changes through its panel's hooks
 // rather than writing anything itself.
@@ -64,8 +66,9 @@ export function buildElementContent() {
 }
 
 export class ElementView {
-    // panel: the owning Panel (canEdit(), gridSize(), hooks.getValue,
-    // hooks.onElementCommit, hooks.onElementClick).
+    // panel: the owning Panel (canEdit(), gridSize(), elementViews,
+    // hooks.getValue, hooks.onElementCommit, hooks.onElementDragging,
+    // hooks.onElementClick).
     constructor(panel, element) {
         this.panel = panel;
         this.element = element;
@@ -106,6 +109,13 @@ export class ElementView {
         this.el.remove();
     }
 
+    // Outlines the panel's other elements for the duration of a drag.
+    #outlineOthers(on) {
+        for (const view of this.panel.elementViews.values()) {
+            if (view !== this) view.el.classList.toggle('pp-element-outline', on);
+        }
+    }
+
     #geometry() {
         return {
             x: Math.round(parseFloat(this.el.style.left) || 0),
@@ -137,8 +147,10 @@ export class ElementView {
                     if (!editable || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
                     dragging = true;
                     this.el.classList.add('pp-element-dragging');
+                    this.#outlineOthers(true);
                 }
                 onDrag(origin, dx, dy);
+                this.panel.hooks.onElementDragging(this.panel, this.id, this.#geometry());
             };
             const end = () => {
                 handle.removeEventListener('pointermove', move);
@@ -146,6 +158,7 @@ export class ElementView {
                 handle.removeEventListener('pointercancel', end);
                 this.el.classList.remove('pp-element-dragging');
                 if (dragging) {
+                    this.#outlineOthers(false);
                     const geometry = this.#geometry();
                     const { x, y, width, height } = this.element;
                     if (geometry.x !== x || geometry.y !== y || geometry.width !== width || geometry.height !== height) {

@@ -19,6 +19,10 @@
 // update of the owning panel record. Any change to what variables the
 // layout shows is announced through onBindingsChange() so the chat
 // session can activate presets and re-watch values.
+//
+// Stacking: each panel's stored zIndex (layout data) is the only thing
+// that decides which panel is on top - clicking or dragging a panel never
+// changes it; only the Layering controls do (setPanelZIndex/restackPanel).
 
 import { Panel } from './panel.js';
 import {
@@ -32,6 +36,8 @@ import {
     setEditingModeFlag,
     getGridSettings,
     setGridSettings,
+    clampZIndex,
+    maxZIndex,
 } from './panel-registry.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import { ELEMENT_TYPE_VARIABLE, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
@@ -42,15 +48,15 @@ import { getTemplate } from '../library/panel-library.js';
 import { confirmYesNo, notify } from '../ui/dialogs.js';
 import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
 
-// Panels sit above the chat but below SillyTavern's own popups/drawers.
-const BASE_Z_INDEX = 2900;
+// Panels sit above the chat but below SillyTavern's own popups/drawers:
+// CSS z-index = BASE_Z_INDEX + the panel's stored zIndex (0..99).
+export const BASE_Z_INDEX = 2900;
 const CASCADE_STEP = 24;
 const CASCADE_SLOTS = 8;
 
 const panels = new Map();
 const stateListeners = new Set();
 const bindingListeners = new Set();
-let zCounter = BASE_Z_INDEX;
 let initialized = false;
 
 const hooks = {
@@ -69,9 +75,6 @@ const hooks = {
     onDeleteRequest(panel) {
         void confirmAndDelete(panel.id);
     },
-    onFocus(panel) {
-        bringToFront(panel);
-    },
     onSaveTemplateRequest(panel) {
         void saveInstanceToLibrary(panel.record);
     },
@@ -87,9 +90,18 @@ const hooks = {
     onElementCommit(panel, elementId, patch) {
         updateElement(panel, elementId, patch);
     },
+    onElementDragging(panel, elementId, geometry) {
+        panel.popup?.refreshElementGeometry(elementId, geometry);
+    },
     onElementClick(panel, elementId) {
         panel.selectElement(elementId);
-        panel.openProperties();
+        panel.openProperties('element');
+    },
+    onZIndexChange(panel, zIndex) {
+        setPanelZIndex(panel, zIndex);
+    },
+    onRestack(panel, action) {
+        restackPanel(panel, action);
     },
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
@@ -128,16 +140,29 @@ export function getBoundVariableNames() {
     return [...names];
 }
 
-function bringToFront(panel) {
-    panel.setZIndex(++zCounter);
-}
-
 function mountPanel(record) {
     const panel = new Panel(record, hooks);
     panels.set(record.id, panel);
     panel.mount();
-    bringToFront(panel);
     return panel;
+}
+
+// Sets a panel's stored stacking order (clamped to 0..99).
+export function setPanelZIndex(panel, zIndex) {
+    const next = clampZIndex(zIndex);
+    if (next === panel.record.zIndex) return;
+    const updated = updatePanelRecord(panel.id, { zIndex: next });
+    if (updated) panel.update(updated);
+}
+
+// Layering buttons: 'forward' (+1), 'backward' (-1), 'front' (one above
+// every other panel), 'back' (0).
+export function restackPanel(panel, action) {
+    const z = panel.record.zIndex;
+    if (action === 'forward') setPanelZIndex(panel, z + 1);
+    else if (action === 'backward') setPanelZIndex(panel, z - 1);
+    else if (action === 'front') setPanelZIndex(panel, maxZIndex(panel.id) + 1);
+    else if (action === 'back') setPanelZIndex(panel, 0);
 }
 
 // Default spot for a new panel: horizontally centred, near the top,
@@ -382,7 +407,7 @@ export function dropVariableAt(name, clientX, clientY) {
             y: clientY - rect.top + panel.body.scrollTop - DEFAULT_ELEMENT_HEIGHT / 2,
         });
     }
-    panel.openProperties();
+    panel.openProperties('element');
     return true;
 }
 

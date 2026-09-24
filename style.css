@@ -519,26 +519,6 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 
 /* ---------- Properties: sections, element fields, preview ---------- */
 
-.pp-properties-section-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.pp-properties-section-row .pp-properties-close {
-    padding: 0 4px;
-}
-
-.pp-properties-element {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.pp-properties-element[hidden] {
-    display: none;
-}
-
 .pp-field {
     display: grid;
     grid-template-columns: 58px 1fr;
@@ -697,4 +677,148 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 .pp-grid-size .text_pole {
     width: 4.5em;
     margin: 0;
+}
+
+/* ---------- Properties: collapsible sections ---------- */
+
+.pp-section {
+    margin-top: 6px;
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+}
+
+.pp-section-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-top: 4px;
+}
+
+.pp-section-header .pp-properties-close {
+    padding: 2px 4px;
+}
+
+.pp-section-toggle {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.pp-section-chevron {
+    width: 1em;
+    font-size: 0.8em;
+    opacity: 0.7;
+    transition: transform 0.15s ease;
+}
+
+.pp-section.pp-collapsed .pp-section-chevron {
+    transform: rotate(-90deg);
+}
+
+.pp-section.pp-collapsed .pp-section-body {
+    display: none;
+}
+
+.pp-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 2px 0 4px;
+}
+
+.pp-section-body .pp-properties-fields {
+    margin: 0;
+}
+
+.pp-element-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pp-element-fields[hidden],
+.pp-element-none[hidden],
+.pp-section-header [hidden] {
+    display: none;
+}
+
+.pp-element-none {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* ---------- Properties: element position/size, panel layering ---------- */
+
+.pp-geometry {
+    display: grid;
+    grid-template-columns: 58px 1fr 1fr;
+    align-items: center;
+    gap: 4px 6px;
+}
+
+.pp-geometry-caption {
+    opacity: 0.7;
+}
+
+.pp-geometry label,
+.pp-layering-z {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    min-width: 0;
+}
+
+.pp-geometry label > span {
+    flex: 0 0 auto;
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+
+.pp-geometry .text_pole,
+.pp-layering .text_pole {
+    margin: 0;
+    min-width: 0;
+    width: 100%;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-layering {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pp-layering-z {
+    flex: 1 1 auto;
+}
+
+.pp-layering-z > span {
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+.pp-layering-buttons {
+    display: flex;
+    gap: 3px;
+}
+
+.pp-layering-buttons .menu_button {
+    margin: 0;
+    padding: 4px 7px;
+}
+
+/* ---------- Element outlines while another element is dragged ---------- */
+
+body.pp-editing .pp-element.pp-element-outline {
+    outline: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 22%, transparent);
+    outline-offset: 0;
 }

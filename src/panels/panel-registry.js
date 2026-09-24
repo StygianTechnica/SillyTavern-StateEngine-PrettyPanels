@@ -8,7 +8,7 @@
 // callers never have to remember to persist. See src/storage/store.js
 // for the overall schema and src/library/ for layout/template management.
 
-import { getStore, getActiveLayout, save, generateId, MIN_GRID_SIZE, MAX_GRID_SIZE } from '../storage/store.js';
+import { getStore, getActiveLayout, save, generateId, MIN_GRID_SIZE, MAX_GRID_SIZE, MAX_Z_INDEX } from '../storage/store.js';
 import { pickDesign } from '../storage/design.js';
 
 // Fills any missing fields on a stored record with sane values, so a
@@ -21,7 +21,19 @@ function normalize(record) {
         ...pickDesign(record),
         name: typeof record.name === 'string' && record.name ? record.name : 'Panel',
         locked: record.locked === true,
+        zIndex: clampZIndex(record.zIndex),
     };
+}
+
+export function clampZIndex(value) {
+    return Number.isFinite(value) ? Math.min(MAX_Z_INDEX, Math.max(0, Math.round(value))) : 0;
+}
+
+// The highest zIndex in the active layout, or -1 if it has no panels.
+export function maxZIndex(excludeId = null) {
+    return Object.values(getActiveLayout().panels)
+        .filter((p) => p && p.id !== excludeId)
+        .reduce((max, p) => Math.max(max, clampZIndex(p.zIndex)), -1);
 }
 
 export function listPanels() {
@@ -37,8 +49,9 @@ export function getPanel(id) {
 }
 
 // Creates and persists a new panel instance in the active layout.
-// `init` may supply any design field and a name; ID is always generated
-// here, and the name defaults to "Panel N".
+// `init` may supply any design field, a name and a zIndex; ID is always
+// generated here, the name defaults to "Panel N", and the zIndex to just
+// above every existing panel.
 export function createPanelRecord(init = {}) {
     const layout = getActiveLayout();
     const number = layout.nextPanelNumber++;
@@ -48,6 +61,7 @@ export function createPanelRecord(init = {}) {
         id: generateId('pp'),
         name,
         createdAt: Date.now(),
+        zIndex: Number.isFinite(init.zIndex) ? init.zIndex : maxZIndex() + 1,
     });
     layout.panels[record.id] = record;
     save();

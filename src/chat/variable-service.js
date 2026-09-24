@@ -19,6 +19,7 @@ let watched = [];
 let catalog = [];
 let refreshToken = 0;
 const valueListeners = new Set();
+const catalogListeners = new Set();
 let warned = false;
 
 // One warning per page load if State Engine is too old to have the
@@ -82,7 +83,15 @@ export async function loadCatalog() {
         warnUnavailable(err);
         catalog = [];
     }
+    for (const listener of catalogListeners) listener(catalog);
     return catalog;
+}
+
+// Called with the new catalog after every loadCatalog() - e.g. after
+// presets were activated, so "inactive" markers stay current.
+export function onCatalogChange(listener) {
+    catalogListeners.add(listener);
+    return () => catalogListeners.delete(listener);
 }
 
 export function getCatalog() {

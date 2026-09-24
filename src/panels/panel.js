@@ -17,6 +17,10 @@ import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
 
+// Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
+// imports this module).
+const BASE_Z_INDEX = 2900;
+
 // Keep at least this much of a panel on-screen so it can always be
 // grabbed again after a window resize.
 const VISIBLE_MARGIN = 40;
@@ -30,13 +34,15 @@ export class Panel {
     //   onGeometryCommit(panel, { x, y, width, height }),
     //   onLockChange(panel, locked),
     //   onDeleteRequest(panel),
-    //   onFocus(panel),
     //   onSaveTemplateRequest(panel),
     //   onExportTemplateRequest(panel),
     //   getGrid() -> { snap, size },
     //   getValue(variableName) -> { value, def } | undefined,
     //   onElementCommit(panel, elementId, patch),
+    //   onElementDragging(panel, elementId, { x, y, width, height }),
     //   onElementClick(panel, elementId),
+    //   onZIndexChange(panel, zIndex),
+    //   onRestack(panel, 'forward' | 'backward' | 'front' | 'back'),
     //   onElementDelete(panel, elementId),
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
@@ -48,6 +54,9 @@ export class Panel {
         this.popup = null;
         this.selectedElementId = null;
         this.elementViews = new Map();
+        // Which properties sections are expanded - kept for as long as the
+        // panel is on screen, so reopening its properties looks the same.
+        this.openSections = { panel: true, element: true, variables: true };
         this.el = this.#build();
         this.body = this.el.querySelector('.pp-panel-body');
         this.#bindDrag();
@@ -83,6 +92,7 @@ export class Panel {
             height: `${height}px`,
         });
         this.el.classList.toggle('pp-locked', locked);
+        this.el.style.zIndex = String(BASE_Z_INDEX + this.record.zIndex);
         this.el.querySelector('.pp-panel-edit').title = locked ? 'Panel properties (locked)' : 'Panel properties';
         this.#renderElements();
         this.popup?.refresh();
@@ -100,10 +110,6 @@ export class Panel {
         this.popup?.refreshElementPreview();
     }
 
-    setZIndex(z) {
-        this.el.style.zIndex = String(z);
-    }
-
     getElement(elementId) {
         return this.record.widgets.find((w) => w.id === elementId) ?? null;
     }
@@ -112,6 +118,8 @@ export class Panel {
         const next = elementId && this.getElement(elementId) ? elementId : null;
         const changed = next !== this.selectedElementId;
         this.selectedElementId = next;
+        // Selecting an element brings its properties back into view.
+        if (changed && next) this.openSections.element = true;
         for (const view of this.elementViews.values()) view.setSelected(view.id === next);
         if (changed) this.popup?.refresh();
     }
@@ -127,7 +135,10 @@ export class Panel {
         return snap ? size : 0;
     }
 
-    openProperties() {
+    // `focus` ('panel' | 'element') expands that section if it was
+    // collapsed - opening from the panel's dot, or clicking an element.
+    openProperties(focus = null) {
+        if (focus) this.openSections[focus] = true;
         if (!this.popup) {
             this.popup = new PanelPropertiesPopup(this, {
                 onLockToggle: (locked) => this.hooks.onLockChange(this, locked),
@@ -135,6 +146,8 @@ export class Panel {
                 onSaveTemplate: () => this.hooks.onSaveTemplateRequest(this),
                 onExportTemplate: () => this.hooks.onExportTemplateRequest(this),
                 onElementChange: (elementId, patch) => this.hooks.onElementCommit(this, elementId, patch),
+                onZIndexChange: (zIndex) => this.hooks.onZIndexChange(this, zIndex),
+                onRestack: (action) => this.hooks.onRestack(this, action),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
                 onDropVariable: (name, x, y) => this.hooks.onDropVariable(name, x, y),
@@ -197,7 +210,6 @@ export class Panel {
             <button type="button" class="pp-panel-edit" aria-label="Panel properties"></button>
             <div class="pp-panel-resize-handle" title="Drag to resize"></div>
         `;
-        el.addEventListener('pointerdown', () => this.hooks.onFocus(this), true);
         return el;
     }
 
@@ -281,7 +293,7 @@ export class Panel {
             e.stopPropagation();
             if (!document.body.classList.contains('pp-editing')) return;
             if (this.popup) this.closeProperties();
-            else this.openProperties();
+            else this.openProperties('panel');
         });
     }
 }

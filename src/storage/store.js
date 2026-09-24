@@ -12,6 +12,7 @@
 //     defaultLayoutId,    shown in a chat that has not chosen one
 //                         (see src/chat/chat-session.js)
 //     layouts:   { [id]: { id, name, createdAt, nextPanelNumber, backgrounds, panels: { [id]: instance } } },
+//                instance.zIndex: stacking order within the layout, 0..MAX_Z_INDEX
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
 //   }
 //
@@ -25,6 +26,9 @@ const DEFAULT_LAYOUT_NAME = 'Default';
 export const DEFAULT_GRID_SIZE = 8;
 export const MIN_GRID_SIZE = 2;
 export const MAX_GRID_SIZE = 64;
+// Panel stacking order within a layout. Kept small so panels always stay
+// below SillyTavern's own popups (see panel-manager.js BASE_Z_INDEX).
+export const MAX_Z_INDEX = 99;
 
 const libraryListeners = new Set();
 
@@ -73,6 +77,20 @@ function migrate(store) {
     delete store.panels;
     delete store.nextPanelNumber;
     store.version = SCHEMA_VERSION;
+}
+
+// Panels saved before zIndex existed get one from their creation order,
+// above every panel that already has one - so an old layout keeps the
+// stacking it had (newest on top).
+function assignMissingZIndexes(layout) {
+    const panels = Object.values(layout.panels).filter((p) => isObject(p));
+    const missing = panels
+        .filter((p) => !Number.isInteger(p.zIndex))
+        .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+    if (missing.length === 0) return false;
+    let next = panels.reduce((max, p) => (Number.isInteger(p.zIndex) ? Math.max(max, p.zIndex + 1) : max), 0);
+    for (const panel of missing) panel.zIndex = Math.min(MAX_Z_INDEX, next++);
+    return true;
 }
 
 export function save() {
@@ -132,6 +150,7 @@ export function getStore() {
         if (!isObject(layout.panels)) { layout.panels = {}; changed = true; }
         if (!Array.isArray(layout.backgrounds)) { layout.backgrounds = []; changed = true; }
         if (!Number.isFinite(layout.nextPanelNumber)) { layout.nextPanelNumber = 1; changed = true; }
+        if (assignMissingZIndexes(layout)) changed = true;
     }
 
     if (Object.keys(store.layouts).length === 0) {

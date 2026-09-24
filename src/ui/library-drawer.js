@@ -30,17 +30,30 @@ import { chooseLayout, showChatLayout, getSessionState, onSessionChange } from '
 import { confirmYesNo, promptText, notify } from './dialogs.js';
 import { downloadJson, pickJsonFile, safeFilename } from './files.js';
 
+// When a chat is open but hasn't chosen a layout, the list starts with a
+// "Default (...)" entry that is selected - so picking ANY real layout,
+// including the default one already on screen, is a change that records
+// it for the chat.
 function renderLayouts() {
     const select = document.getElementById('pp_layout_select');
     if (!select) return;
     const activeId = getActiveLayoutId();
-    select.replaceChildren(...listLayouts().map((layout) => {
+    const { chatId, chosen } = getSessionState();
+    const layouts = listLayouts();
+    const options = layouts.map((layout) => {
         const option = document.createElement('option');
         option.value = layout.id;
         option.textContent = layout.isDefault ? `${layout.name} ★` : layout.name;
-        option.selected = layout.id === activeId;
         return option;
-    }));
+    });
+    let selectedValue = activeId;
+    if (chatId && !chosen) {
+        const current = layouts.find((l) => l.id === activeId);
+        options.unshift(new Option(`Default (${current?.name ?? 'none'} ★) - not saved to this chat`, ''));
+        selectedValue = '';
+    }
+    select.replaceChildren(...options);
+    select.value = selectedValue;
     renderChatHint();
 }
 
@@ -165,7 +178,9 @@ export function initLibraryDrawer() {
     const root = document.getElementById('pretty_panels_settings');
     if (!root) return;
 
-    document.getElementById('pp_layout_select').addEventListener('change', (e) => void chooseLayout(e.target.value));
+    document.getElementById('pp_layout_select').addEventListener('change', (e) => {
+        if (e.target.value) void chooseLayout(e.target.value);
+    });
 
     root.querySelectorAll('[data-layout-action]').forEach((button) => {
         button.addEventListener('click', () => {

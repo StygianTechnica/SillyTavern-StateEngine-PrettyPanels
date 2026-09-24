@@ -86,3 +86,30 @@ export function elementLabel(element, def) {
     if (def?.label) return def.label;
     return element.binding ? localName(element.binding.name) : 'Unbound';
 }
+
+// Keeps an element's geometry inside its panel body (bodyWidth x
+// bodyHeight) and above the minimum size. `changed` names the field just
+// edited: a width/height edit keeps the position and limits the size to
+// the space left; anything else fits the size first, then the position -
+// either way the element never ends up outside the panel.
+export function clampElementGeometry({ x, y, width, height }, bodyWidth, bodyHeight, changed = null) {
+    const fit = (value, min, max) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
+    if (changed === 'width' || changed === 'height') {
+        const px = fit(x, 0, bodyWidth - MIN_ELEMENT_WIDTH);
+        const py = fit(y, 0, bodyHeight - MIN_ELEMENT_HEIGHT);
+        return {
+            x: px,
+            y: py,
+            width: fit(width, MIN_ELEMENT_WIDTH, bodyWidth - px),
+            height: fit(height, MIN_ELEMENT_HEIGHT, bodyHeight - py),
+        };
+    }
+    const w = fit(width, MIN_ELEMENT_WIDTH, bodyWidth);
+    const h = fit(height, MIN_ELEMENT_HEIGHT, bodyHeight);
+    return {
+        x: fit(x, 0, bodyWidth - w),
+        y: fit(y, 0, bodyHeight - h),
+        width: w,
+        height: h,
+    };
+}
