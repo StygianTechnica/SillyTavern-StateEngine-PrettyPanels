@@ -4,7 +4,9 @@
 // the SillyTavern theme", exactly as panels looked before styling existed.
 //
 //   backgroundColor    CSS color (the pickers store #rrggbb)
-//   backgroundOpacity  0-100 (%), applied to the background colour only
+//   panelOpacity       0-100 (%), the background colour layer only - never
+//                      the border, the image or the elements (formerly
+//                      backgroundOpacity; migrated in store.js)
 //   borderColor        CSS color
 //   borderWidth        px, 0-20
 //   borderRadius       px, 0-50
@@ -13,17 +15,25 @@
 //   margin             px, 0-64 - the visible panel is inset by this much
 //                      inside its stored bounds (geometry is unchanged)
 //   backgroundImage    image URL (remote, or a SillyTavern-served path)
+//   backgroundImageVariable  a State Engine image / imageList / imageMap
+//                      variable; when set, the image it is showing replaces
+//                      backgroundImage (which stays stored). A binding, so
+//                      stripped from panel templates like element bindings.
 //   backgroundImageMode  'cover' (default) | 'contain' | 'tile' | 'stretch'
 //   backgroundImageOpacity  0-100 (%), the image layer only
 //
-// The image is its own layer (.pp-panel-image) between the background
-// colour and the panel's content, so its opacity never touches elements.
+// Layers, bottom to top: background colour (panelOpacity), image
+// (backgroundImageOpacity; PNG/SVG/WebP alpha kept - nothing fills behind
+// it), border, content. With panelOpacity 0 there is no frosted backdrop
+// and the drop shadow follows the image's own shape instead of a box;
+// with panelOpacity 0, no visible image and border 0 the panel is fully
+// invisible while still holding its elements.
 //
 // Applied as --pp-* custom properties on the panel element; style.css
 // maps them onto .pp-panel-box / .pp-panel-body.
 
 export const PANEL_STYLE_LIMITS = {
-    backgroundOpacity: [0, 100],
+    panelOpacity: [0, 100],
     borderWidth: [0, 20],
     borderRadius: [0, 50],
     padding: [0, 64],
@@ -82,29 +92,41 @@ function number(style, key) {
 }
 
 // The --pp-* property values for a style (null = unset, use the theme).
-export function panelStyleVars(style = {}) {
+// `image` is the resolved image of backgroundImageVariable (undefined when
+// the panel has no image variable), which replaces backgroundImage.
+export function panelStyleVars(style = {}, image = undefined) {
     const bgColor = isColor(style.backgroundColor) ? style.backgroundColor : null;
-    const opacity = number(style, 'backgroundOpacity');
+    const opacity = number(style, 'panelOpacity') ?? number({ panelOpacity: style.backgroundOpacity }, 'panelOpacity');
     let background = null;
     if (bgColor || opacity !== null) {
         const base = bgColor ?? 'var(--SmartThemeBlurTintColor)';
         background = opacity === null ? base : `color-mix(in srgb, ${base} ${opacity}%, transparent)`;
     }
     const px = (v) => (v === null ? null : `${v}px`);
+    const images = imageVars(style, image);
+    const imageVisible = images['--pp-bg-image'] !== null && number(style, 'backgroundImageOpacity') !== 0;
+    const clearPanel = opacity === 0;
+    const shadowOn = style.shadow !== false;
     return {
         '--pp-bg': background,
         '--pp-border-color': isColor(style.borderColor) ? style.borderColor : null,
         '--pp-border-width': px(number(style, 'borderWidth')),
         '--pp-radius': px(number(style, 'borderRadius')),
-        '--pp-shadow': style.shadow === false ? 'none' : null,
+        // A clear panel casts no box shadow; a visible image on it casts
+        // one that follows the image's own shape (alpha) instead.
+        '--pp-shadow': !shadowOn || clearPanel ? 'none' : null,
+        '--pp-image-shadow': shadowOn && clearPanel && imageVisible ? `drop-shadow(${STANDARD_SHADOW})` : null,
+        // A clear panel doesn't frost what's behind it either.
+        '--pp-backdrop': clearPanel ? 'none' : null,
         '--pp-padding': px(number(style, 'padding')),
         '--pp-margin': px(number(style, 'margin')),
-        ...imageVars(style),
+        ...images,
     };
 }
 
-function imageVars(style) {
-    const url = cssUrl(style.backgroundImage);
+function imageVars(style, image) {
+    const source = style.backgroundImageVariable ? image : style.backgroundImage;
+    const url = cssUrl(source);
     if (!url) {
         return { '--pp-bg-image': null, '--pp-bg-image-size': null, '--pp-bg-image-repeat': null, '--pp-bg-image-opacity': null };
     }
@@ -118,8 +140,8 @@ function imageVars(style) {
     };
 }
 
-export function applyPanelStyle(el, style) {
-    for (const [prop, value] of Object.entries(panelStyleVars(style))) {
+export function applyPanelStyle(el, style, image = undefined) {
+    for (const [prop, value] of Object.entries(panelStyleVars(style, image))) {
         if (value === null) el.style.removeProperty(prop);
         else el.style.setProperty(prop, value);
     }

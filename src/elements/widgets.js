@@ -7,8 +7,9 @@
 // and stroke-dashoffset changes can animate (200ms) when `animate` is on.
 //
 // Percentage = value / max * 100, with the value clamped to [0, max].
-// `max` is the element's Max Value (widget.maxValue); left blank, it is
-// the bound variable's own max if it defines one, else 100.
+// `max` is the element's Max Value (widget.maxValue); left blank, the
+// bound variable's own range is used - its max if it defines one (else
+// 100) and its min if it defines one (else 0).
 
 import { isColor } from '../panels/panel-style.js';
 import { iconClass } from './element-style.js';
@@ -71,7 +72,9 @@ export function percentOf(value, def, widget) {
     const n = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
     if (!Number.isFinite(n)) return null;
     const max = effectiveMax(widget, def);
-    return (Math.min(max, Math.max(0, n)) / max) * 100;
+    const explicit = Number.isFinite(widget?.maxValue) && widget.maxValue > 0;
+    const min = !explicit && Number.isFinite(def?.min) && def.min < max ? def.min : 0;
+    return ((Math.min(max, Math.max(min, n)) - min) / (max - min)) * 100;
 }
 
 function svg(tag, attrs = {}) {

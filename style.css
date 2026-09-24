@@ -30,7 +30,7 @@
     pointer-events: auto;
     color: var(--SmartThemeBodyColor);
     background-color: var(--pp-bg, var(--SmartThemeBlurTintColor));
-    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    backdrop-filter: var(--pp-backdrop, blur(var(--SmartThemeBlurStrength, 10px)));
     border: var(--pp-border-width, 1px) solid var(--pp-border-color, var(--SmartThemeBorderColor));
     border-radius: var(--pp-radius, 10px);
     box-shadow: var(--pp-shadow, 0 2px 6px rgba(0, 0, 0, 0.4));
@@ -1142,6 +1142,7 @@ body.pp-editing .pp-element.pp-element-outline {
     background-repeat: var(--pp-bg-image-repeat, no-repeat);
     background-position: center;
     opacity: var(--pp-bg-image-opacity, 1);
+    filter: var(--pp-image-shadow, none);
 }
 
 .pp-panel-drag-handle {

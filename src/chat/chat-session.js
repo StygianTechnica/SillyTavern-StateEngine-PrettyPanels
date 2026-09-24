@@ -17,7 +17,7 @@
 import { EXTENSION_ID } from '../constants.js';
 import { activatePreset } from '../api/activate-preset.js';
 import { getLayout, getActiveLayoutId, getDefaultLayoutId } from '../library/layout-library.js';
-import { switchLayout, getBoundVariableNames, onBindingsChange } from '../panels/panel-manager.js';
+import { switchLayout, getBoundVariableNames, getBoundImageNames, onBindingsChange } from '../panels/panel-manager.js';
 import { ensureConfigPreset, readChatLayoutId, writeChatLayoutId } from './pp-config.js';
 import { VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, loadCatalog } from './variable-service.js';
 import { notify } from '../ui/dialogs.js';
@@ -66,7 +66,7 @@ async function activateLayoutPresets(chatId, names = getBoundVariableNames()) {
 }
 
 async function refreshVariables() {
-    await watchNames(getBoundVariableNames());
+    await watchNames(getBoundVariableNames(), getBoundImageNames());
 }
 
 // Shows the layout the current chat chose, or the default. Also used

@@ -1,13 +1,15 @@
 // Live State Engine variable data for display:
 //   - the CATALOG: every preset in every namespace with its variables
 //     (for the variable picker and the element Binding field), and
-//   - current VALUES for the variable names the active layout shows.
+//   - current VALUES for the variable names the active layout shows, and
+//   - resolved IMAGES for the image variables panels use as backgrounds.
 // Plain cache + listeners; src/chat/chat-session.js decides when to
 // refresh (chat changes, State Engine's variables-changed event).
 
 import { EXTENSION_ID } from '../constants.js';
 import { listAllVariables } from '../api/list-all-variables.js';
 import { getVariableValues } from '../api/get-variable-values.js';
+import { getVariableImage } from '../api/get-variable-image.js';
 import { notify } from '../ui/dialogs.js';
 
 // Emitted by State Engine on SillyTavern's eventSource whenever variable
@@ -16,6 +18,8 @@ export const VARIABLES_CHANGED_EVENT = 'state_engine_variables_changed';
 
 let values = new Map();
 let watched = [];
+let images = new Map();
+let watchedImages = [];
 let catalog = [];
 let refreshToken = 0;
 const valueListeners = new Set();
@@ -46,9 +50,17 @@ export function getValue(name) {
     return values.get(name);
 }
 
-// Sets which names to keep values for, then refreshes them.
-export function watchNames(names) {
+// The image an image variable is showing in the current chat (a
+// display-safe source), or null.
+export function getImage(name) {
+    return images.get(name) ?? null;
+}
+
+// Sets which names to keep values (and, for `imageNames`, resolved
+// images) for, then refreshes them.
+export function watchNames(names, imageNames = []) {
     watched = [...new Set(names)];
+    watchedImages = [...new Set(imageNames)];
     return refreshValues();
 }
 
@@ -56,6 +68,7 @@ export async function refreshValues() {
     const token = ++refreshToken;
     const chatId = currentChatId();
     const next = new Map();
+    const nextImages = new Map();
     if (chatId && watched.length > 0) {
         try {
             const read = await getVariableValues(EXTENSION_ID, chatId, watched);
@@ -64,9 +77,20 @@ export async function refreshValues() {
             warnUnavailable(err);
         }
     }
+    if (chatId) {
+        for (const name of watchedImages) {
+            try {
+                nextImages.set(name, await getVariableImage(EXTENSION_ID, chatId, name));
+            } catch (err) {
+                warnUnavailable(err);
+                break;
+            }
+        }
+    }
     // A newer refresh (e.g. after a chat switch) already started - drop this one.
     if (token !== refreshToken) return;
     values = next;
+    images = nextImages;
     for (const listener of valueListeners) listener();
 }
 

@@ -41,6 +41,7 @@ export class Panel {
     //   onExportTemplateRequest(panel),
     //   getGrid() -> { snap, size },
     //   getValue(variableName) -> { value, def } | undefined,
+    //   getImage(variableName) -> display-safe image source | null,
     //   onElementCommit(panel, elementId, patch),
     //   onElementDragging(panel, elementId, { x, y, width, height }),
     //   onElementClick(panel, elementId),
@@ -111,7 +112,7 @@ export class Panel {
         });
         this.el.classList.toggle('pp-locked', locked);
         this.el.style.zIndex = String(BASE_Z_INDEX + this.record.zIndex);
-        applyPanelStyle(this.el, this.record.style);
+        this.#applyStyle();
         this.el.querySelector('.pp-panel-edit').title = locked ? 'Panel properties (locked)' : 'Panel properties';
         this.#renderElements();
         this.popup?.refresh();
@@ -123,8 +124,16 @@ export class Panel {
         this.applyRecord();
     }
 
-    // Re-renders element values only (after the variable service updated).
+    // Panel Styling, with the background image variable (if any) resolved.
+    #applyStyle() {
+        const name = this.record.style?.backgroundImageVariable;
+        applyPanelStyle(this.el, this.record.style, name ? this.hooks.getImage(name) : undefined);
+    }
+
+    // Re-renders variable-driven content only (after the variable service
+    // updated): element values and a variable background image.
     renderValues() {
+        this.#applyStyle();
         for (const view of this.elementViews.values()) view.render();
         this.popup?.refreshElementPreview();
     }

@@ -53,7 +53,7 @@ import {
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import { isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
-import { getValue, onValuesChange } from '../chat/variable-service.js';
+import { getValue, getImage, onValuesChange } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
 import { getTemplate } from '../library/panel-library.js';
@@ -102,6 +102,9 @@ const hooks = {
     },
     getValue(name) {
         return getValue(name);
+    },
+    getImage(name) {
+        return getImage(name);
     },
     onElementCommit(panel, elementId, patch) {
         updateElement(panel, elementId, patch);
@@ -173,14 +176,25 @@ export function onBindingsChange(listener) {
     return () => bindingListeners.delete(listener);
 }
 
-// Every variable name bound by an element in the active layout (from the
-// registry, so it's right even while panels are unmounted).
+// Every variable name the active layout uses - element bindings and panel
+// background image variables (from the registry, so it's right even while
+// panels are unmounted). Their presets get activated in the chat.
 export function getBoundVariableNames() {
-    const names = new Set();
+    const names = new Set(getBoundImageNames());
     for (const record of listPanels()) {
         for (const widget of record.widgets) {
             if (isVariableElement(widget) && widget.binding) names.add(widget.binding.name);
         }
+    }
+    return [...names];
+}
+
+// The image variables panels use as backgrounds.
+export function getBoundImageNames() {
+    const names = new Set();
+    for (const record of listPanels()) {
+        const name = record.style?.backgroundImageVariable;
+        if (typeof name === 'string' && name) names.add(name);
     }
     return [...names];
 }
@@ -240,15 +254,30 @@ function moveRecord(panel, patch) {
     if (updated) panel.update(updated);
 }
 
+// The screen area panels align to: the window minus SillyTavern's top
+// bar, measured live (its height depends on theme and zoom). Anything
+// that isn't there or isn't visible is ignored.
+const TOP_BAR_SELECTORS = ['#top-settings-holder', '#top-bar'];
+function screenBounds() {
+    let top = 0;
+    for (const selector of TOP_BAR_SELECTORS) {
+        const el = document.querySelector(selector);
+        if (!el || el.offsetParent === null && getComputedStyle(el).position !== 'fixed') continue;
+        const rect = el.getBoundingClientRect();
+        // Only a bar actually along the top edge counts.
+        if (rect.height > 0 && rect.top <= 1 && rect.bottom < window.innerHeight / 2) top = Math.max(top, Math.ceil(rect.bottom));
+    }
+    return { x: 0, y: top, width: window.innerWidth, height: window.innerHeight - top };
+}
+
 // Aligns the selected panels. With several selected, to the first one
-// picked; with one, to the screen. Locked panels never move. Edges:
+// picked; with one, to the screen below SillyTavern's top bar
+// (screenBounds). Locked panels never move. Edges:
 // 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'.
 export function alignSelection(edge) {
     const chosen = selection.map((id) => panels.get(id)).filter(Boolean);
     if (chosen.length === 0) return 0;
-    const ref = chosen.length > 1
-        ? chosen[0].record
-        : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+    const ref = chosen.length > 1 ? chosen[0].record : screenBounds();
     const targets = chosen.length > 1 ? chosen.slice(1) : chosen;
     let moved = 0;
     for (const panel of targets) {
@@ -360,7 +389,10 @@ export function setPanelZIndex(panel, zIndex) {
 
 // Merges `patch` into a panel's Panel Styling; a null/undefined value
 // removes that property (back to the theme default).
+// Changing the background image variable is a binding change (its preset
+// may need activating, and its image must be watched).
 export function updatePanelStyle(panel, patch) {
+    const before = panel.record.style?.backgroundImageVariable ?? null;
     const style = { ...panel.record.style };
     for (const [key, value] of Object.entries(patch)) {
         if (value === null || value === undefined) delete style[key];
@@ -368,6 +400,8 @@ export function updatePanelStyle(panel, patch) {
     }
     const updated = updatePanelRecord(panel.id, { style });
     if (updated) panel.update(updated);
+    const after = style.backgroundImageVariable ?? null;
+    if (before !== after) emitBindingsChange(after ? [after] : []);
 }
 
 // Layering buttons: 'forward' (+1), 'backward' (-1), 'front' (one above

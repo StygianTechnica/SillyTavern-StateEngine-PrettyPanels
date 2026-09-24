@@ -170,6 +170,7 @@ export class PanelPropertiesPopup {
             option.label = `${def.label || localName(def.name)} · ${preset.name}`;
             return option;
         })));
+        this.#fillPanelStyle();
         this.#refreshElement();
     }
 
@@ -205,7 +206,7 @@ export class PanelPropertiesPopup {
         for (const control of this.el.querySelectorAll('input, select, button')) {
             if (control.closest('[data-section="variables"]')) continue;
             if (control.matches('[data-action="lock"], [data-action="close"], [data-toggle]')) continue;
-            control.disabled = locked;
+            control.disabled = locked || control.dataset.overridden === '1';
         }
     }
 
@@ -373,7 +374,35 @@ export class PanelPropertiesPopup {
         for (const key of Object.keys(PANEL_STYLE_LIMITS)) this.#fillValue('panel', key, style[key]);
         this.#fillValue('panel', 'shadow', style.shadow !== false);
         this.#fillValue('panel', 'backgroundImage', style.backgroundImage ?? '');
+        this.#fillImageVariable(style.backgroundImageVariable ?? '');
+        // A chosen image variable overrides the URL: greyed out, value kept.
+        const url = this.#styleField('panel', 'backgroundImage');
+        url.dataset.overridden = style.backgroundImageVariable ? '1' : '';
+        url.title = style.backgroundImageVariable ? 'Overridden by the image variable below' : '';
         this.#fillValue('panel', 'backgroundImageMode', style.backgroundImageMode ?? 'cover');
+    }
+
+    // The Image variable dropdown: "none", then every image / image list /
+    // image map variable, grouped by preset. A stored name missing from the
+    // catalog is kept as its own option.
+    #fillImageVariable(current) {
+        const select = this.#styleField('panel', 'backgroundImageVariable');
+        if (select === document.activeElement) return;
+        const groups = getCatalog()
+            .map((preset) => ({ preset, vars: preset.variables.filter((v) => ['image', 'imageList', 'imageMap'].includes(v.type)) }))
+            .filter((g) => g.vars.length > 0);
+        const options = [new Option('None - use the Image URL', '')];
+        for (const { preset, vars } of groups) {
+            const group = document.createElement('optgroup');
+            group.label = `${preset.name} (${preset.namespace})`;
+            for (const v of vars) group.appendChild(new Option(`${v.label || localName(v.name)} · ${v.type}`, v.name));
+            options.push(group);
+        }
+        if (current && !groups.some((g) => g.vars.some((v) => v.name === current))) {
+            options.push(new Option(`${current} (not found)`, current));
+        }
+        select.replaceChildren(...options);
+        select.value = current;
     }
 
     #fillElementStyle(element) {
@@ -560,7 +589,7 @@ export class PanelPropertiesPopup {
             </div>
             ${sectionMarkup('panelStyle', 'Panel Styling', '', `
                 ${colorRow('Background', 'panel', 'backgroundColor')}
-                ${numberRow('Opacity', 'panel', 'backgroundOpacity', PANEL_STYLE_LIMITS.backgroundOpacity, '%')}
+                ${numberRow('Panel opacity', 'panel', 'panelOpacity', PANEL_STYLE_LIMITS.panelOpacity, '%')}
                 ${colorRow('Border', 'panel', 'borderColor')}
                 ${numberRow('Thickness', 'panel', 'borderWidth', PANEL_STYLE_LIMITS.borderWidth)}
                 ${numberRow('Radius', 'panel', 'borderRadius', PANEL_STYLE_LIMITS.borderRadius)}
@@ -569,7 +598,12 @@ export class PanelPropertiesPopup {
                 </label>
                 ${numberRow('Padding', 'panel', 'padding', PANEL_STYLE_LIMITS.padding)}
                 ${numberRow('Margin', 'panel', 'margin', PANEL_STYLE_LIMITS.margin)}
-                ${textRow('Image', 'panel', 'backgroundImage', 'image URL')}
+                ${textRow('Image URL', 'panel', 'backgroundImage', 'image URL')}
+                <div class="pp-style-row"><span>Image variable</span>
+                    <div class="pp-style-controls">
+                        <select class="text_pole" data-style="panel:backgroundImageVariable" title="A State Engine image variable. When set, the image it is showing replaces the Image URL."></select>
+                    </div>
+                </div>
                 ${selectRow('Image mode', 'panel', 'backgroundImageMode', IMAGE_MODES)}
                 ${numberRow('Image opacity', 'panel', 'backgroundImageOpacity', PANEL_STYLE_LIMITS.backgroundImageOpacity, '%')}
             `, 'pp-subsection')}

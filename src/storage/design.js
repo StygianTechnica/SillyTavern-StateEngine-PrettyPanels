@@ -41,11 +41,14 @@ export function pickDesign(source = {}) {
     };
 }
 
-// A design with every element's binding removed - what a panel template
+// A design with every variable binding removed - elements' bindings and
+// the panel's background image variable - which is what a panel template
 // may hold.
 export function stripBindings(design) {
+    const { backgroundImageVariable: _binding, ...style } = design.style ?? {};
     return {
         ...design,
+        style,
         widgets: design.widgets.map((w) => ('binding' in w ? { ...w, binding: null } : w)),
     };
 }

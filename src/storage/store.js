@@ -82,6 +82,21 @@ function migrate(store) {
     store.version = SCHEMA_VERSION;
 }
 
+// Panel Styling's "Opacity" was stored as backgroundOpacity before it
+// became panelOpacity - same meaning, renamed.
+function migratePanelStyles(layout) {
+    let changed = false;
+    for (const panel of Object.values(layout.panels)) {
+        const style = isObject(panel) ? panel.style : null;
+        if (isObject(style) && style.backgroundOpacity !== undefined) {
+            if (style.panelOpacity === undefined) style.panelOpacity = style.backgroundOpacity;
+            delete style.backgroundOpacity;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 // Panels saved before zIndex existed get one from their creation order,
 // above every panel that already has one - so an old layout keeps the
 // stacking it had (newest on top).
@@ -190,6 +205,7 @@ export function getStore() {
         if (!Number.isFinite(layout.nextPanelNumber)) { layout.nextPanelNumber = 1; changed = true; }
         if (assignMissingZIndexes(layout)) changed = true;
         if (repairGroups(layout)) changed = true;
+        if (migratePanelStyles(layout)) changed = true;
     }
 
     if (Object.keys(store.layouts).length === 0) {
