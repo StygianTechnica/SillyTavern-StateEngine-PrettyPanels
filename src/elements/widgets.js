@@ -6,9 +6,9 @@
 // The DOM for a type is built once and then only updated, so width/height
 // and stroke-dashoffset changes can animate (200ms) when `animate` is on.
 //
-// Percentage: a variable that defines min/max fills relative to that
-// range (hp 12 of max 20 = 60%); otherwise the value itself is the
-// percentage, clamped to 0-100.
+// Percentage = value / max * 100, with the value clamped to [0, max].
+// `max` is the element's Max Value (widget.maxValue); left blank, it is
+// the bound variable's own max if it defines one, else 100.
 
 import { isColor } from '../panels/panel-style.js';
 import { iconClass } from './element-style.js';
@@ -17,11 +17,11 @@ import { formatValue } from './formats.js';
 
 // Which Widget Properties each type offers, in display order.
 export const WIDGET_FIELDS = {
-    'bar-horizontal': ['trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
-    'bar-vertical': ['trackColor', 'fillColor', 'cornerRadius', 'barWidth', 'animate'],
-    'gauge-circle': ['gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
-    'gauge-semicircle': ['gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
-    'composite-bar': ['labelText', 'labelColor', 'icon', 'iconColor', 'iconSize', 'trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
+    'bar-horizontal': ['maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
+    'bar-vertical': ['maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barWidth', 'animate'],
+    'gauge-circle': ['maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
+    'gauge-semicircle': ['maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
+    'composite-bar': ['labelText', 'labelColor', 'icon', 'iconColor', 'iconSize', 'maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
 };
 
 export const WIDGET_LIMITS = {
@@ -59,14 +59,19 @@ function color(widget, key) {
     return isColor(widget?.[key]) ? widget[key] : null;
 }
 
+// The max a widget measures against (see header).
+export function effectiveMax(widget, def) {
+    if (Number.isFinite(widget?.maxValue) && widget.maxValue > 0) return widget.maxValue;
+    if (Number.isFinite(def?.max) && def.max > 0) return def.max;
+    return 100;
+}
+
 // 0-100, or null when the value isn't a number.
-export function percentOf(value, def) {
+export function percentOf(value, def, widget) {
     const n = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
     if (!Number.isFinite(n)) return null;
-    const min = Number.isFinite(def?.min) ? def.min : 0;
-    const max = Number.isFinite(def?.max) ? def.max : (Number.isFinite(def?.min) ? def.min + 100 : 100);
-    if (max <= min) return null;
-    return Math.min(100, Math.max(0, ((n - min) / (max - min)) * 100));
+    const max = effectiveMax(widget, def);
+    return (Math.min(max, Math.max(0, n)) / max) * 100;
 }
 
 function svg(tag, attrs = {}) {
@@ -184,7 +189,7 @@ function updateComposite(holder, element, entry, pct) {
 export function renderWidget(container, element, entry) {
     const holder = container.querySelector('.pp-widget');
     if (holder.dataset.type !== element.type) build(holder, element.type);
-    const pct = entry === undefined ? null : percentOf(entry.value, entry.def);
+    const pct = entry === undefined ? null : percentOf(entry.value, entry.def, element.widget);
     applyColors(holder, element.widget);
     holder.classList.toggle('pp-widget-nodata', pct === null);
     if (element.type === 'bar-horizontal') updateBar(holder, element.widget, pct, false);

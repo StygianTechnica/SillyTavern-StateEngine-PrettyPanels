@@ -25,7 +25,26 @@ activation.
   - click the tiny dot in the top-right corner to open that panel's properties;
   - drag an element to move it, its corner grip to resize it, click it to edit it. While one
     element is dragged, the panel's other elements are faintly outlined.
-- Locked panels (and their elements) can't be moved or resized until unlocked.
+- Locked panels (and their elements) can't be moved, resized or edited until unlocked; in
+  Editing Mode they show a small lock icon, and their properties are read-only except Unlock.
+
+### Layout Tools
+
+A small floating toolbar shown only in Editing Mode (drag it by its title, collapse it with
+the chevron). Click panels to select them; Ctrl/Shift+click adds or removes. The first
+panel picked is the reference.
+
+- **Show Grid** - a faint grid across the screen and inside panels, at the grid size.
+  Purely visual; snapping is unchanged.
+- **Align** Left / Center / Right / Top / Middle / Bottom - to the reference panel, or to the
+  screen when only one panel is selected.
+- **Distribute** Horizontally / Vertically - 3+ panels, equal gaps between the outermost two;
+  sizes never change.
+- **Create Group / Ungroup / Select Group** - grouped panels move together when one of them
+  is dragged (grouped panels show a link icon). Styling and elements stay per panel.
+- **Alignment guides** appear while dragging a panel whenever its edges or centre line up with
+  another panel's.
+- Locked panels are never moved by align, distribute or a group drag.
 
 ### Properties pane
 
@@ -36,8 +55,10 @@ selecting a panel or element expands its section.
   0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
   (background colour and opacity, border colour/thickness/radius, drop shadow, padding, and
-  margin - the visible panel is inset by the margin inside its stored bounds). Anything left
-  unset follows the SillyTavern theme; ↺ resets a colour.
+  margin - the visible panel is inset by the margin inside its stored bounds; background
+  image URL with Cover / Contain / Tile / Stretch and its own opacity, drawn above the
+  background colour and below the content). Anything left unset follows the SillyTavern
+  theme; ↺ resets a colour.
 - **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
   Shift+↑/↓ = one grid step); for **Text** elements: Show Label, Label override, Format and
@@ -60,8 +81,9 @@ selecting a panel or element expands its section.
 | Semi-Circular Gauge | a 180° SVG arc, value underneath | as Circular Gauge |
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
 
-- Widgets show the bound variable as a percentage: relative to its min/max when the
-  variable defines them (12 of max 20 = 60%), otherwise the value itself, clamped to 0-100.
+- Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max
+  Value left blank uses the variable's own max if it defines one (12 of max 20 = 60%),
+  otherwise 100.
 - Animate Changes (on by default) eases width/height/arc changes over 200ms.
 - Composite Bar: an icon alone shows just the icon; icon and label text show both; with
   neither, the variable's label is shown.
@@ -84,8 +106,9 @@ selecting a panel or element expands its section.
 
 ## Layouts, templates and storage
 
-- A **layout** is a complete HUD: its panel instances (geometry, z-index, styling, elements
-  with their variable bindings, background layers) plus layout-level background layers.
+- A **layout** is a complete HUD: its panel instances (geometry, z-index, lock, styling,
+  elements with their variable bindings, background layers), its panel groups, and
+  layout-level background layers.
 - A **panel template** is a reusable design. It never stores variable bindings - they're
   stripped on save, export and import. Inserting one creates an independent instance; editing
   either never changes the other.
@@ -120,6 +143,8 @@ selecting a panel or element expands its section.
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, live refresh |
 | `src/chat/variable-service.js` | Variable catalog and current values |
 | `src/ui/variable-picker.js` | Searchable, draggable variable list |
+| `src/ui/layout-toolbar.js` | Layout Tools toolbar |
+| `src/ui/guides.js` | Alignment guides while dragging |
 | `src/ui/wand-menu.js` | Magic Wand entries (insert only) |
 | `src/ui/template-actions.js` | Properties-pane Save to Library / Export |
 | `src/ui/settings-drawer.js` + `settings.html` | Extensions-drawer global settings |

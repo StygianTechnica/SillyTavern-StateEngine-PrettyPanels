@@ -43,17 +43,35 @@ function sortedInstances(layout) {
         .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
 }
 
+// Groups in portable form: arrays of indices into the instance list.
+function portableGroups(layout, instances) {
+    const index = new Map(instances.map((p, i) => [p.id, i]));
+    return Object.values(layout.groups ?? {})
+        .map((g) => g.panelIds.map((id) => index.get(id)).filter((i) => i !== undefined))
+        .filter((g) => g.length >= 2);
+}
+
 // Adds a new layout built from portable instance data. Every instance
-// gets a fresh ID. Does not change which layout is active.
-function addLayout(name, { backgrounds = [], instances = [], nextPanelNumber = 1 } = {}) {
+// gets a fresh ID; `groups` (index arrays) are rebuilt onto those IDs.
+// Does not change which layout is active.
+function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPanelNumber = 1 } = {}) {
     const store = getStore();
     const layout = newLayoutRecord(uniqueName(name, layoutNames(store)));
     layout.backgrounds = Array.isArray(backgrounds) ? clone(backgrounds) : [];
     const now = Date.now();
-    instances.forEach((source, i) => {
+    const ids = instances.map((source, i) => {
         const id = generateId('pp');
         layout.panels[id] = { id, createdAt: now + i, ...instanceData(source) };
+        return id;
     });
+    layout.groups = {};
+    for (const members of Array.isArray(groups) ? groups : []) {
+        const panelIds = (Array.isArray(members) ? members : []).map((i) => ids[i]).filter(Boolean);
+        if (panelIds.length >= 2) {
+            const gid = generateId('ppg');
+            layout.groups[gid] = { id: gid, panelIds };
+        }
+    }
     layout.nextPanelNumber = Math.max(instances.length + 1, Number.isFinite(nextPanelNumber) ? nextPanelNumber : 1);
     store.layouts[layout.id] = layout;
     save();
@@ -113,9 +131,11 @@ export function createLayout(name) {
 export function duplicateLayout(id) {
     const source = getStore().layouts[id];
     if (!source) return null;
+    const instances = sortedInstances(source);
     return addLayout(`${source.name} (copy)`, {
         backgrounds: source.backgrounds,
-        instances: sortedInstances(source),
+        instances,
+        groups: portableGroups(source, instances),
         nextPanelNumber: source.nextPanelNumber,
     });
 }
@@ -149,10 +169,12 @@ export function deleteLayout(id) {
 export function exportLayout(id) {
     const layout = getStore().layouts[id];
     if (!layout) return null;
+    const instances = sortedInstances(layout);
     return makePayload(KIND.LAYOUT, {
         name: layout.name,
         backgrounds: clone(layout.backgrounds),
-        panels: sortedInstances(layout).map(instanceData),
+        panels: instances.map(instanceData),
+        groups: portableGroups(layout, instances),
     });
 }
 
@@ -163,5 +185,6 @@ export function importLayout(data) {
     return addLayout(name, {
         backgrounds: data.backgrounds,
         instances: Array.isArray(data.panels) ? data.panels.filter((p) => p && typeof p === 'object') : [],
+        groups: data.groups,
     });
 }

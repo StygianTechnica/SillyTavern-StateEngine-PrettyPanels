@@ -19,10 +19,10 @@ import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/
 import {
     ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, elementLabel, localName, clampElementGeometry,
 } from '../elements/element-model.js';
-import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS } from '../elements/widgets.js';
+import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import { formatsFor } from '../elements/formats.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
-import { PANEL_STYLE_LIMITS, clampStyleNumber } from './panel-style.js';
+import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
     FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, FONT_WEIGHTS, FONT_FAMILIES, ALIGNMENTS, ICON_SUGGESTIONS,
 } from '../elements/element-style.js';
@@ -194,7 +194,19 @@ export class PanelPropertiesPopup {
 
         this.#applySections();
         this.#refreshElement();
+        this.#applyLock(record.locked);
         this.#position(geometry);
+    }
+
+    // A locked panel can't be edited: every control except Unlock, Close,
+    // the section toggles and the Variables list is disabled.
+    #applyLock(locked) {
+        this.el.classList.toggle('pp-properties-locked', locked);
+        for (const control of this.el.querySelectorAll('input, select, button')) {
+            if (control.closest('[data-section="variables"]')) continue;
+            if (control.matches('[data-action="lock"], [data-action="close"], [data-toggle]')) continue;
+            control.disabled = locked;
+        }
     }
 
     refreshElementPreview() {
@@ -317,6 +329,9 @@ export class PanelPropertiesPopup {
         this.#fillColor('widget', 'labelColor', widget.labelColor, find('.pp-widget-label', 'color'));
         this.#fillColor('widget', 'iconColor', widget.iconColor, find('.pp-widget-icon', 'color'));
         for (const key of Object.keys(WIDGET_LIMITS)) this.#fillValue('widget', key, widget[key]);
+        this.#fillValue('widget', 'maxValue', widget.maxValue);
+        // Blank Max Value: show the max actually in use.
+        this.#styleField('widget', 'maxValue').placeholder = String(effectiveMax({}, this.#def(element)));
         this.#fillValue('widget', 'labelText', widget.labelText ?? '');
         this.#fillValue('widget', 'icon', widget.icon ?? '');
         this.#fillValue('widget', 'animate', widget.animate ?? WIDGET_DEFAULTS.animate);
@@ -357,6 +372,8 @@ export class PanelPropertiesPopup {
         this.#fillColor('panel', 'borderColor', style.borderColor, computed.borderTopColor);
         for (const key of Object.keys(PANEL_STYLE_LIMITS)) this.#fillValue('panel', key, style[key]);
         this.#fillValue('panel', 'shadow', style.shadow !== false);
+        this.#fillValue('panel', 'backgroundImage', style.backgroundImage ?? '');
+        this.#fillValue('panel', 'backgroundImageMode', style.backgroundImageMode ?? 'cover');
     }
 
     #fillElementStyle(element) {
@@ -410,7 +427,7 @@ export class PanelPropertiesPopup {
 
     #numberLimits(scope, key) {
         if (scope === 'panel') return PANEL_STYLE_LIMITS[key];
-        if (scope === 'widget') return WIDGET_LIMITS[key];
+        if (scope === 'widget') return WIDGET_LIMITS[key] ?? null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         return null; // conditionThreshold: any number
@@ -427,7 +444,7 @@ export class PanelPropertiesPopup {
                 if (input.value.trim() === '') return null;
                 if (!Number.isFinite(input.valueAsNumber)) return undefined;
                 const limits = this.#numberLimits(scope, key);
-                if (!limits) return input.valueAsNumber;
+                if (!limits) return key === 'maxValue' && input.valueAsNumber <= 0 ? undefined : input.valueAsNumber;
                 return scope === 'panel' ? clampStyleNumber(key, input.valueAsNumber)
                     : Math.min(limits[1], Math.max(limits[0], Math.round(input.valueAsNumber)));
             };
@@ -511,8 +528,9 @@ export class PanelPropertiesPopup {
                 <dt>Position</dt><dd data-field="position"></dd>
                 <dt>Size</dt><dd data-field="size"></dd>
             </dl>
+            <div class="pp-locked-note"><i class="fa-solid fa-lock"></i> Locked - unlock to move, resize or edit.</div>
             <div class="pp-properties-actions">
-                <button type="button" class="menu_button pp-properties-button" data-action="lock">
+                <button type="button" class="menu_button pp-properties-button" data-action="lock" title="Lock Panel: no moving, resizing or editing">
                     <i class="fa-solid fa-lock-open"></i><span>Unlocked</span>
                 </button>
                 <button type="button" class="menu_button pp-properties-button pp-danger" data-action="delete">
@@ -551,6 +569,9 @@ export class PanelPropertiesPopup {
                 </label>
                 ${numberRow('Padding', 'panel', 'padding', PANEL_STYLE_LIMITS.padding)}
                 ${numberRow('Margin', 'panel', 'margin', PANEL_STYLE_LIMITS.margin)}
+                ${textRow('Image', 'panel', 'backgroundImage', 'image URL')}
+                ${selectRow('Image mode', 'panel', 'backgroundImageMode', IMAGE_MODES)}
+                ${numberRow('Image opacity', 'panel', 'backgroundImageOpacity', PANEL_STYLE_LIMITS.backgroundImageOpacity, '%')}
             `, 'pp-subsection')}
         `);
 
@@ -597,6 +618,12 @@ export class PanelPropertiesPopup {
                     ${widgetField('icon', textRow('Icon', 'widget', 'icon', 'e.g. heart'))}
                     ${widgetField('iconColor', colorRow('Icon color', 'widget', 'iconColor'))}
                     ${widgetField('iconSize', numberRow('Icon size', 'widget', 'iconSize', WIDGET_LIMITS.iconSize))}
+                    ${widgetField('maxValue', `
+                        <div class="pp-style-row"><span>Max value</span>
+                            <div class="pp-style-controls">
+                                <input type="number" class="text_pole" data-style="widget:maxValue" min="0" step="any" title="The value that fills the widget. Blank: the variable's own max, or 100." />
+                            </div>
+                        </div>`)}
                     ${widgetField('gaugeRadius', numberRow('Radius', 'widget', 'gaugeRadius', WIDGET_LIMITS.gaugeRadius))}
                     ${widgetField('strokeWidth', numberRow('Stroke', 'widget', 'strokeWidth', WIDGET_LIMITS.strokeWidth))}
                     ${widgetField('trackColor', colorRow('Track', 'widget', 'trackColor'))}

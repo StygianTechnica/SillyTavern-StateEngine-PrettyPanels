@@ -37,6 +37,8 @@
 }
 
 .pp-panel-body {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -51,9 +53,9 @@
     overflow: auto;
 }
 
-/* The panel grid elements snap to - only visible while editing with
-   snapping on. --pp-grid is set by panel-manager.js. */
-body.pp-editing.pp-snap .pp-panel-canvas {
+/* The panel grid elements snap to - shown while editing with Show Grid
+   on (Layout Tools). --pp-grid is set by panel-manager.js. */
+body.pp-editing.pp-show-grid .pp-panel-canvas {
     background-image: radial-gradient(circle, color-mix(in srgb, var(--SmartThemeBodyColor) 22%, transparent) 0.75px, transparent 1px);
     background-size: var(--pp-grid, 8px) var(--pp-grid, 8px);
     background-position: 0 0;
@@ -1126,4 +1128,211 @@ body.pp-editing .pp-element.pp-element-outline {
 /* Only the fields that apply to the selected element type are shown. */
 .pp-properties [data-for-types][hidden] {
     display: none;
+}
+
+/* ---------- Panel background image (above the colour, below content) ---------- */
+
+.pp-panel-image {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--pp-bg-image, none);
+    background-size: var(--pp-bg-image-size, cover);
+    background-repeat: var(--pp-bg-image-repeat, no-repeat);
+    background-position: center;
+    opacity: var(--pp-bg-image-opacity, 1);
+}
+
+.pp-panel-drag-handle {
+    position: relative;
+    z-index: 1;
+}
+
+body.pp-editing .pp-panel-edit,
+body.pp-editing .pp-panel-resize-handle {
+    z-index: 2;
+}
+
+/* ---------- Layout Tools: screen grid, selection, markers, guides ---------- */
+
+.pp-grid-overlay {
+    display: none;
+}
+
+body.pp-editing.pp-show-grid .pp-grid-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 2899;
+    pointer-events: none;
+    background-image:
+        linear-gradient(to right, color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent) 1px, transparent 1px),
+        linear-gradient(to bottom, color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent) 1px, transparent 1px);
+    background-size: var(--pp-grid, 8px) var(--pp-grid, 8px);
+}
+
+body.pp-editing .pp-panel.pp-selected {
+    outline: 2px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 80%, transparent);
+    outline-offset: 2px;
+}
+
+body.pp-editing .pp-panel.pp-selected-first {
+    outline-width: 3px;
+    outline-color: var(--SmartThemeQuoteColor);
+}
+
+.pp-panel-lock,
+.pp-panel-group {
+    display: none;
+}
+
+body.pp-editing .pp-panel.pp-locked .pp-panel-lock,
+body.pp-editing .pp-panel.pp-grouped .pp-panel-group {
+    display: block;
+    position: absolute;
+    top: 2px;
+    z-index: 2;
+    font-size: 9px;
+    line-height: 1;
+    opacity: 0.75;
+    pointer-events: none;
+    color: var(--SmartThemeQuoteColor);
+}
+
+body.pp-editing .pp-panel.pp-locked .pp-panel-lock {
+    left: 4px;
+    color: var(--SmartThemeEmColor, var(--SmartThemeBodyColor));
+}
+
+body.pp-editing .pp-panel.pp-grouped .pp-panel-group {
+    left: 16px;
+}
+
+body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
+    left: 4px;
+}
+
+.pp-guides {
+    position: fixed;
+    inset: 0;
+    z-index: 3050;
+    pointer-events: none;
+}
+
+.pp-guide {
+    position: fixed;
+    background-color: var(--SmartThemeQuoteColor);
+    opacity: 0.85;
+}
+
+.pp-guide-x {
+    width: 1px;
+}
+
+.pp-guide-y {
+    height: 1px;
+}
+
+/* ---------- Locked panel properties ---------- */
+
+.pp-locked-note {
+    display: none;
+    margin: 2px 0 4px;
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+.pp-properties-locked .pp-locked-note {
+    display: block;
+}
+
+.pp-properties-locked .pp-section-body :disabled {
+    opacity: 0.5;
+}
+
+/* ---------- Layout Tools toolbar ---------- */
+
+.pp-toolbar {
+    position: fixed;
+    z-index: 3090;
+    box-sizing: border-box;
+    padding: 4px 8px 6px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.45));
+    font-size: calc(var(--mainFontSize, 15px) * 0.85);
+}
+
+.pp-toolbar[hidden] {
+    display: none;
+}
+
+.pp-toolbar-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pp-toolbar-title {
+    flex: 1 1 auto;
+    font-weight: 600;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
+}
+
+.pp-toolbar-count {
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+
+.pp-toolbar-header .pp-properties-close {
+    padding: 2px 4px;
+}
+
+.pp-toolbar.pp-collapsed .pp-toolbar-header .fa-chevron-down {
+    transform: rotate(-90deg);
+}
+
+.pp-toolbar.pp-collapsed .pp-toolbar-body {
+    display: none;
+}
+
+.pp-toolbar-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.pp-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.pp-toolbar .pp-tool {
+    margin: 0;
+    padding: 4px 7px;
+}
+
+.pp-toolbar .pp-tool:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.pp-toolbar-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 0 3px;
+    background-color: color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+}
+
+.pp-toolbar-hint {
+    opacity: 0.6;
+    max-width: 330px;
 }

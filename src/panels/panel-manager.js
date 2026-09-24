@@ -23,6 +23,11 @@
 // Stacking: each panel's stored zIndex (layout data) is the only thing
 // that decides which panel is on top - clicking or dragging a panel never
 // changes it; only the Layering controls do (setPanelZIndex/restackPanel).
+//
+// Layout Tools (src/ui/layout-toolbar.js) act on the panel SELECTION kept
+// here: align, distribute, group/ungroup/select group, Show Grid. Grouped
+// panels move together when one of them is dragged; alignment guides are
+// drawn while dragging (src/ui/guides.js).
 
 import { Panel } from './panel.js';
 import {
@@ -38,7 +43,14 @@ import {
     setGridSettings,
     clampZIndex,
     maxZIndex,
+    listGroups,
+    groupOfPanel,
+    createGroupRecord,
+    ungroupPanels,
+    isShowGrid,
+    setShowGridFlag,
 } from './panel-registry.js';
+import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import { isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
 import { getValue, onValuesChange } from '../chat/variable-service.js';
@@ -57,6 +69,10 @@ const CASCADE_SLOTS = 8;
 const panels = new Map();
 const stateListeners = new Set();
 const bindingListeners = new Set();
+const selectionListeners = new Set();
+// Selected panel IDs, in the order they were picked - the first is the
+// reference panel for alignment.
+let selection = [];
 let initialized = false;
 
 const hooks = {
@@ -106,6 +122,32 @@ const hooks = {
     onStyleChange(panel, patch) {
         updatePanelStyle(panel, patch);
     },
+    // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
+    // toggles it in the selection; a plain press selects it (keeping a
+    // multi-selection it's already part of, so a drag doesn't drop it).
+    onPanelPress(panel, additive) {
+        if (additive) togglePanelSelection(panel.id);
+        else if (!selection.includes(panel.id)) setSelection([panel.id]);
+    },
+    // A plain click that didn't turn into a drag selects just that panel.
+    onPanelClick(panel, additive) {
+        if (!additive) setSelection([panel.id]);
+    },
+    // Other panels of this panel's group that move with it (unlocked only).
+    getGroupPeers(panel) {
+        const group = groupOfPanel(panel.id);
+        if (!group) return [];
+        return group.panelIds
+            .filter((id) => id !== panel.id)
+            .map((id) => panels.get(id))
+            .filter((p) => p && !p.record.locked);
+    },
+    onPanelDragging(panel, geometry, movingIds) {
+        showGuides(computeGuides(geometry, new Set(movingIds)));
+    },
+    onPanelDragEnd() {
+        clearGuides();
+    },
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
     },
@@ -147,7 +189,165 @@ function mountPanel(record) {
     const panel = new Panel(record, hooks);
     panels.set(record.id, panel);
     panel.mount();
+    applyPanelMarkers();
     return panel;
+}
+
+// ---------------------------------------------------------------------
+// Selection
+// ---------------------------------------------------------------------
+
+// Pushes selection and group membership to every panel, then listeners.
+function applyPanelMarkers() {
+    const grouped = new Set(listGroups().flatMap((g) => g.panelIds));
+    for (const panel of panels.values()) {
+        panel.setSelectionState(selection.indexOf(panel.id), grouped.has(panel.id));
+    }
+    const state = getSelectionState();
+    for (const listener of selectionListeners) listener(state);
+}
+
+function setSelection(ids) {
+    selection = ids.filter((id, i) => panels.has(id) && ids.indexOf(id) === i);
+    applyPanelMarkers();
+}
+
+export function togglePanelSelection(id) {
+    setSelection(selection.includes(id) ? selection.filter((x) => x !== id) : [...selection, id]);
+}
+
+export function clearSelection() {
+    setSelection([]);
+}
+
+// { ids, count, grouped: any selected panel is in a group }
+export function getSelectionState() {
+    const grouped = new Set(listGroups().flatMap((g) => g.panelIds));
+    return { ids: [...selection], count: selection.length, grouped: selection.some((id) => grouped.has(id)) };
+}
+
+export function onSelectionChange(listener) {
+    selectionListeners.add(listener);
+    return () => selectionListeners.delete(listener);
+}
+
+// ---------------------------------------------------------------------
+// Layout tools: align, distribute, groups, guides, grid
+// ---------------------------------------------------------------------
+
+function moveRecord(panel, patch) {
+    const updated = updatePanelRecord(panel.id, patch);
+    if (updated) panel.update(updated);
+}
+
+// Aligns the selected panels. With several selected, to the first one
+// picked; with one, to the screen. Locked panels never move. Edges:
+// 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'.
+export function alignSelection(edge) {
+    const chosen = selection.map((id) => panels.get(id)).filter(Boolean);
+    if (chosen.length === 0) return 0;
+    const ref = chosen.length > 1
+        ? chosen[0].record
+        : { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+    const targets = chosen.length > 1 ? chosen.slice(1) : chosen;
+    let moved = 0;
+    for (const panel of targets) {
+        if (panel.record.locked) continue;
+        const { width, height } = panel.record;
+        const pos = {
+            left: { x: ref.x },
+            center: { x: Math.round(ref.x + ref.width / 2 - width / 2) },
+            right: { x: ref.x + ref.width - width },
+            top: { y: ref.y },
+            middle: { y: Math.round(ref.y + ref.height / 2 - height / 2) },
+            bottom: { y: ref.y + ref.height - height },
+        }[edge];
+        if (!pos) continue;
+        moveRecord(panel, pos);
+        moved++;
+    }
+    return moved;
+}
+
+// Evenly spaces the selected panels (3+) between the outermost two,
+// keeping sizes: equal gaps between neighbours along the axis. Locked
+// panels keep their place.
+export function distributeSelection(axis) {
+    const chosen = selection.map((id) => panels.get(id)).filter(Boolean);
+    if (chosen.length < 3) return 0;
+    const pos = axis === 'horizontal' ? 'x' : 'y';
+    const size = axis === 'horizontal' ? 'width' : 'height';
+    const sorted = [...chosen].sort((a, b) => a.record[pos] - b.record[pos]);
+    const first = sorted[0].record;
+    const last = sorted[sorted.length - 1].record;
+    const span = last[pos] + last[size] - first[pos];
+    const total = sorted.reduce((sum, p) => sum + p.record[size], 0);
+    const gap = (span - total) / (sorted.length - 1);
+    let cursor = first[pos] + first[size] + gap;
+    let moved = 0;
+    for (const panel of sorted.slice(1, -1)) {
+        if (!panel.record.locked) {
+            moveRecord(panel, { [pos]: Math.round(cursor) });
+            moved++;
+        }
+        cursor += panel.record[size] + gap;
+    }
+    return moved;
+}
+
+export function groupSelection() {
+    const group = createGroupRecord(selection);
+    applyPanelMarkers();
+    return group;
+}
+
+export function ungroupSelection() {
+    const removed = ungroupPanels(selection);
+    applyPanelMarkers();
+    return removed;
+}
+
+// Adds every panel in the selected panels' groups to the selection.
+export function selectGroupOfSelection() {
+    const ids = new Set(selection);
+    for (const group of listGroups()) {
+        if (group.panelIds.some((id) => ids.has(id))) group.panelIds.forEach((id) => ids.add(id));
+    }
+    setSelection([...selection, ...[...ids].filter((id) => !selection.includes(id))]);
+}
+
+// Alignment guides for a panel being dragged to `g`: every other panel
+// (not moving with it) whose left/right edge or horizontal centre, or
+// top/bottom edge or vertical centre, lines up within 1px.
+const GUIDE_TOLERANCE = 1;
+function computeGuides(g, movingIds) {
+    const lines = [];
+    const xs = [g.x, g.x + g.width, g.x + g.width / 2];
+    const ys = [g.y, g.y + g.height, g.y + g.height / 2];
+    for (const other of panels.values()) {
+        if (movingIds.has(other.id)) continue;
+        const o = other.getRenderedGeometry();
+        const top = Math.min(g.y, o.y);
+        const bottom = Math.max(g.y + g.height, o.y + o.height);
+        const left = Math.min(g.x, o.x);
+        const right = Math.max(g.x + g.width, o.x + o.width);
+        for (const ox of [o.x, o.x + o.width, o.x + o.width / 2]) {
+            if (xs.some((x) => Math.abs(x - ox) <= GUIDE_TOLERANCE)) lines.push({ axis: 'x', at: ox, from: top, to: bottom });
+        }
+        for (const oy of [o.y, o.y + o.height, o.y + o.height / 2]) {
+            if (ys.some((y) => Math.abs(y - oy) <= GUIDE_TOLERANCE)) lines.push({ axis: 'y', at: oy, from: left, to: right });
+        }
+    }
+    return lines;
+}
+
+export function setShowGrid(show) {
+    setShowGridFlag(show);
+    applyGrid();
+}
+
+export function getShowGrid() {
+    return isShowGrid();
 }
 
 // Sets a panel's stored stacking order (clamped to 0..99).
@@ -227,6 +427,7 @@ function applyGrid() {
     const { snap, size } = getGridSettings();
     document.body.style.setProperty('--pp-grid', `${size}px`);
     document.body.classList.toggle('pp-snap', snap);
+    document.body.classList.toggle('pp-show-grid', isShowGrid());
 }
 
 export function setGrid(settings) {
@@ -243,6 +444,7 @@ export function getGrid() {
 function reloadPanels() {
     unmountAllPanels();
     if (isEnabled()) mountAllPanels();
+    setSelection([]);
 }
 
 // Restores every panel stored in the registry (if enabled). Idempotent.
@@ -254,6 +456,12 @@ export function initPanels() {
     // if a stale saved setting says otherwise.
     if (!isEnabled() && isEditingMode()) setEditingModeFlag(false);
     if (isEnabled()) mountAllPanels();
+    if (!document.querySelector('.pp-grid-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'pp-grid-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(overlay);
+    }
     applyGrid();
     applyState();
 
@@ -321,6 +529,7 @@ export function deletePanel(id) {
     panel.destroy();
     panels.delete(id);
     deletePanelRecord(id);
+    setSelection(selection.filter((x) => x !== id));
     if (hadBindings) emitBindingsChange();
     return true;
 }
@@ -439,6 +648,7 @@ function applyState() {
     document.body.classList.toggle('pp-editing', editing);
     if (!editing) {
         for (const panel of panels.values()) panel.closeProperties();
+        if (selection.length) setSelection([]);
     }
     const state = { enabled, editingMode: editing };
     for (const listener of stateListeners) listener(state);

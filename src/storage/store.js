@@ -7,12 +7,15 @@
 // Schema v2:
 //   {
 //     version, enabled, editingMode,
-//     snapToGrid, gridSize,
+//     snapToGrid, gridSize, showGrid,
+//     toolbar: { x, y, collapsed },   the Layout Tools toolbar
 //     activeLayoutId,     the layout currently on screen
 //     defaultLayoutId,    shown in a chat that has not chosen one
 //                         (see src/chat/chat-session.js)
 //     layouts:   { [id]: { id, name, createdAt, nextPanelNumber, backgrounds, panels: { [id]: instance } } },
 //                instance.zIndex: stacking order within the layout, 0..MAX_Z_INDEX
+//                layout.groups: { [id]: { id, panelIds: [...] } } - panels that move
+//                together; a panel is in at most one group, a group has 2+ panels
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
 //   }
 //
@@ -93,6 +96,33 @@ function assignMissingZIndexes(layout) {
     return true;
 }
 
+// Keeps groups consistent with the panels that exist: unknown panels are
+// dropped, a panel stays in only its first group, and a group left with
+// fewer than two panels disappears.
+function repairGroups(layout) {
+    let changed = false;
+    if (!isObject(layout.groups)) {
+        layout.groups = {};
+        changed = true;
+    }
+    const seen = new Set();
+    for (const [id, group] of Object.entries(layout.groups)) {
+        const ids = Array.isArray(group?.panelIds) ? group.panelIds : [];
+        const kept = [...new Set(ids)].filter((pid) => layout.panels[pid] && !seen.has(pid));
+        if (kept.length < 2) {
+            delete layout.groups[id];
+            changed = true;
+            continue;
+        }
+        kept.forEach((pid) => seen.add(pid));
+        if (group.id !== id || kept.length !== ids.length) {
+            layout.groups[id] = { ...group, id, panelIds: kept };
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 export function save() {
     SillyTavern.getContext().saveSettingsDebounced();
 }
@@ -130,6 +160,14 @@ export function getStore() {
         store.gridSize = DEFAULT_GRID_SIZE;
         changed = true;
     }
+    if (typeof store.showGrid !== 'boolean') {
+        store.showGrid = false;
+        changed = true;
+    }
+    if (!isObject(store.toolbar)) {
+        store.toolbar = { x: null, y: null, collapsed: false };
+        changed = true;
+    }
     if (!isObject(store.layouts)) {
         store.layouts = {};
         changed = true;
@@ -151,6 +189,7 @@ export function getStore() {
         if (!Array.isArray(layout.backgrounds)) { layout.backgrounds = []; changed = true; }
         if (!Number.isFinite(layout.nextPanelNumber)) { layout.nextPanelNumber = 1; changed = true; }
         if (assignMissingZIndexes(layout)) changed = true;
+        if (repairGroups(layout)) changed = true;
     }
 
     if (Object.keys(store.layouts).length === 0) {

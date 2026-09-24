@@ -12,6 +12,12 @@
 //   padding            px, 0-64 - space between the panel edge and elements
 //   margin             px, 0-64 - the visible panel is inset by this much
 //                      inside its stored bounds (geometry is unchanged)
+//   backgroundImage    image URL (remote, or a SillyTavern-served path)
+//   backgroundImageMode  'cover' (default) | 'contain' | 'tile' | 'stretch'
+//   backgroundImageOpacity  0-100 (%), the image layer only
+//
+// The image is its own layer (.pp-panel-image) between the background
+// colour and the panel's content, so its opacity never touches elements.
 //
 // Applied as --pp-* custom properties on the panel element; style.css
 // maps them onto .pp-panel-box / .pp-panel-body.
@@ -22,7 +28,36 @@ export const PANEL_STYLE_LIMITS = {
     borderRadius: [0, 50],
     padding: [0, 64],
     margin: [0, 64],
+    backgroundImageOpacity: [0, 100],
 };
+
+export const IMAGE_MODES = [
+    ['cover', 'Cover'],
+    ['contain', 'Contain'],
+    ['tile', 'Tile'],
+    ['stretch', 'Stretch'],
+];
+
+// background-size / background-repeat per image mode.
+const IMAGE_MODE_CSS = {
+    cover: ['cover', 'no-repeat'],
+    contain: ['contain', 'no-repeat'],
+    tile: ['auto', 'repeat'],
+    stretch: ['100% 100%', 'no-repeat'],
+};
+
+// A CSS url() for a user-entered URL, or null. Quoted and escaped so a
+// URL can never break out of the declaration.
+function cssUrl(url) {
+    if (typeof url !== 'string') return null;
+    // Drop control characters; percent-encode the two characters that
+    // could end a quoted CSS string (" and backslash, codes 34 and 92).
+    const clean = [...url.trim()]
+        .filter((ch) => ch.charCodeAt(0) > 31 && ch.charCodeAt(0) !== 127)
+        .map((ch) => (ch.charCodeAt(0) === 34 || ch.charCodeAt(0) === 92 ? `%${ch.charCodeAt(0).toString(16).toUpperCase()}` : ch))
+        .join('');
+    return clean ? `url("${clean}")` : null;
+}
 
 export const STANDARD_SHADOW = '0px 2px 6px rgba(0, 0, 0, 0.4)';
 
@@ -64,6 +99,22 @@ export function panelStyleVars(style = {}) {
         '--pp-shadow': style.shadow === false ? 'none' : null,
         '--pp-padding': px(number(style, 'padding')),
         '--pp-margin': px(number(style, 'margin')),
+        ...imageVars(style),
+    };
+}
+
+function imageVars(style) {
+    const url = cssUrl(style.backgroundImage);
+    if (!url) {
+        return { '--pp-bg-image': null, '--pp-bg-image-size': null, '--pp-bg-image-repeat': null, '--pp-bg-image-opacity': null };
+    }
+    const [size, repeat] = IMAGE_MODE_CSS[style.backgroundImageMode] ?? IMAGE_MODE_CSS.cover;
+    const opacity = number(style, 'backgroundImageOpacity');
+    return {
+        '--pp-bg-image': url,
+        '--pp-bg-image-size': size,
+        '--pp-bg-image-repeat': repeat,
+        '--pp-bg-image-opacity': opacity === null ? null : String(opacity / 100),
     };
 }
 

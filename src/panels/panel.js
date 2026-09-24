@@ -51,6 +51,9 @@ export class Panel {
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
     //   dropTargetAt(clientX, clientY) -> { panel, elementId? } | null,
+    //   onPanelPress(panel, additive), onPanelClick(panel, additive),
+    //   getGroupPeers(panel) -> Panel[],
+    //   onPanelDragging(panel, geometry, movingIds), onPanelDragEnd(panel),
     // }
     constructor(record, hooks) {
         this.record = { ...record };
@@ -65,6 +68,15 @@ export class Panel {
         this.el = this.#build();
         // Where elements live and what they're positioned/clamped against.
         this.body = this.el.querySelector('.pp-panel-canvas');
+        // Pressing the panel's empty area selects it (elements stop their
+        // own presses). Works for locked panels too - they can be aligned
+        // against, just never moved.
+        this.body.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 || !document.body.classList.contains('pp-editing') || e.target.closest('.pp-element')) return;
+            const additive = e.ctrlKey || e.shiftKey || e.metaKey;
+            this.hooks.onPanelPress(this, additive);
+            this.hooks.onPanelClick(this, additive);
+        });
         this.#bindDrag();
         this.#bindResize();
         this.#bindEditAffordance();
@@ -129,6 +141,14 @@ export class Panel {
         if (changed && next) this.openSections.element = true;
         for (const view of this.elementViews.values()) view.setSelected(view.id === next);
         if (changed) this.popup?.refresh();
+    }
+
+    // Selection/group markers from the manager: `index` is this panel's
+    // place in the selection (-1 = not selected, 0 = the reference panel).
+    setSelectionState(index, grouped) {
+        this.el.classList.toggle('pp-selected', index >= 0);
+        this.el.classList.toggle('pp-selected-first', index === 0);
+        this.el.classList.toggle('pp-grouped', grouped);
     }
 
     // Editing Mode is on and this panel isn't locked.
@@ -214,6 +234,9 @@ export class Panel {
         el.dataset.panelId = this.record.id;
         el.innerHTML = `
             <div class="pp-panel-box">
+                <div class="pp-panel-image" aria-hidden="true"></div>
+                <i class="pp-panel-lock fa-solid fa-lock" title="Locked"></i>
+                <i class="pp-panel-group fa-solid fa-link" title="In a group - moves with its group"></i>
                 <div class="pp-panel-drag-handle" title="Drag to move"></div>
                 <div class="pp-panel-body"><div class="pp-panel-canvas"></div></div>
                 <button type="button" class="pp-panel-edit" aria-label="Panel properties"></button>
@@ -231,20 +254,29 @@ export class Panel {
 
     // Shared pointer-drag plumbing for move and resize: captures the
     // pointer on `handle`, calls onMove(dx, dy) as it moves, and commits
-    // the rendered geometry once on release.
-    #trackPointer(handle, onStart, onMove) {
+    // the rendered geometry once on release (then onEnd). With `select`,
+    // the press also selects the panel (Ctrl/Shift/Cmd toggles), and a
+    // release without movement counts as a click.
+    #trackPointer(handle, { onStart, onMove, onEnd = null, select = false }) {
         handle.addEventListener('pointerdown', (e) => {
             if (e.button !== 0 || !this.canEdit()) return;
             e.preventDefault();
             e.stopPropagation();
+            const additive = e.ctrlKey || e.shiftKey || e.metaKey;
+            if (select) this.hooks.onPanelPress(this, additive);
             const startX = e.clientX;
             const startY = e.clientY;
+            let moved = false;
             onStart();
             handle.setPointerCapture(e.pointerId);
             this.el.classList.add('pp-interacting');
 
             const move = (ev) => {
-                onMove(ev.clientX - startX, ev.clientY - startY);
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                if (!moved && Math.hypot(dx, dy) < 2) return;
+                moved = true;
+                onMove(dx, dy);
                 this.popup?.refresh(this.getRenderedGeometry());
             };
             const end = () => {
@@ -253,6 +285,8 @@ export class Panel {
                 handle.removeEventListener('pointercancel', end);
                 this.el.classList.remove('pp-interacting');
                 this.hooks.onGeometryCommit(this, this.getRenderedGeometry());
+                onEnd?.(moved);
+                if (select && !moved) this.hooks.onPanelClick(this, additive);
             };
             handle.addEventListener('pointermove', move);
             handle.addEventListener('pointerup', end);
@@ -260,30 +294,52 @@ export class Panel {
         });
     }
 
+    // Shows this panel at (x, y) - clamped to the viewport like any panel
+    // - without committing; used for group members moving along.
+    previewPosition(x, y) {
+        const pos = this.#clampPosition(x, y, this.record.width);
+        this.el.style.left = `${Math.round(pos.x)}px`;
+        this.el.style.top = `${Math.round(pos.y)}px`;
+    }
+
+    // Moving drags the whole group (unlocked members) and reports the
+    // position for alignment guides.
     #bindDrag() {
         const handle = this.el.querySelector('.pp-panel-drag-handle');
         let origin;
-        this.#trackPointer(
-            handle,
-            () => { origin = this.getRenderedGeometry(); },
-            (dx, dy) => {
+        let peers = [];
+        this.#trackPointer(handle, {
+            select: true,
+            onStart: () => {
+                origin = this.getRenderedGeometry();
+                peers = this.hooks.getGroupPeers(this).map((panel) => ({ panel, origin: panel.getRenderedGeometry() }));
+            },
+            onMove: (dx, dy) => {
                 const grid = this.gridSize();
                 const x = softSnapSpan(origin.x + dx, origin.width, grid);
                 const y = softSnapSpan(origin.y + dy, origin.height, grid);
                 const pos = this.#clampPosition(x, y, origin.width);
                 this.el.style.left = `${Math.round(pos.x)}px`;
                 this.el.style.top = `${Math.round(pos.y)}px`;
+                const shiftX = Math.round(pos.x) - origin.x;
+                const shiftY = Math.round(pos.y) - origin.y;
+                for (const peer of peers) peer.panel.previewPosition(peer.origin.x + shiftX, peer.origin.y + shiftY);
+                this.hooks.onPanelDragging(this, this.getRenderedGeometry(), [this.id, ...peers.map((p) => p.panel.id)]);
             },
-        );
+            onEnd: () => {
+                for (const peer of peers) this.hooks.onGeometryCommit(peer.panel, peer.panel.getRenderedGeometry());
+                peers = [];
+                this.hooks.onPanelDragEnd(this);
+            },
+        });
     }
 
     #bindResize() {
         const handle = this.el.querySelector('.pp-panel-resize-handle');
         let origin;
-        this.#trackPointer(
-            handle,
-            () => { origin = this.getRenderedGeometry(); },
-            (dx, dy) => {
+        this.#trackPointer(handle, {
+            onStart: () => { origin = this.getRenderedGeometry(); },
+            onMove: (dx, dy) => {
                 // Snap the far edges to the layout grid, not the size.
                 const grid = this.gridSize();
                 const right = softSnap(origin.x + origin.width + dx, grid);
@@ -293,7 +349,7 @@ export class Panel {
                 this.el.style.width = `${Math.round(width)}px`;
                 this.el.style.height = `${Math.round(height)}px`;
             },
-        );
+        });
     }
 
     #bindEditAffordance() {

@@ -81,11 +81,63 @@ export function updatePanelRecord(id, patch) {
 }
 
 export function deletePanelRecord(id) {
-    const panels = getActiveLayout().panels;
-    if (!panels[id]) return false;
-    delete panels[id];
+    const layout = getActiveLayout();
+    if (!layout.panels[id]) return false;
+    delete layout.panels[id];
+    removeFromGroups([id]);
     save();
     return true;
+}
+
+// ---------------------------------------------------------------------
+// Groups (active layout): panels that move together.
+// ---------------------------------------------------------------------
+
+export function listGroups() {
+    return Object.values(getActiveLayout().groups ?? {}).map((g) => ({ id: g.id, panelIds: [...g.panelIds] }));
+}
+
+export function groupOfPanel(panelId) {
+    return listGroups().find((g) => g.panelIds.includes(panelId)) ?? null;
+}
+
+// Takes panels out of whatever groups they are in; a group left with
+// fewer than two panels is removed.
+function removeFromGroups(panelIds) {
+    const groups = getActiveLayout().groups ?? {};
+    for (const [id, group] of Object.entries(groups)) {
+        const kept = group.panelIds.filter((pid) => !panelIds.includes(pid));
+        if (kept.length < 2) delete groups[id];
+        else group.panelIds = kept;
+    }
+}
+
+// Groups the given panels (at least two existing ones), taking them out
+// of any previous group. Returns the new group, or null.
+export function createGroupRecord(panelIds) {
+    const layout = getActiveLayout();
+    const ids = [...new Set(panelIds)].filter((id) => layout.panels[id]);
+    if (ids.length < 2) return null;
+    removeFromGroups(ids);
+    layout.groups ??= {};
+    const group = { id: generateId('ppg'), panelIds: ids };
+    layout.groups[group.id] = group;
+    save();
+    return { ...group, panelIds: [...ids] };
+}
+
+// Dissolves every group containing any of these panels. Returns how many.
+export function ungroupPanels(panelIds) {
+    const groups = getActiveLayout().groups ?? {};
+    let removed = 0;
+    for (const [id, group] of Object.entries(groups)) {
+        if (group.panelIds.some((pid) => panelIds.includes(pid))) {
+            delete groups[id];
+            removed++;
+        }
+    }
+    if (removed) save();
+    return removed;
 }
 
 export function isEnabled() {
@@ -119,4 +171,25 @@ export function setGridSettings({ snap, size } = {}) {
     if (Number.isFinite(size)) store.gridSize = Math.min(MAX_GRID_SIZE, Math.max(MIN_GRID_SIZE, Math.round(size)));
     save();
     return getGridSettings();
+}
+
+// Show Grid: a purely visual grid while editing (snapping is separate).
+export function isShowGrid() {
+    return getStore().showGrid === true;
+}
+
+export function setShowGridFlag(show) {
+    getStore().showGrid = show === true;
+    save();
+}
+
+// The Layout Tools toolbar's position and collapsed state.
+export function getToolbarState() {
+    return { ...getStore().toolbar };
+}
+
+export function setToolbarState(patch) {
+    const store = getStore();
+    store.toolbar = { ...store.toolbar, ...patch };
+    save();
 }
