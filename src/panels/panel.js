@@ -9,13 +9,16 @@
 // registry itself, so persistence stays in one place.
 //
 // Moving and resizing soft-snap to the layout grid (src/panels/snap.js);
-// the panel body is the grid its elements snap to.
+// the panel canvas is the grid its elements snap to. DOM:
+//   .pp-panel (stored bounds) > .pp-panel-box (visible, Panel Styling)
+//     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
 import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
 import { ELEMENT_TYPE_VARIABLE } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
+import { applyPanelStyle } from './panel-style.js';
 
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
 // imports this module).
@@ -43,6 +46,7 @@ export class Panel {
     //   onElementClick(panel, elementId),
     //   onZIndexChange(panel, zIndex),
     //   onRestack(panel, 'forward' | 'backward' | 'front' | 'back'),
+    //   onStyleChange(panel, stylePatch),
     //   onElementDelete(panel, elementId),
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
@@ -56,9 +60,11 @@ export class Panel {
         this.elementViews = new Map();
         // Which properties sections are expanded - kept for as long as the
         // panel is on screen, so reopening its properties looks the same.
-        this.openSections = { panel: true, element: true, variables: true };
+        // The styling subsections start collapsed to keep the pane short.
+        this.openSections = { panel: true, panelStyle: false, element: true, elementStyle: false, variables: true };
         this.el = this.#build();
-        this.body = this.el.querySelector('.pp-panel-body');
+        // Where elements live and what they're positioned/clamped against.
+        this.body = this.el.querySelector('.pp-panel-canvas');
         this.#bindDrag();
         this.#bindResize();
         this.#bindEditAffordance();
@@ -93,6 +99,7 @@ export class Panel {
         });
         this.el.classList.toggle('pp-locked', locked);
         this.el.style.zIndex = String(BASE_Z_INDEX + this.record.zIndex);
+        applyPanelStyle(this.el, this.record.style);
         this.el.querySelector('.pp-panel-edit').title = locked ? 'Panel properties (locked)' : 'Panel properties';
         this.#renderElements();
         this.popup?.refresh();
@@ -148,6 +155,7 @@ export class Panel {
                 onElementChange: (elementId, patch) => this.hooks.onElementCommit(this, elementId, patch),
                 onZIndexChange: (zIndex) => this.hooks.onZIndexChange(this, zIndex),
                 onRestack: (action) => this.hooks.onRestack(this, action),
+                onPanelStyleChange: (patch) => this.hooks.onStyleChange(this, patch),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
                 onDropVariable: (name, x, y) => this.hooks.onDropVariable(name, x, y),
@@ -205,10 +213,12 @@ export class Panel {
         el.className = 'pp-panel';
         el.dataset.panelId = this.record.id;
         el.innerHTML = `
-            <div class="pp-panel-drag-handle" title="Drag to move"></div>
-            <div class="pp-panel-body"></div>
-            <button type="button" class="pp-panel-edit" aria-label="Panel properties"></button>
-            <div class="pp-panel-resize-handle" title="Drag to resize"></div>
+            <div class="pp-panel-box">
+                <div class="pp-panel-drag-handle" title="Drag to move"></div>
+                <div class="pp-panel-body"><div class="pp-panel-canvas"></div></div>
+                <button type="button" class="pp-panel-edit" aria-label="Panel properties"></button>
+                <div class="pp-panel-resize-handle" title="Drag to resize"></div>
+            </div>
         `;
         return el;
     }

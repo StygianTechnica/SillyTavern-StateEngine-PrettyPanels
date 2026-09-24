@@ -10,6 +10,7 @@
 
 import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, elementLabel } from './element-model.js';
 import { formatValue } from './formats.js';
+import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 
 // Pointer travel (px) before a press becomes a drag instead of a click.
@@ -19,8 +20,8 @@ function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-// Fills `container` (which must hold .pp-element-label and
-// .pp-element-value) with an element's label and formatted value.
+// Fills `container` (built by buildElementContent()) with an element's
+// label, icon and formatted value, styled by its Element Styling.
 // `entry` is the variable service's { value, def } or undefined. Shared by
 // the on-panel view and the properties-pane preview.
 export function renderElementContent(container, element, entry) {
@@ -30,6 +31,7 @@ export function renderElementContent(container, element, entry) {
 
     labelEl.textContent = elementLabel(element, def);
     labelEl.hidden = !element.showLabel;
+    applyElementStyle(container, element.style, entry?.value);
 
     valueEl.replaceChildren();
     container.classList.remove('pp-element-missing', 'pp-element-unbound');
@@ -61,7 +63,7 @@ export function renderElementContent(container, element, entry) {
 export function buildElementContent() {
     const el = document.createElement('div');
     el.className = 'pp-element';
-    el.innerHTML = '<span class="pp-element-label"></span><span class="pp-element-value"></span>';
+    el.innerHTML = '<span class="pp-element-label"></span><i class="pp-element-icon" hidden></i><span class="pp-element-value"></span>';
     return el;
 }
 

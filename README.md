@@ -34,11 +34,16 @@ selecting a panel or element expands its section.
 
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
   0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Panel Library** (Save
-  as a new template or over an existing one, Export as a template file).
+  as a new template or over an existing one, Export as a template file); **Panel Styling**
+  (background colour and opacity, border colour/thickness/radius, drop shadow, padding, and
+  margin - the visible panel is inset by the margin inside its stored bounds). Anything left
+  unset follows the SillyTavern theme; ↺ resets a colour.
 - **Element Properties** - Role, Binding (search, pick or type a variable name), Position
   X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
-  Shift+↑/↓ = one grid step), Show Label, Label override, Format (by variable type), a live
-  Preview, and delete.
+  Shift+↑/↓ = one grid step), Show Label, Label override, Format (by variable type),
+  **Element Styling** (font size, weight and family, text/label colour, alignment, a Font
+  Awesome icon left of the value with its colour and size, and one conditional colour rule:
+  "if value < threshold, colour the value"), a live Preview, and delete.
 - **Variables** - every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag one onto a panel to add an element, onto an element to rebind it, or click
   it to add it to this panel.
@@ -84,9 +89,11 @@ selecting a panel or element expands its section.
 | `src/panels/panel.js` | One panel element: drag, resize, elements, properties |
 | `src/panels/properties-popup.js` | Per-panel properties pane |
 | `src/panels/snap.js` | Soft snap-to-grid |
+| `src/panels/panel-style.js` | Panel Styling model and CSS variables |
 | `src/elements/element-model.js` | VariableElement records, labels, geometry clamping |
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
 | `src/elements/formats.js` | Value formats per variable type |
+| `src/elements/element-style.js` | Element Styling: typography, icon, conditional colour |
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, live refresh |
 | `src/chat/variable-service.js` | Variable catalog and current values |

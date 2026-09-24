@@ -103,6 +103,9 @@ const hooks = {
     onRestack(panel, action) {
         restackPanel(panel, action);
     },
+    onStyleChange(panel, patch) {
+        updatePanelStyle(panel, patch);
+    },
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
     },
@@ -152,6 +155,18 @@ export function setPanelZIndex(panel, zIndex) {
     const next = clampZIndex(zIndex);
     if (next === panel.record.zIndex) return;
     const updated = updatePanelRecord(panel.id, { zIndex: next });
+    if (updated) panel.update(updated);
+}
+
+// Merges `patch` into a panel's Panel Styling; a null/undefined value
+// removes that property (back to the theme default).
+export function updatePanelStyle(panel, patch) {
+    const style = { ...panel.record.style };
+    for (const [key, value] of Object.entries(patch)) {
+        if (value === null || value === undefined) delete style[key];
+        else style[key] = value;
+    }
+    const updated = updatePanelRecord(panel.id, { style });
     if (updated) panel.update(updated);
 }
 

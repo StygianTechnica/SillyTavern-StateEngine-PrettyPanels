@@ -9,6 +9,7 @@
 //     binding: { name } | null fully-qualified State Engine variable name
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
+//     style,                   Element Styling (src/elements/element-style.js)
 //   }
 //
 // Bindings live in the layout's panel instances (a chat chooses a layout
@@ -56,6 +57,7 @@ export function normalizeVariableElement(element) {
         showLabel: element.showLabel !== false,
         labelOverride: text(element.labelOverride),
         format: typeof element.format === 'string' && element.format ? element.format : 'auto',
+        style: element.style && typeof element.style === 'object' && !Array.isArray(element.style) ? element.style : {},
     };
 }
 

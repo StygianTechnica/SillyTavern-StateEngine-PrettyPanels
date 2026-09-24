@@ -2,10 +2,11 @@
 // (created on open, discarded on close), so several panels' popups can
 // be open at once without sharing state. Three collapsible sections:
 //   - Panel Properties: name, position and size (read-only), lock toggle,
-//     delete, Layering (z-index), Panel Library (save/export template)
+//     delete, Layering (z-index), Panel Library (save/export template),
+//     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Role, Binding, X/Y,
-//     Width/Height, Show Label, Label Override, Format, a live Preview,
-//     and delete
+//     Width/Height, Show Label, Label Override, Format, the collapsible
+//     Element Styling subsection, a live Preview, and delete
 //   - Variables: the variable picker (src/ui/variable-picker.js)
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
@@ -16,15 +17,19 @@ import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/
 import { ROLE_SUGGESTIONS, elementLabel, localName, clampElementGeometry } from '../elements/element-model.js';
 import { formatsFor } from '../elements/formats.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
+import { PANEL_STYLE_LIMITS, clampStyleNumber } from './panel-style.js';
+import {
+    FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, FONT_WEIGHTS, FONT_FAMILIES, ALIGNMENTS, ICON_SUGGESTIONS,
+} from '../elements/element-style.js';
 
 const POPUP_GAP = 8;
 const GEOMETRY_KEYS = ['x', 'y', 'width', 'height'];
 // Shift+Arrow step when the grid size can't be read.
 const FALLBACK_GRID_STEP = 8;
 
-function sectionMarkup(key, title, actions, body) {
+function sectionMarkup(key, title, actions, body, extraClass = '') {
     return `
-        <section class="pp-section" data-section="${key}">
+        <section class="pp-section ${extraClass}" data-section="${key}">
             <div class="pp-section-header">
                 <button type="button" class="pp-section-toggle" data-toggle="${key}" aria-expanded="true">
                     <i class="fa-solid fa-chevron-down pp-section-chevron"></i><span>${title}</span>
@@ -36,9 +41,63 @@ function sectionMarkup(key, title, actions, body) {
     `;
 }
 
+// ---- Styling field markup. `scope` is 'panel' or 'element'; the input
+// carries data-style="<scope>:<key>".
+
+function colorRow(label, scope, key) {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <input type="color" data-style="${scope}:${key}" />
+                <span class="pp-style-state" data-style-state="${scope}:${key}">theme</span>
+                <button type="button" class="pp-properties-close pp-style-reset" data-style-reset="${scope}:${key}" title="Back to the default">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+        </div>`;
+}
+
+function numberRow(label, scope, key, [min, max], unit = 'px') {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <input type="number" class="text_pole" data-style="${scope}:${key}" min="${min}" max="${max}" step="1" placeholder="auto" />
+                <span class="pp-style-unit">${unit}</span>
+            </div>
+        </div>`;
+}
+
+function selectRow(label, scope, key, options) {
+    const opts = options.map(([id, text]) => `<option value="${id}">${text}</option>`).join('');
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <select class="text_pole" data-style="${scope}:${key}">${opts}</select>
+            </div>
+        </div>`;
+}
+
+// Normalizes any CSS colour to #rrggbb for <input type="color">, via the
+// canvas colour parser (handles rgb(), names, color-mix results).
+let colorProbe = null;
+function toHex(color) {
+    try {
+        colorProbe ??= document.createElement('canvas').getContext('2d');
+        colorProbe.fillStyle = '#000000';
+        colorProbe.fillStyle = color;
+        const out = colorProbe.fillStyle;
+        if (/^#[0-9a-f]{6}$/i.test(out)) return out;
+        const m = out.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+        if (m) return `#${[m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+    } catch {
+        // fall through
+    }
+    return '#000000';
+}
+
 export class PanelPropertiesPopup {
     // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(),
-    //          onZIndexChange(zIndex), onRestack(action),
+    //          onZIndexChange(zIndex), onRestack(action), onPanelStyleChange(patch),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          getValue(name), onClose() }
@@ -104,6 +163,7 @@ export class PanelPropertiesPopup {
 
         const zField = this.el.querySelector('[data-field="zIndex"]');
         if (zField !== document.activeElement) zField.value = String(record.zIndex);
+        this.#fillPanelStyle();
 
         this.#applySections();
         this.#refreshElement();
@@ -200,6 +260,125 @@ export class PanelPropertiesPopup {
 
         Object.assign(this.preview.style, { width: `${element.width}px`, height: `${element.height}px` });
         this.refreshElementPreview();
+        // After the preview renders: unset colours show what's on screen.
+        this.#fillElementStyle(element);
+    }
+
+    // ---- Styling ----------------------------------------------------------
+
+    #styleField(scope, key) {
+        return this.el.querySelector(`[data-style="${scope}:${key}"]`);
+    }
+
+    // Sets a colour picker from a stored colour, or - when unset - from the
+    // colour actually on screen, marked "theme"/"default".
+    #fillColor(scope, key, stored, fallback) {
+        const input = this.#styleField(scope, key);
+        const state = this.el.querySelector(`[data-style-state="${scope}:${key}"]`);
+        const reset = this.el.querySelector(`[data-style-reset="${scope}:${key}"]`);
+        const has = typeof stored === 'string' && stored !== '';
+        if (input !== document.activeElement) input.value = toHex(has ? stored : fallback);
+        state.hidden = has;
+        state.textContent = scope === 'panel' ? 'theme' : 'default';
+        reset.hidden = !has;
+    }
+
+    #fillValue(scope, key, value) {
+        const input = this.#styleField(scope, key);
+        if (input === document.activeElement) return;
+        if (input.type === 'checkbox') input.checked = value;
+        else input.value = value ?? '';
+    }
+
+    #fillPanelStyle() {
+        const style = this.panel.record.style ?? {};
+        const box = this.panel.el.querySelector('.pp-panel-box');
+        const computed = getComputedStyle(box);
+        this.#fillColor('panel', 'backgroundColor', style.backgroundColor, getComputedStyle(document.body).getPropertyValue('--SmartThemeBlurTintColor') || computed.backgroundColor);
+        this.#fillColor('panel', 'borderColor', style.borderColor, computed.borderTopColor);
+        for (const key of Object.keys(PANEL_STYLE_LIMITS)) this.#fillValue('panel', key, style[key]);
+        this.#fillValue('panel', 'shadow', style.shadow !== false);
+    }
+
+    #fillElementStyle(element) {
+        const style = element.style ?? {};
+        // The element's inherited colour, not the value's rendered one - that
+        // may be showing the conditional colour.
+        const inherited = getComputedStyle(this.preview).color;
+        const icon = this.preview.querySelector('.pp-element-icon');
+        this.#fillValue('element', 'fontSize', style.fontSize);
+        this.#fillValue('element', 'fontWeight', style.fontWeight ?? '');
+        this.#fillValue('element', 'fontFamily', style.fontFamily ?? 'inherit');
+        this.#fillValue('element', 'align', style.align ?? '');
+        this.#fillColor('element', 'textColor', style.textColor, inherited);
+        this.#fillColor('element', 'labelColor', style.labelColor, inherited);
+        this.#fillValue('element', 'icon', style.icon ?? '');
+        this.#fillColor('element', 'iconColor', style.iconColor, getComputedStyle(icon).color);
+        this.#fillValue('element', 'iconSize', style.iconSize);
+        this.#fillValue('element', 'conditionThreshold', style.condition?.threshold);
+        const conditionColor = this.#styleField('element', 'conditionColor');
+        if (conditionColor !== document.activeElement) conditionColor.value = toHex(style.condition?.color ?? '#e0605a');
+    }
+
+    // Commits one styling value. null/'' removes it (back to the default).
+    #commitStyle(scope, key, value) {
+        if (scope === 'panel') {
+            this.hooks.onPanelStyleChange({ [key]: value === '' ? null : value });
+            return;
+        }
+        const element = this.#selected();
+        if (!element) return;
+        const style = { ...element.style };
+        if (key === 'conditionThreshold' || key === 'conditionColor') {
+            const current = style.condition ?? {};
+            const threshold = key === 'conditionThreshold' ? value : current.threshold ?? null;
+            const color = key === 'conditionColor' ? value : current.color ?? this.#styleField('element', 'conditionColor').value;
+            style.condition = { threshold: Number.isFinite(threshold) ? threshold : null, color };
+        } else if (value === null || value === '' || value === undefined) {
+            delete style[key];
+        } else {
+            style[key] = value;
+        }
+        this.hooks.onElementChange(element.id, { style });
+    }
+
+    #numberLimits(scope, key) {
+        if (scope === 'panel') return PANEL_STYLE_LIMITS[key];
+        if (key === 'fontSize') return FONT_SIZE_LIMITS;
+        if (key === 'iconSize') return ICON_SIZE_LIMITS;
+        return null; // conditionThreshold: any number
+    }
+
+    #bindStyleField(input) {
+        const [scope, key] = input.dataset.style.split(':');
+        if (input.type === 'color') {
+            input.addEventListener('input', () => this.#commitStyle(scope, key, input.value));
+        } else if (input.type === 'checkbox') {
+            input.addEventListener('change', () => this.#commitStyle(scope, key, input.checked));
+        } else if (input.type === 'number') {
+            const read = () => {
+                if (input.value.trim() === '') return null;
+                if (!Number.isFinite(input.valueAsNumber)) return undefined;
+                const limits = this.#numberLimits(scope, key);
+                if (!limits) return input.valueAsNumber;
+                return scope === 'panel' ? clampStyleNumber(key, input.valueAsNumber)
+                    : Math.min(limits[1], Math.max(limits[0], Math.round(input.valueAsNumber)));
+            };
+            input.addEventListener('input', () => {
+                const value = read();
+                if (value !== undefined) this.#commitStyle(scope, key, value);
+            });
+            // On Enter/blur show the value actually stored (clamped).
+            input.addEventListener('change', () => {
+                const value = read();
+                input.value = value === null || value === undefined ? '' : String(value);
+            });
+        } else {
+            // select, text (icon)
+            input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+                this.#commitStyle(scope, key, input.value.trim());
+            });
+        }
     }
 
     #change(patch) {
@@ -294,6 +473,18 @@ export class PanelPropertiesPopup {
                     <i class="fa-solid fa-file-export"></i><span>Export</span>
                 </button>
             </div>
+            ${sectionMarkup('panelStyle', 'Panel Styling', '', `
+                ${colorRow('Background', 'panel', 'backgroundColor')}
+                ${numberRow('Opacity', 'panel', 'backgroundOpacity', PANEL_STYLE_LIMITS.backgroundOpacity, '%')}
+                ${colorRow('Border', 'panel', 'borderColor')}
+                ${numberRow('Thickness', 'panel', 'borderWidth', PANEL_STYLE_LIMITS.borderWidth)}
+                ${numberRow('Radius', 'panel', 'borderRadius', PANEL_STYLE_LIMITS.borderRadius)}
+                <label class="checkbox_label pp-field-check">
+                    <input type="checkbox" data-style="panel:shadow" /><span>Drop shadow</span>
+                </label>
+                ${numberRow('Padding', 'panel', 'padding', PANEL_STYLE_LIMITS.padding)}
+                ${numberRow('Margin', 'panel', 'margin', PANEL_STYLE_LIMITS.margin)}
+            `, 'pp-subsection')}
         `);
 
         const elementSection = sectionMarkup('element', 'Element Properties', `
@@ -327,6 +518,27 @@ export class PanelPropertiesPopup {
                 <label class="pp-field"><span>Format</span>
                     <select class="text_pole" data-el="format"></select>
                 </label>
+                ${sectionMarkup('elementStyle', 'Element Styling', '', `
+                    ${numberRow('Font size', 'element', 'fontSize', FONT_SIZE_LIMITS)}
+                    ${selectRow('Weight', 'element', 'fontWeight', [['', 'Default'], ...FONT_WEIGHTS])}
+                    ${selectRow('Font', 'element', 'fontFamily', FONT_FAMILIES)}
+                    ${selectRow('Align', 'element', 'align', [['', 'Default'], ...ALIGNMENTS])}
+                    ${colorRow('Text', 'element', 'textColor')}
+                    ${colorRow('Label', 'element', 'labelColor')}
+                    <div class="pp-style-row"><span>Icon</span>
+                        <div class="pp-style-controls">
+                            <input type="text" class="text_pole" data-style="element:icon" placeholder="e.g. heart" autocomplete="off" />
+                        </div>
+                    </div>
+                    ${colorRow('Icon color', 'element', 'iconColor')}
+                    ${numberRow('Icon size', 'element', 'iconSize', ICON_SIZE_LIMITS)}
+                    <div class="pp-style-row"><span>If value &lt;</span>
+                        <div class="pp-style-controls">
+                            <input type="number" class="text_pole" data-style="element:conditionThreshold" step="any" placeholder="off" title="When the value is a number below this, its text takes the colour on the right" />
+                            <input type="color" data-style="element:conditionColor" title="Colour when the value is below the threshold" />
+                        </div>
+                    </div>
+                `, 'pp-subsection')}
                 <div class="pp-field-caption">Preview</div>
                 <div class="pp-element-preview-frame"></div>
             </div>
@@ -350,6 +562,7 @@ export class PanelPropertiesPopup {
             ${variablesSection}
             <datalist class="pp-binding-options"></datalist>
             <datalist class="pp-role-options"></datalist>
+            <datalist class="pp-icon-options"></datalist>
         `;
 
         // datalist ids must be unique per page - one pair per popup.
@@ -360,6 +573,10 @@ export class PanelPropertiesPopup {
         roleList.replaceChildren(...ROLE_SUGGESTIONS.map((role) => new Option(role, role)));
         el.querySelector('[data-el="binding"]').setAttribute('list', bindingList.id);
         el.querySelector('[data-el="role"]').setAttribute('list', roleList.id);
+        const iconList = el.querySelector('.pp-icon-options');
+        iconList.id = `pp-icon-options-${this.panel.id}`;
+        iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));
+        el.querySelector('[data-style="element:icon"]').setAttribute('list', iconList.id);
 
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
         this.preview = buildElementContent();
@@ -408,6 +625,11 @@ export class PanelPropertiesPopup {
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));
         field('format').addEventListener('change', (e) => this.#change({ format: e.target.value }));
         for (const input of el.querySelectorAll('[data-geo]')) this.#bindGeometryField(input);
+        for (const input of el.querySelectorAll('[data-style]')) this.#bindStyleField(input);
+        for (const button of el.querySelectorAll('[data-style-reset]')) {
+            const [scope, key] = button.dataset.styleReset.split(':');
+            button.addEventListener('click', () => this.#commitStyle(scope, key, null));
+        }
         return el;
     }
 
