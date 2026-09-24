@@ -54,11 +54,16 @@ selecting a panel or element expands its section.
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
   0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
-  (background colour and opacity, border colour/thickness/radius, drop shadow, padding, and
-  margin - the visible panel is inset by the margin inside its stored bounds; background
-  image URL with Cover / Contain / Tile / Stretch and its own opacity, drawn above the
-  background colour and below the content). Anything left unset follows the SillyTavern
-  theme; ↺ resets a colour.
+  (background colour and Panel opacity, border colour/thickness/radius, drop shadow,
+  padding, and margin - the visible panel is inset by the margin inside its stored bounds;
+  a background image from a URL or from a State Engine **image variable** (image, image
+  list or image map - the variable wins while set, and follows it live), with Cover /
+  Contain / Tile / Stretch and its own opacity). Anything left unset follows the
+  SillyTavern theme; ↺ resets a colour.
+- Layers, bottom to top: background colour, image, border, content. Panel opacity affects
+  the colour layer only. At Panel opacity 0 there is no frosted backdrop and the drop shadow
+  follows the image's own (transparent) shape; with image opacity 0 (or no image) and border
+  0 too, the panel is fully invisible but still shows its elements.
 - **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
   Shift+↑/↓ = one grid step); for **Text** elements: Show Label, Label override, Format and
@@ -82,8 +87,9 @@ selecting a panel or element expands its section.
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
 
 - Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max
-  Value left blank uses the variable's own max if it defines one (12 of max 20 = 60%),
-  otherwise 100.
+  Value left blank uses the variable's own range: its max if it defines one (12 of max 20 =
+  60%), otherwise 100, and its min if it defines one. Min/Max are optional per variable in
+  State Engine's editor.
 - Animate Changes (on by default) eases width/height/arc changes over 200ms.
 - Composite Bar: an icon alone shows just the icon; icon and label text show both; with
   neither, the variable's label is shown.
