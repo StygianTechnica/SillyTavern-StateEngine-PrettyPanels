@@ -484,6 +484,28 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
     object-fit: contain;
 }
 
+/* Image variable elements (element-view.js applyImageStyle): PNG/WebP
+   alpha is kept as-is; opacity, fit, rounded or elliptical clipping. */
+.pp-element.pp-kind-image {
+    padding: 0;
+}
+
+.pp-element.pp-kind-image .pp-element-value img {
+    opacity: var(--pp-img-opacity, 1);
+    border-radius: var(--pp-img-radius, 0);
+    clip-path: var(--pp-img-clip, none);
+}
+
+.pp-element.pp-kind-image.pp-image-fill .pp-element-value {
+    align-self: stretch;
+}
+
+.pp-element.pp-kind-image.pp-image-fill .pp-element-value img {
+    width: 100%;
+    height: 100%;
+    object-fit: var(--pp-img-fit, cover);
+}
+
 .pp-element-missing .pp-element-value,
 .pp-element-unbound .pp-element-value {
     opacity: 0.45;
@@ -1647,4 +1669,108 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
     resize: vertical;
     min-height: 3.5em;
     font-family: inherit;
+}
+
+/* ---------- Screen anchors (src/panels/anchors.js) ---------- */
+
+.pp-anchor-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.pp-anchor-row select.text_pole {
+    margin: 0;
+    width: auto;
+}
+
+.pp-anchor-row [data-action="detach"][hidden] {
+    display: none;
+}
+
+/* Shown only while a panel is being dragged; above panels, below popups. */
+.pp-anchor-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3050;
+    pointer-events: none;
+}
+
+.pp-anchor-zone {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
+    border-radius: 4px;
+    transition: background-color 0.1s, border-color 0.1s;
+}
+
+.pp-anchor-zone > span {
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--SmartThemeBodyColor);
+    background-color: color-mix(in srgb, var(--SmartThemeBlurTintColor) 85%, transparent);
+    opacity: 0.75;
+}
+
+.pp-anchor-zone.pp-anchor-vertical > span {
+    writing-mode: vertical-rl;
+    padding: 6px 1px;
+}
+
+.pp-anchor-zone.pp-anchor-active {
+    border-style: solid;
+    border-width: 2px;
+    border-color: var(--SmartThemeQuoteColor);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 28%, transparent);
+}
+
+.pp-anchor-zone.pp-anchor-active > span {
+    opacity: 1;
+    font-weight: 600;
+}
+
+/* ---------- Element Z Index and Image rows (properties) ---------- */
+
+.pp-element-z {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.pp-element-z .text_pole {
+    width: 4.5em;
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.pp-image-opacity {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pp-image-opacity input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pp-image-opacity span {
+    flex: 0 0 3em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+[data-el="image-row"][hidden],
+[data-el="imageRadiusRow"][hidden],
+[data-el="imageFitRow"][hidden] {
+    display: none;
 }

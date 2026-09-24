@@ -53,16 +53,20 @@ import {
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
-    isVariableElement, isShapeElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
-    ELEMENT_TYPE_FREE_TEXT, createVariableElement,
+    isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
+    ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
 } from '../elements/element-model.js';
-import { getValue, getImage, onValuesChange } from '../chat/variable-service.js';
+import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
 import { getTemplate } from '../library/panel-library.js';
 import { confirmYesNo, notify } from '../ui/dialogs.js';
 import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
 import { fontRegistry } from '../fonts/font-registry.js';
+import {
+    measureAnchors, nearestAnchor, placeOnAnchor, offsetOnAnchor, resolveAnchoredPosition, showAnchorOverlay,
+    hideAnchorOverlay, watchAnchorLayout, topBarBottom,
+} from './anchors.js';
 
 // Panels sit above the chat but below SillyTavern's own popups/drawers:
 // CSS z-index = BASE_Z_INDEX + the panel's stored zIndex (0..99).
@@ -79,14 +83,31 @@ const selectionListeners = new Set();
 let selection = [];
 let initialized = false;
 
+// While a single panel is dragged: the anchors measured at drag start and
+// the one it would snap to on release.
+let dragAnchors = null;
+let pendingAnchor = null;
+
 const hooks = {
     onGeometryCommit(panel, geometry) {
-        const { x, y, width, height } = panel.record;
-        if (geometry.x === x && geometry.y === y && geometry.width === width && geometry.height === height) {
-            return;
-        }
-        const updated = updatePanelRecord(panel.id, geometry);
+        const { width, height } = panel.record;
+        // An anchored panel is shown at its anchor, not its stored x/y.
+        const shown = resolveAnchoredPosition(panel.record) ?? panel.record;
+        const moved = geometry.x !== shown.x || geometry.y !== shown.y;
+        if (!moved && geometry.width === width && geometry.height === height) return;
+        // Moving an anchored panel detaches it (a drag may re-anchor it on
+        // release, see onPanelDragEnd); resizing keeps the anchor.
+        const patch = moved && panel.record.anchorTarget ? { ...geometry, anchorTarget: null } : geometry;
+        const updated = updatePanelRecord(panel.id, patch);
         if (updated) panel.update(updated);
+    },
+    resolveAnchor(record) {
+        return resolveAnchoredPosition(record);
+    },
+    onAnchorChange(panel, patch) {
+        // Detaching keeps the panel where it is on screen.
+        const place = patch.anchorTarget === null ? (({ x, y }) => ({ x, y }))(panel.getRenderedGeometry()) : {};
+        moveRecord(panel, { ...place, ...patch });
     },
     onLockChange(panel, locked) {
         const updated = updatePanelRecord(panel.id, { locked });
@@ -151,9 +172,22 @@ const hooks = {
     },
     onPanelDragging(panel, geometry, movingIds) {
         showGuides(computeGuides(geometry, new Set(movingIds)));
+        // Screen anchors: single-panel drags only (a group moves as one).
+        if (movingIds.length !== 1) return;
+        dragAnchors ??= measureAnchors();
+        pendingAnchor = nearestAnchor(dragAnchors, geometry, panel.record.anchorMode);
+        showAnchorOverlay(dragAnchors, pendingAnchor?.id ?? null);
     },
-    onPanelDragEnd() {
+    onPanelDragEnd(panel, moved) {
         clearGuides();
+        hideAnchorOverlay();
+        const anchor = pendingAnchor;
+        dragAnchors = null;
+        pendingAnchor = null;
+        if (!moved || !anchor) return;
+        const geometry = panel.getRenderedGeometry();
+        const anchorOffset = offsetOnAnchor(anchor, geometry);
+        moveRecord(panel, { ...placeOnAnchor(anchor, geometry, anchorOffset), anchorTarget: anchor.id, anchorOffset });
     },
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
@@ -262,24 +296,18 @@ export function onSelectionChange(listener) {
 // Layout tools: align, distribute, groups, guides, grid
 // ---------------------------------------------------------------------
 
+// Writes a panel's record. Any explicit move (x/y, e.g. Align or
+// Distribute) detaches it from its screen anchor unless the patch sets one.
 function moveRecord(panel, patch) {
-    const updated = updatePanelRecord(panel.id, patch);
+    const detach = ('x' in patch || 'y' in patch) && !('anchorTarget' in patch) && panel.record.anchorTarget;
+    const updated = updatePanelRecord(panel.id, detach ? { ...patch, anchorTarget: null } : patch);
     if (updated) panel.update(updated);
 }
 
 // The screen area panels align to: the window minus SillyTavern's top
-// bar, measured live (its height depends on theme and zoom). Anything
-// that isn't there or isn't visible is ignored.
-const TOP_BAR_SELECTORS = ['#top-settings-holder', '#top-bar'];
+// bar, measured live (its height depends on theme and zoom).
 function screenBounds() {
-    let top = 0;
-    for (const selector of TOP_BAR_SELECTORS) {
-        const el = document.querySelector(selector);
-        if (!el || el.offsetParent === null && getComputedStyle(el).position !== 'fixed') continue;
-        const rect = el.getBoundingClientRect();
-        // Only a bar actually along the top edge counts.
-        if (rect.height > 0 && rect.top <= 1 && rect.bottom < window.innerHeight / 2) top = Math.max(top, Math.ceil(rect.bottom));
-    }
+    const top = topBarBottom();
     return { x: 0, y: top, width: window.innerWidth, height: window.innerHeight - top };
 }
 
@@ -521,6 +549,12 @@ export function initPanels() {
         for (const panel of panels.values()) panel.renderValues();
     });
     void fontRegistry.load();
+    // Anchored panels follow SillyTavern's interface as it changes.
+    watchAnchorLayout(() => {
+        for (const panel of panels.values()) {
+            if (panel.record.anchorTarget) panel.applyPosition();
+        }
+    });
 
     // Re-clamp on-screen positions when the window changes size; stored
     // geometry is untouched (see Panel.applyRecord()).
@@ -544,7 +578,9 @@ export function insertTemplate(templateId) {
     if (!isEnabled() || !isEditingMode()) return null;
     const template = getTemplate(templateId);
     if (!template) return null;
-    const design = pickDesign(template);
+    // A new instance starts unanchored (it would otherwise land exactly on
+    // top of any other panel anchored at the same spot).
+    const design = { ...pickDesign(template), anchorTarget: null };
     // Don't land exactly on top of an instance already at the template's
     // saved spot, or the insert looks like it did nothing.
     for (let i = 0; i < CASCADE_SLOTS && isOccupied(design.x, design.y); i++) {
@@ -611,8 +647,23 @@ export function updateElement(panel, elementId, patch) {
     return true;
 }
 
+// The definition of a variable, from its live value or the catalog.
+function variableDef(name) {
+    return name ? (getValue(name)?.def ?? findVariable(name)?.def ?? null) : null;
+}
+
+// Binding a text element to an image variable gives it the image
+// styling fields (if it has none yet) and hides its label.
+function imageFieldsFor(element, name) {
+    if (element.type !== ELEMENT_TYPE_TEXT || !isImageDefinition(variableDef(name))) return {};
+    const missing = Object.fromEntries(Object.entries(IMAGE_DEFAULTS).filter(([key]) => element[key] === undefined));
+    return Object.keys(missing).length ? { ...missing, showLabel: false } : {};
+}
+
 export function rebindElement(panel, elementId, name) {
-    return updateElement(panel, elementId, { binding: name ? { name } : null });
+    const current = panel.getElement(elementId);
+    if (!current) return false;
+    return updateElement(panel, elementId, { binding: name ? { name } : null, ...imageFieldsFor(current, name) });
 }
 
 export function deleteElement(panel, elementId) {
@@ -647,7 +698,11 @@ export function addVariableElement(panel, name, at = null) {
     }
     x = Math.max(0, Math.min(Math.round(x), bodyWidth - width));
     y = Math.max(0, Math.round(y));
-    const element = createVariableElement({ x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? { name } : null });
+    const image = isImageDefinition(variableDef(name));
+    const element = createVariableElement({
+        x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? { name } : null,
+        ...(image ? { ...IMAGE_DEFAULTS, showLabel: false, zIndex: IMAGE_Z_INDEX } : {}),
+    });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);
     if (name) emitBindingsChange([name]);
@@ -699,28 +754,20 @@ export function dropPaletteElementAt(kind, clientX, clientY) {
     return true;
 }
 
-// Moves an element within the panel's stacking order: 'back' | 'backward'
-// | 'forward' | 'front'. Shapes always stay behind other elements
-// (panel.js), so this orders shapes among shapes and the rest among the rest.
+// Changes an element's zIndex: 'back' (below every other element),
+// 'backward' (-1), 'forward' (+1) or 'front' (above every other element).
 export function arrangeElement(panel, elementId, action) {
-    const widgets = [...panel.record.widgets];
-    const index = widgets.findIndex((w) => w.id === elementId);
-    if (index < 0) return false;
-    const [element] = widgets.splice(index, 1);
-    const peers = widgets
-        .map((w, i) => ({ w, i }))
-        .filter(({ w }) => isVariableElement(w) && isShapeElement(w) === isShapeElement(element));
-    const before = peers.filter(({ i }) => i < index);
-    const after = peers.filter(({ i }) => i >= index);
-    let at = index;
-    if (action === 'back') at = before.length ? before[0].i : index;
-    else if (action === 'backward') at = before.length ? before[before.length - 1].i : index;
-    else if (action === 'forward') at = after.length ? after[0].i + 1 : index;
-    else if (action === 'front') at = after.length ? after[after.length - 1].i + 1 : index;
-    widgets.splice(at, 0, element);
-    if (at === index) return false;
-    saveWidgets(panel, widgets);
-    return true;
+    const element = panel.getElement(elementId);
+    if (!element) return false;
+    const others = panel.record.widgets.filter((w) => isVariableElement(w) && w.id !== elementId).map((w) => w.zIndex ?? 0);
+    const z = element.zIndex ?? 0;
+    let next = z;
+    if (action === 'backward') next = z - 1;
+    else if (action === 'forward') next = z + 1;
+    else if (action === 'back' && others.length) next = Math.min(z, Math.min(...others) - 1);
+    else if (action === 'front' && others.length) next = Math.max(z, Math.max(...others) + 1);
+    if (next === z) return false;
+    return updateElement(panel, elementId, { zIndex: next });
 }
 
 // What a variable dragged to (clientX, clientY) would land on:

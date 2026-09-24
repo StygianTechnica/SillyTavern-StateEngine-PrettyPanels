@@ -2,13 +2,15 @@
 // (created on open, discarded on close), so several panels' popups can
 // be open at once without sharing state. Three collapsible sections:
 //   - Panel Properties: name, position and size (read-only), lock toggle,
-//     delete, Layering (z-index), Panel Library (save/export template),
+//     delete, Layering (z-index), Screen Anchor (Free/Snap, the anchor it
+//     is attached to, Detach), Panel Library (save/export template),
 //     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
-//     Width/Height, Order, then per type: Show Label, Label Override,
+//     Width/Height, Z Index, then per type: Show Label, Label Override,
 //     Format (+ Custom pattern) and Element Styling (text), Text + Preset
 //     and Element Styling (free text), Widget Properties (bars/gauges) or
-//     Shape Properties (shapes); fonts are chosen in the Font Picker
+//     Shape Properties (shapes); Image (opacity, fit, clipping) for a text
+//     element showing an image variable; fonts are chosen in the Font Picker
 //     (src/ui/font-picker.js); a live
 //     Preview, and delete. Rows carry data-for-types / data-widget-field
 //     and are hidden when they don't apply to the element's type.
@@ -21,10 +23,11 @@
 import { VariablePicker, ElementPalette } from '../ui/variable-picker.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
+import { ANCHOR_MODES, anchorLabel } from './anchors.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
 import {
     ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
-    isUnboundType,
+    isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_DEFAULTS,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import { formatsFor, DATETIME_PATTERN_HINT } from '../elements/formats.js';
@@ -163,7 +166,7 @@ function toHex(color) {
 
 export class PanelPropertiesPopup {
     // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(),
-    //          onZIndexChange(zIndex), onRestack(action), onPanelStyleChange(patch),
+    //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
@@ -240,6 +243,11 @@ export class PanelPropertiesPopup {
 
         const zField = this.el.querySelector('[data-field="zIndex"]');
         if (zField !== document.activeElement) zField.value = String(record.zIndex);
+        this.el.querySelector('[data-field="anchorMode"]').value = record.anchorMode ?? 'free';
+        this.el.querySelector('[data-field="anchorStatus"]').textContent = record.anchorTarget
+            ? `Anchored to: ${anchorLabel(record.anchorTarget)}`
+            : 'Not anchored - drag the panel onto a highlighted zone to anchor it.';
+        this.el.querySelector('[data-action="detach"]').hidden = !record.anchorTarget;
         this.#fillPanelStyle();
 
         this.#applySections();
@@ -351,6 +359,8 @@ export class PanelPropertiesPopup {
         section.querySelector('[data-el="pattern-row"]').hidden = !(FORMAT_TYPES.includes(element.type) && format === 'custom');
         set('formatPattern', (f) => { f.value = element.formatPattern ?? ''; });
         set('content', (f) => { f.value = element.content ?? ''; });
+        set('zIndex', (f) => { f.value = String(element.zIndex ?? 0); });
+        this.#fillImage(element, def, format);
         this.#fillGeometry(element);
 
         Object.assign(this.preview.style, { width: `${element.width}px`, height: `${element.height}px` });
@@ -359,6 +369,29 @@ export class PanelPropertiesPopup {
         this.#fillElementStyle(element);
         this.#fillWidget(element);
         this.#fillShape(element);
+    }
+
+    // The Image rows: only for a text element whose value is drawn as an
+    // image (an image or image list variable, not formatted as text).
+    #fillImage(element, def, format) {
+        const row = this.el.querySelector('[data-el="image-row"]');
+        const noImageFormat = { image: 'text', imageList: 'count' }[def?.type];
+        row.hidden = !(element.type === 'text' && isImageDefinition(def) && def.type !== 'imageMap' && format !== noImageFormat);
+        if (row.hidden) return;
+        const set = (key, apply) => {
+            const field = row.querySelector(`[data-el="${key}"]`);
+            if (field !== document.activeElement) apply(field);
+        };
+        const opacity = Number.isFinite(element.opacity) ? element.opacity : IMAGE_DEFAULTS.opacity;
+        set('imageOpacity', (f) => { f.value = String(opacity); });
+        row.querySelector('[data-el="imageOpacityValue"]').textContent = `${Math.round(opacity * 100)}%`;
+        set('imageFit', (f) => { f.value = element.fit ?? 'contain'; });
+        const clip = element.clipShape ?? 'none';
+        set('imageClip', (f) => { f.value = clip; });
+        set('imageRadius', (f) => { f.value = String(element.borderRadius ?? 0); });
+        row.querySelector('[data-el="imageRadiusRow"]').hidden = clip !== 'rectangle';
+        // A clip always covers the element, so Fit only matters without one.
+        row.querySelector('[data-el="imageFitRow"]').hidden = clip !== 'none';
     }
 
     #fillShape(element) {
@@ -709,6 +742,18 @@ export class PanelPropertiesPopup {
                     <button type="button" class="menu_button" data-restack="front" title="Bring to Front"><i class="fa-solid fa-angles-up"></i></button>
                 </div>
             </div>
+            <div class="pp-properties-section-label">Screen Anchor</div>
+            <div class="pp-anchor-row">
+                <label class="pp-layering-z"><span>Anchor mode</span>
+                    <select class="text_pole" data-field="anchorMode" title="Free: snaps only when dropped right on a highlighted zone. Snap: prefers zones - snaps from further away.">
+                        ${ANCHOR_MODES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                    </select>
+                </label>
+                <button type="button" class="menu_button pp-properties-button" data-action="detach" title="Stop following the anchor; the panel stays where it is">
+                    <i class="fa-solid fa-link-slash"></i><span>Detach</span>
+                </button>
+            </div>
+            <small class="pp-field-info" data-field="anchorStatus"></small>
             <div class="pp-properties-section-label">Panel Library</div>
             <div class="pp-properties-actions">
                 <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library">
@@ -767,12 +812,15 @@ export class PanelPropertiesPopup {
                     <label><span>W</span><input type="number" class="text_pole" data-geo="width" min="1" step="1" /></label>
                     <label><span>H</span><input type="number" class="text_pole" data-geo="height" min="1" step="1" /></label>
                 </div>
-                <div class="pp-field pp-element-order"><span>Order</span>
-                    <div class="pp-layering-buttons">
-                        <button type="button" class="menu_button" data-arrange="back" title="Send to Back (shapes always stay behind other elements)"><i class="fa-solid fa-angles-down"></i></button>
-                        <button type="button" class="menu_button" data-arrange="backward" title="Send Backward"><i class="fa-solid fa-angle-down"></i></button>
-                        <button type="button" class="menu_button" data-arrange="forward" title="Bring Forward"><i class="fa-solid fa-angle-up"></i></button>
-                        <button type="button" class="menu_button" data-arrange="front" title="Bring to Front"><i class="fa-solid fa-angles-up"></i></button>
+                <div class="pp-field pp-element-order"><span>Z Index</span>
+                    <div class="pp-element-z">
+                        <input type="number" class="text_pole" data-el="zIndex" step="1" title="Stacking order inside the panel: higher draws on top. Equal values keep their order." />
+                        <div class="pp-layering-buttons">
+                            <button type="button" class="menu_button" data-arrange="back" title="Send to Back (below every other element)"><i class="fa-solid fa-angles-down"></i></button>
+                            <button type="button" class="menu_button" data-arrange="backward" title="Send Backward (-1)"><i class="fa-solid fa-angle-down"></i></button>
+                            <button type="button" class="menu_button" data-arrange="forward" title="Bring Forward (+1)"><i class="fa-solid fa-angle-up"></i></button>
+                            <button type="button" class="menu_button" data-arrange="front" title="Bring to Front (above every other element)"><i class="fa-solid fa-angles-up"></i></button>
+                        </div>
                     </div>
                 </div>
                 <label class="checkbox_label pp-field-check" data-for-types="text">
@@ -784,6 +832,28 @@ export class PanelPropertiesPopup {
                 <label class="pp-field" data-for-types="${FORMAT_TYPES.join(' ')}"><span>Format</span>
                     <select class="text_pole" data-el="format"></select>
                 </label>
+                <div data-el="image-row" hidden>
+                    <div class="pp-field-caption">Image</div>
+                    <div class="pp-field"><span>Opacity</span>
+                        <div class="pp-image-opacity">
+                            <input type="range" data-el="imageOpacity" min="0" max="1" step="0.05" />
+                            <span data-el="imageOpacityValue"></span>
+                        </div>
+                    </div>
+                    <label class="pp-field"><span>Clip shape</span>
+                        <select class="text_pole" data-el="imageClip">
+                            ${IMAGE_CLIP_SHAPES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="pp-field" data-el="imageRadiusRow"><span>Radius</span>
+                        <input type="number" class="text_pole" data-el="imageRadius" min="${IMAGE_RADIUS_LIMITS[0]}" max="${IMAGE_RADIUS_LIMITS[1]}" step="1" title="Corner rounding of the rectangle clip, px" />
+                    </label>
+                    <label class="pp-field" data-el="imageFitRow"><span>Fit</span>
+                        <select class="text_pole" data-el="imageFit" title="Without a clip shape: fill the element (cropping) or show the whole image">
+                            ${IMAGE_FITS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                        </select>
+                    </label>
+                </div>
                 <div data-el="pattern-row" hidden>
                     <label class="pp-field"><span>Pattern</span>
                         <input type="text" class="text_pole" data-el="formatPattern" placeholder="{monthName} {day}, {year}" autocomplete="off" />
@@ -944,6 +1014,8 @@ export class PanelPropertiesPopup {
         for (const button of el.querySelectorAll('[data-restack]')) {
             button.addEventListener('click', () => this.hooks.onRestack(button.dataset.restack));
         }
+        el.querySelector('[data-field="anchorMode"]').addEventListener('change', (e) => this.hooks.onAnchorChange({ anchorMode: e.target.value }));
+        el.querySelector('[data-action="detach"]').addEventListener('click', () => this.hooks.onAnchorChange({ anchorTarget: null }));
 
         const field = (key) => el.querySelector(`[data-el="${key}"]`);
         // Switching type: an element still at the old type's default size
@@ -994,6 +1066,17 @@ export class PanelPropertiesPopup {
                     : { labelFontFamily: null });
             });
         }
+        const elementZ = field('zIndex');
+        elementZ.addEventListener('input', () => {
+            if (Number.isFinite(elementZ.valueAsNumber)) this.#change({ zIndex: Math.round(elementZ.valueAsNumber) });
+        });
+        elementZ.addEventListener('change', () => { elementZ.value = String(this.#selected()?.zIndex ?? 0); });
+        field('imageOpacity').addEventListener('input', (e) => this.#change({ opacity: Math.round(Number(e.target.value) * 100) / 100 }));
+        field('imageFit').addEventListener('change', (e) => this.#change({ fit: e.target.value }));
+        field('imageClip').addEventListener('change', (e) => this.#change({ clipShape: e.target.value }));
+        field('imageRadius').addEventListener('input', (e) => {
+            if (Number.isFinite(e.target.valueAsNumber)) this.#change({ borderRadius: Math.round(e.target.valueAsNumber) });
+        });
         for (const button of el.querySelectorAll('[data-arrange]')) {
             button.addEventListener('click', () => {
                 const element = this.#selected();

@@ -36,6 +36,7 @@ export function renderElementContent(container, element, entry) {
     const valueEl = container.querySelector('.pp-element-value');
     const def = entry?.def ?? null;
 
+    container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
     if (element.type === ELEMENT_TYPE_SHAPE) {
         container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
@@ -93,9 +94,27 @@ export function renderElementContent(container, element, entry) {
         img.alt = elementLabel(element, def);
         img.draggable = false;
         valueEl.appendChild(img);
+        applyImageStyle(container, element);
     } else {
         valueEl.textContent = shown.text;
     }
+}
+
+// Image variable elements: opacity, fit and clipping of the <img>, as CSS
+// variables/classes on the element (style.css "Image variable elements").
+// A rectangle or ellipse clip always covers the element; no clip uses the
+// element's fit - or, for elements saved before fit existed, the image's
+// natural size scaled down to fit (the original look).
+function applyImageStyle(container, element) {
+    const clip = element.clipShape ?? 'none';
+    const fit = clip === 'none' ? element.fit : 'cover';
+    container.classList.add('pp-kind-image');
+    container.classList.toggle('pp-image-fill', !!fit);
+    const set = (prop, v) => (v === null ? container.style.removeProperty(prop) : container.style.setProperty(prop, v));
+    set('--pp-img-opacity', Number.isFinite(element.opacity) ? String(element.opacity) : null);
+    set('--pp-img-fit', fit ?? null);
+    set('--pp-img-radius', clip === 'rectangle' ? `${element.borderRadius ?? 0}px` : null);
+    set('--pp-img-clip', clip === 'ellipse' ? 'ellipse(50% 50% at 50% 50%)' : null);
 }
 
 export function buildElementContent() {

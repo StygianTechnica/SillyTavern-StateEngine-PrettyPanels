@@ -13,6 +13,11 @@
 //     binding: { name } | null fully-qualified State Engine variable name
 //                              (always null for a shape or free text)
 //     content,                 free text only: the text it shows
+//     zIndex,                  stacking order inside the panel, any integer:
+//                              elements draw in ascending zIndex, ties in
+//                              stored order (DEFAULT_Z_INDEX per type)
+//     opacity, fit,            image variable elements (a text element whose
+//     clipShape, borderRadius  value is an image): see IMAGE_* below
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
 //     formatPattern,           the 'custom' datetime format's pattern
@@ -24,8 +29,9 @@
 //                              (src/elements/shapes.js)
 //   }
 //
-// Shapes are drawn behind every other element (panel.js), so a coloured
-// rectangle can sit under text to keep it readable.
+// With the default zIndex values shapes sit behind images, images behind
+// text and text behind gauges, so a coloured rectangle can sit under text
+// to keep it readable - and any element can be moved up or down.
 //
 // Elements saved before types existed have type 'variable'; they load as
 // 'text'. Any other unknown type is kept untouched (and not drawn).
@@ -66,6 +72,40 @@ export const DEFAULT_TYPE_SIZES = {
     'free-text': [160, 32],
 };
 
+// A new element's zIndex, per type. Image variable elements (text bound
+// to an image variable) get IMAGE_Z_INDEX; TITLE_Z_INDEX is reserved for
+// a future title element.
+export const DEFAULT_Z_INDEX = {
+    'shape': 0,
+    'text': 2,
+    'free-text': 2,
+    'bar-horizontal': 3,
+    'bar-vertical': 3,
+    'gauge-circle': 3,
+    'gauge-semicircle': 3,
+    'composite-bar': 3,
+};
+export const IMAGE_Z_INDEX = 1;
+export const TITLE_Z_INDEX = 4;
+
+// Image variable elements: how the image is drawn.
+export const IMAGE_FITS = [['cover', 'Cover (fill, crop)'], ['contain', 'Contain (whole image)']];
+export const IMAGE_CLIP_SHAPES = [['none', 'None'], ['rectangle', 'Rectangle'], ['ellipse', 'Ellipse']];
+export const IMAGE_RADIUS_LIMITS = [0, 500];
+// Set on an element when it is first bound to an image variable.
+export const IMAGE_DEFAULTS = { opacity: 1, fit: 'cover', clipShape: 'none', borderRadius: 0 };
+const IMAGE_VARIABLE_TYPES = new Set(['image', 'imageList', 'imageMap']);
+
+export function isImageDefinition(def) {
+    return IMAGE_VARIABLE_TYPES.has(def?.type);
+}
+
+// zIndex for a new element of `type` bound to a variable defined as `def`.
+export function defaultZIndex(type, def = null) {
+    if (type === ELEMENT_TYPE_TEXT && isImageDefinition(def)) return IMAGE_Z_INDEX;
+    return DEFAULT_Z_INDEX[type] ?? 2;
+}
+
 // True for any element this version draws (every bound element type).
 export function isVariableElement(widget) {
     return !!widget && TYPE_IDS.has(widget.type);
@@ -103,6 +143,20 @@ function normalizeBinding(binding) {
     return name ? { name } : null;
 }
 
+// The image-styling fields an element has, validated (absent ones stay
+// absent - they are only added when an element is bound to an image).
+function normalizeImageFields(element) {
+    const out = {};
+    if (element.opacity !== undefined) out.opacity = Number.isFinite(element.opacity) ? Math.min(1, Math.max(0, element.opacity)) : 1;
+    if (element.fit !== undefined) out.fit = IMAGE_FITS.some(([id]) => id === element.fit) ? element.fit : 'cover';
+    if (element.clipShape !== undefined) out.clipShape = IMAGE_CLIP_SHAPES.some(([id]) => id === element.clipShape) ? element.clipShape : 'none';
+    if (element.borderRadius !== undefined) {
+        out.borderRadius = Number.isFinite(element.borderRadius)
+            ? Math.min(IMAGE_RADIUS_LIMITS[1], Math.max(IMAGE_RADIUS_LIMITS[0], Math.round(element.borderRadius))) : 0;
+    }
+    return out;
+}
+
 // Fills defaults on a VariableElement. Unknown fields are preserved.
 export function normalizeVariableElement(element) {
     const type = TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT;
@@ -122,6 +176,8 @@ export function normalizeVariableElement(element) {
         labelOverride: text(element.labelOverride),
         format: typeof element.format === 'string' && element.format ? element.format : 'auto',
         formatPattern: text(element.formatPattern),
+        zIndex: Number.isFinite(element.zIndex) ? Math.round(element.zIndex) : defaultZIndex(type),
+        ...normalizeImageFields(element),
         style: object(element.style),
         widget: object(element.widget),
         shape: object(element.shape),

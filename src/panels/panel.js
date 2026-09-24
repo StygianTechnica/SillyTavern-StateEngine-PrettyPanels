@@ -14,7 +14,7 @@
 //     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
 import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
-import { isVariableElement, isShapeElement } from '../elements/element-model.js';
+import { isVariableElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
@@ -54,7 +54,9 @@ export class Panel {
     //   dropTargetAt(clientX, clientY) -> { panel, elementId? } | null,
     //   onPanelPress(panel, additive), onPanelClick(panel, additive),
     //   getGroupPeers(panel) -> Panel[],
-    //   onPanelDragging(panel, geometry, movingIds), onPanelDragEnd(panel),
+    //   onPanelDragging(panel, geometry, movingIds), onPanelDragEnd(panel, moved),
+    //   resolveAnchor(record) -> { x, y } | null  (screen anchoring, anchors.js),
+    //   onAnchorChange(panel, patch),
     // }
     constructor(record, hooks) {
         this.record = { ...record };
@@ -102,20 +104,26 @@ export class Panel {
     // record is left alone, so a panel placed on a large monitor returns
     // to its real spot when the window grows again.
     applyRecord() {
-        const { x, y, width, height, locked } = this.record;
-        const pos = this.#clampPosition(x, y, width);
-        Object.assign(this.el.style, {
-            left: `${pos.x}px`,
-            top: `${pos.y}px`,
-            width: `${width}px`,
-            height: `${height}px`,
-        });
+        const { width, height, locked } = this.record;
+        Object.assign(this.el.style, { width: `${width}px`, height: `${height}px` });
+        this.applyPosition();
         this.el.classList.toggle('pp-locked', locked);
         this.el.style.zIndex = String(BASE_Z_INDEX + this.record.zIndex);
         this.#applyStyle();
         this.el.querySelector('.pp-panel-edit').title = locked ? 'Panel properties (locked)' : 'Panel properties';
         this.#renderElements();
         this.popup?.refresh();
+    }
+
+    // Positions the panel: at its screen anchor when it has one that is
+    // available right now (anchors.js), else at its stored x/y.
+    applyPosition() {
+        const anchored = this.hooks.resolveAnchor?.(this.record) ?? null;
+        const { x, y } = anchored ?? this.record;
+        const pos = this.#clampPosition(x, y, this.record.width);
+        this.el.style.left = `${pos.x}px`;
+        this.el.style.top = `${pos.y}px`;
+        this.el.classList.toggle('pp-anchored', !!this.record.anchorTarget);
     }
 
     // Replaces the working copy after the registry accepted a change.
@@ -184,6 +192,7 @@ export class Panel {
                 onElementChange: (elementId, patch) => this.hooks.onElementCommit(this, elementId, patch),
                 onZIndexChange: (zIndex) => this.hooks.onZIndexChange(this, zIndex),
                 onRestack: (action) => this.hooks.onRestack(this, action),
+                onAnchorChange: (patch) => this.hooks.onAnchorChange(this, patch),
                 onPanelStyleChange: (patch) => this.hooks.onStyleChange(this, patch),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
@@ -218,11 +227,14 @@ export class Panel {
     }
 
     // Keeps one ElementView per VariableElement, reusing existing views.
-    // Shapes go first so they are drawn behind everything else; otherwise
-    // the stored order is the stacking order.
+    // DOM order is the stacking order: ascending zIndex, ties in stored
+    // order (Array.prototype.sort is stable).
     #renderElements() {
-        const all = this.record.widgets.filter(isVariableElement);
-        const elements = [...all.filter(isShapeElement), ...all.filter((e) => !isShapeElement(e))];
+        const elements = this.record.widgets
+            .filter(isVariableElement)
+            .map((element, index) => ({ element, index }))
+            .sort((a, b) => (a.element.zIndex ?? 0) - (b.element.zIndex ?? 0) || a.index - b.index)
+            .map(({ element }) => element);
         const keep = new Set(elements.map((e) => e.id));
         for (const [id, view] of this.elementViews) {
             if (!keep.has(id)) {
@@ -341,10 +353,10 @@ export class Panel {
                 for (const peer of peers) peer.panel.previewPosition(peer.origin.x + shiftX, peer.origin.y + shiftY);
                 this.hooks.onPanelDragging(this, this.getRenderedGeometry(), [this.id, ...peers.map((p) => p.panel.id)]);
             },
-            onEnd: () => {
+            onEnd: (moved) => {
                 for (const peer of peers) this.hooks.onGeometryCommit(peer.panel, peer.panel.getRenderedGeometry());
                 peers = [];
-                this.hooks.onPanelDragEnd(this);
+                this.hooks.onPanelDragEnd(this, moved);
             },
         });
     }

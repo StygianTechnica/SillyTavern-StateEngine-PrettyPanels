@@ -52,7 +52,8 @@ Three collapsible sections; which are open is remembered per panel while it's on
 selecting a panel or element expands its section.
 
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
-  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Panel Library** (Save
+  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Screen Anchor** (Anchor
+  mode Free / Snap, which anchor the panel is attached to, Detach); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
   (background colour and Panel opacity, border colour/thickness/radius, drop shadow,
   padding, and margin - the visible panel is inset by the margin inside its stored bounds;
@@ -66,7 +67,9 @@ selecting a panel or element expands its section.
   0 too, the panel is fully invisible but still shows its elements.
 - **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
-  Shift+↑/↓ = one grid step), Order (Send to Back / Backward / Forward / Bring to Front);
+  Shift+↑/↓ = one grid step), **Z Index** (any integer, plus Send to Back / Backward /
+  Forward / Bring to Front); for a Text element showing an **image variable**: **Image**
+  (opacity, clip shape none / rectangle / ellipse, corner radius, fit cover / contain);
   for **Text** elements: Show Label, Label override, Format and
   **Element Styling** (a **Font** button opening the Font Picker - font, weight, italic and
   variable-font axes - plus a separate label font, font size, letter spacing, line height,
@@ -107,9 +110,24 @@ selecting a panel or element expands its section.
 - Switching an element's type resizes it to the new type's default size only if it was still
   at the old type's default size.
 - Elements saved before types existed load as Text.
-- Shapes are always drawn behind every other element in the panel, so a translucent
-  rectangle under a Text element makes a readable backdrop. Order moves an element among
-  its own kind (shapes among shapes, everything else among the rest).
+- **Element stacking**: every element has a Z Index; higher draws on top, equal values keep
+  the order they were added in. New elements start at: shapes 0, image variable elements 1,
+  text and free text 2, bars and gauges 3 (4 is kept for a future title element) - so a
+  translucent rectangle under text makes a readable backdrop, and an icon can sit above text
+  by raising its Z Index. Elements saved before Z Index existed get their type's default
+  (an older text element showing an image gets 2, not 1).
+- **Image variable elements** (a Text element bound to an image or image list variable) keep
+  PNG/WebP transparency and add opacity, fit and clipping: a rectangle clip (with corner
+  radius) or an ellipse clip always fills the element (cover). Binding a Text element to an
+  image variable turns its label off and gives it these settings.
+- **Screen anchors**: while a panel is dragged, SillyTavern's anchor zones are outlined - Top
+  bar, Bottom bar, Left and Right margin, Chat header, Chat footer, Sidebar margin (beside an
+  open sidebar) and Input margin (beside the input bar). Drop the panel on a highlighted zone
+  to anchor it: it then follows that part of SillyTavern as the interface changes (window
+  size, chat width, input height, sidebar opening). Dragging it away, or moving it with Align
+  / Distribute, detaches it. Anchor mode **Free** snaps only when dropped right on a zone
+  (within 24px); **Snap** prefers zones (within 96px). A panel anchored to a closed sidebar
+  waits at its last position until the sidebar opens again. Group drags don't anchor.
 - **Fonts**: ten bundled open-licence fonts (UI, fantasy, sci-fi, gothic, handwritten, HUD;
   most are variable fonts) plus your own uploads. Pretty Panels keeps only a sanitized,
   subsetted WOFF2 copy of an uploaded font, never the original file. Fonts are embedded in
@@ -165,6 +183,7 @@ selecting a panel or element expands its section.
 | `src/panels/properties-popup.js` | Per-panel properties pane |
 | `src/panels/snap.js` | Soft snap-to-grid |
 | `src/panels/panel-style.js` | Panel Styling model and CSS variables |
+| `src/panels/anchors.js` | Screen anchors: SillyTavern zones, snapping, drag overlay, layout watching |
 | `src/elements/element-model.js` | VariableElement records, labels, geometry clamping |
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
 | `src/elements/formats.js` | Value formats per variable type |
