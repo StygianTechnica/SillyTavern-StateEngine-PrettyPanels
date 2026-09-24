@@ -387,7 +387,6 @@ export class PanelPropertiesPopup {
     // catalog is kept as its own option.
     #fillImageVariable(current) {
         const select = this.#styleField('panel', 'backgroundImageVariable');
-        if (select === document.activeElement) return;
         const groups = getCatalog()
             .map((preset) => ({ preset, vars: preset.variables.filter((v) => ['image', 'imageList', 'imageMap'].includes(v.type)) }))
             .filter((g) => g.vars.length > 0);
@@ -798,6 +797,11 @@ export class PanelPropertiesPopup {
         field('format').addEventListener('change', (e) => this.#change({ format: e.target.value }));
         for (const input of el.querySelectorAll('[data-geo]')) this.#bindGeometryField(input);
         for (const input of el.querySelectorAll('[data-style]')) this.#bindStyleField(input);
+        // State Engine doesn't announce new variable definitions, so the lists
+        // that offer variables re-read them when you go to use them.
+        for (const field of [el.querySelector('[data-style="panel:backgroundImageVariable"]'), el.querySelector('[data-el="binding"]')]) {
+            field.addEventListener('focus', () => void loadCatalog());
+        }
         for (const button of el.querySelectorAll('[data-style-reset]')) {
             const [scope, key] = button.dataset.styleReset.split(':');
             button.addEventListener('click', () => this.#commitStyle(scope, key, null));

@@ -66,7 +66,18 @@ function cssUrl(url) {
         .filter((ch) => ch.charCodeAt(0) > 31 && ch.charCodeAt(0) !== 127)
         .map((ch) => (ch.charCodeAt(0) === 34 || ch.charCodeAt(0) === 92 ? `%${ch.charCodeAt(0).toString(16).toUpperCase()}` : ch))
         .join('');
-    return clean ? `url("${clean}")` : null;
+    if (!clean) return null;
+    // Made absolute against the PAGE: a relative url() inside a CSS custom
+    // property resolves against the stylesheet that uses it (this
+    // extension's folder), so State Engine's "user/images/..." paths would
+    // otherwise 404 while the same path works in an <img>.
+    let absolute = clean;
+    try {
+        absolute = new URL(clean, document.baseURI).href;
+    } catch {
+        // not a URL we can resolve - use it as written
+    }
+    return `url("${absolute}")`;
 }
 
 export const STANDARD_SHADOW = '0px 2px 6px rgba(0, 0, 0, 0.4)';

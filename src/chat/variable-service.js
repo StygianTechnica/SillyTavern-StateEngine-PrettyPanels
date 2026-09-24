@@ -111,6 +111,11 @@ export async function loadCatalog() {
     return catalog;
 }
 
+// Whether anything (an open properties pane) is showing the catalog.
+export function isCatalogWatched() {
+    return catalogListeners.size > 0;
+}
+
 // Called with the new catalog after every loadCatalog() - e.g. after
 // presets were activated, so "inactive" markers stay current.
 export function onCatalogChange(listener) {

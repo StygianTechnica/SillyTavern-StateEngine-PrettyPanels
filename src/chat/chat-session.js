@@ -19,7 +19,7 @@ import { activatePreset } from '../api/activate-preset.js';
 import { getLayout, getActiveLayoutId, getDefaultLayoutId } from '../library/layout-library.js';
 import { switchLayout, getBoundVariableNames, getBoundImageNames, onBindingsChange } from '../panels/panel-manager.js';
 import { ensureConfigPreset, readChatLayoutId, writeChatLayoutId } from './pp-config.js';
-import { VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, loadCatalog } from './variable-service.js';
+import { VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, loadCatalog, isCatalogWatched } from './variable-service.js';
 import { notify } from '../ui/dialogs.js';
 
 let started = false;
@@ -104,6 +104,10 @@ async function onVariablesChanged(chatId) {
         }
     }
     await refreshValues();
+    // A variable just created in State Engine's manager seeds a value, which
+    // lands here - pick up the new definition while a properties pane is
+    // open (the variable list, Binding and Image variable fields).
+    if (isCatalogWatched()) await loadCatalog();
 }
 
 // The user picked a layout: show it and, if a chat is open, record it as
