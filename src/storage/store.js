@@ -7,18 +7,24 @@
 // Schema v2:
 //   {
 //     version, enabled, editingMode,
-//     activeLayoutId,
+//     snapToGrid, gridSize,
+//     activeLayoutId,     the layout currently on screen
+//     defaultLayoutId,    shown in a chat that has not chosen one
+//                         (see src/chat/chat-session.js)
 //     layouts:   { [id]: { id, name, createdAt, nextPanelNumber, backgrounds, panels: { [id]: instance } } },
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
 //   }
 //
-// Layouts and templates hold DESIGN data only (see design.js). Variable
-// bindings, visibility rules and theme overrides are chat-scoped and
-// never live here.
+// Layouts hold design data plus their elements' variable bindings - a
+// layout is what a chat chooses, so it carries what it displays.
+// Templates hold design data only: bindings are stripped (design.js).
 
 const SETTINGS_KEY = 'prettyPanels';
 const SCHEMA_VERSION = 2;
 const DEFAULT_LAYOUT_NAME = 'Default';
+export const DEFAULT_GRID_SIZE = 8;
+export const MIN_GRID_SIZE = 2;
+export const MAX_GRID_SIZE = 64;
 
 const libraryListeners = new Set();
 
@@ -98,6 +104,14 @@ export function getStore() {
         store.editingMode = store.editingMode === true;
         changed = true;
     }
+    if (typeof store.snapToGrid !== 'boolean') {
+        store.snapToGrid = store.snapToGrid !== false;
+        changed = true;
+    }
+    if (!Number.isInteger(store.gridSize) || store.gridSize < MIN_GRID_SIZE || store.gridSize > MAX_GRID_SIZE) {
+        store.gridSize = DEFAULT_GRID_SIZE;
+        changed = true;
+    }
     if (!isObject(store.layouts)) {
         store.layouts = {};
         changed = true;
@@ -125,8 +139,12 @@ export function getStore() {
         store.layouts[layout.id] = layout;
         changed = true;
     }
+    if (!store.layouts[store.defaultLayoutId]) {
+        store.defaultLayoutId = store.layouts[store.activeLayoutId] ? store.activeLayoutId : sortedLayouts(store)[0].id;
+        changed = true;
+    }
     if (!store.layouts[store.activeLayoutId]) {
-        store.activeLayoutId = sortedLayouts(store)[0].id;
+        store.activeLayoutId = store.defaultLayoutId;
         changed = true;
     }
 

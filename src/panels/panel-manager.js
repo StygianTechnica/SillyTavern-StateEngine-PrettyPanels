@@ -11,7 +11,14 @@
 //
 // Only the active layout's panels are ever mounted. Switching or
 // deleting the active layout goes through switchLayout()/removeLayout()
-// here so the screen follows the Layout Library.
+// here so the screen follows the Layout Library (which layout a chat
+// shows is decided in src/chat/chat-session.js).
+//
+// Elements (VariableElements inside panels) are edited here too: add,
+// rebind, move/resize, change properties, delete - each a whole-widgets
+// update of the owning panel record. Any change to what variables the
+// layout shows is announced through onBindingsChange() so the chat
+// session can activate presets and re-watch values.
 
 import { Panel } from './panel.js';
 import {
@@ -23,11 +30,16 @@ import {
     setEnabledFlag,
     isEditingMode,
     setEditingModeFlag,
+    getGridSettings,
+    setGridSettings,
 } from './panel-registry.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
+import { ELEMENT_TYPE_VARIABLE, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, createVariableElement } from '../elements/element-model.js';
+import { getValue, onValuesChange } from '../chat/variable-service.js';
+import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
 import { getTemplate } from '../library/panel-library.js';
-import { confirmYesNo } from '../ui/dialogs.js';
+import { confirmYesNo, notify } from '../ui/dialogs.js';
 import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
 
 // Panels sit above the chat but below SillyTavern's own popups/drawers.
@@ -37,6 +49,7 @@ const CASCADE_SLOTS = 8;
 
 const panels = new Map();
 const stateListeners = new Set();
+const bindingListeners = new Set();
 let zCounter = BASE_Z_INDEX;
 let initialized = false;
 
@@ -65,7 +78,55 @@ const hooks = {
     onExportTemplateRequest(panel) {
         exportInstanceTemplate(panel.record);
     },
+    getGrid() {
+        return getGridSettings();
+    },
+    getValue(name) {
+        return getValue(name);
+    },
+    onElementCommit(panel, elementId, patch) {
+        updateElement(panel, elementId, patch);
+    },
+    onElementClick(panel, elementId) {
+        panel.selectElement(elementId);
+        panel.openProperties();
+    },
+    onElementDelete(panel, elementId) {
+        deleteElement(panel, elementId);
+    },
+    onAddVariable(panel, name) {
+        addVariableElement(panel, name);
+    },
+    onDropVariable(name, clientX, clientY) {
+        return dropVariableAt(name, clientX, clientY);
+    },
+    dropTargetAt(clientX, clientY) {
+        return dropTargetAt(clientX, clientY);
+    },
 };
+
+// Tells the chat session the set of shown variables changed. `added` are
+// names newly shown, whose presets may need activating.
+function emitBindingsChange(added = []) {
+    for (const listener of bindingListeners) listener(added);
+}
+
+export function onBindingsChange(listener) {
+    bindingListeners.add(listener);
+    return () => bindingListeners.delete(listener);
+}
+
+// Every variable name bound by an element in the active layout (from the
+// registry, so it's right even while panels are unmounted).
+export function getBoundVariableNames() {
+    const names = new Set();
+    for (const record of listPanels()) {
+        for (const widget of record.widgets) {
+            if (widget.type === ELEMENT_TYPE_VARIABLE && widget.binding) names.add(widget.binding.name);
+        }
+    }
+    return [...names];
+}
 
 function bringToFront(panel) {
     panel.setZIndex(++zCounter);
@@ -120,6 +181,24 @@ function unmountAllPanels() {
     panels.clear();
 }
 
+// Grid size as a CSS variable (the editing-mode grid overlay), and a
+// body class while snapping is on.
+function applyGrid() {
+    const { snap, size } = getGridSettings();
+    document.body.style.setProperty('--pp-grid', `${size}px`);
+    document.body.classList.toggle('pp-snap', snap);
+}
+
+export function setGrid(settings) {
+    const result = setGridSettings(settings);
+    applyGrid();
+    return result;
+}
+
+export function getGrid() {
+    return getGridSettings();
+}
+
 // Rebuilds the screen from the (possibly newly) active layout.
 function reloadPanels() {
     unmountAllPanels();
@@ -135,7 +214,12 @@ export function initPanels() {
     // if a stale saved setting says otherwise.
     if (!isEnabled() && isEditingMode()) setEditingModeFlag(false);
     if (isEnabled()) mountAllPanels();
+    applyGrid();
     applyState();
+
+    onValuesChange(() => {
+        for (const panel of panels.values()) panel.renderValues();
+    });
 
     // Re-clamp on-screen positions when the window changes size; stored
     // geometry is untouched (see Panel.applyRecord()).
@@ -183,16 +267,122 @@ export function switchLayout(id) {
 export function removeLayout(id) {
     const wasActive = id === getActiveLayoutId();
     if (!deleteLayout(id)) return false;
-    if (wasActive) reloadPanels();
+    if (wasActive) {
+        reloadPanels();
+        emitBindingsChange(getBoundVariableNames());
+    }
     return true;
 }
 
 export function deletePanel(id) {
     const panel = panels.get(id);
     if (!panel) return false;
+    const hadBindings = panel.record.widgets.some((w) => w.binding);
     panel.destroy();
     panels.delete(id);
     deletePanelRecord(id);
+    if (hadBindings) emitBindingsChange();
+    return true;
+}
+
+// ---------------------------------------------------------------------
+// Elements
+// ---------------------------------------------------------------------
+
+function saveWidgets(panel, widgets) {
+    const updated = updatePanelRecord(panel.id, { widgets });
+    if (updated) panel.update(updated);
+    return updated;
+}
+
+// Shallow-merges `patch` into one element. A binding change is announced.
+export function updateElement(panel, elementId, patch) {
+    const current = panel.getElement(elementId);
+    if (!current) return false;
+    const next = { ...current, ...patch, id: current.id, type: current.type };
+    const widgets = panel.record.widgets.map((w) => (w.id === elementId ? next : w));
+    if (!saveWidgets(panel, widgets)) return false;
+    const before = current.binding?.name ?? null;
+    const after = panel.getElement(elementId)?.binding?.name ?? null;
+    if (before !== after) emitBindingsChange(after ? [after] : []);
+    return true;
+}
+
+export function rebindElement(panel, elementId, name) {
+    return updateElement(panel, elementId, { binding: name ? { name } : null });
+}
+
+export function deleteElement(panel, elementId) {
+    const current = panel.getElement(elementId);
+    if (!current) return false;
+    if (panel.selectedElementId === elementId) panel.selectElement(null);
+    saveWidgets(panel, panel.record.widgets.filter((w) => w.id !== elementId));
+    if (current.binding) emitBindingsChange();
+    return true;
+}
+
+// Adds a VariableElement bound to `name`. `at` ({ x, y } in body
+// coordinates) defaults to the first free row below existing elements.
+// The new element is selected.
+export function addVariableElement(panel, name, at = null) {
+    if (!panel.canEdit()) {
+        notify('warning', 'Unlock this panel (and turn on Editing Mode) to add elements to it.');
+        return null;
+    }
+    const grid = panel.gridSize() || 1;
+    const bodyWidth = panel.body.clientWidth || panel.record.width;
+    const width = Math.max(24, Math.min(DEFAULT_ELEMENT_WIDTH, bodyWidth));
+    let x;
+    let y;
+    if (at) {
+        x = softSnap(at.x, grid);
+        y = softSnap(at.y, grid);
+    } else {
+        const bottom = panel.record.widgets.reduce((max, w) => Math.max(max, (w.y ?? 0) + (w.height ?? 0)), 0);
+        x = 0;
+        y = Math.ceil(bottom / grid) * grid;
+    }
+    x = Math.max(0, Math.min(Math.round(x), bodyWidth - width));
+    y = Math.max(0, Math.round(y));
+    const element = createVariableElement({ x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? { name } : null });
+    saveWidgets(panel, [...panel.record.widgets, element]);
+    panel.selectElement(element.id);
+    if (name) emitBindingsChange([name]);
+    return element;
+}
+
+// What a variable dragged to (clientX, clientY) would land on:
+// { panel, elementId } (rebind) or { panel } (new element), or null.
+export function dropTargetAt(clientX, clientY) {
+    const hit = document.elementFromPoint(clientX, clientY);
+    const panelEl = hit?.closest?.('.pp-panel');
+    const panel = panelEl ? panels.get(panelEl.dataset.panelId) : null;
+    if (!panel) return null;
+    const elementEl = hit.closest('.pp-element');
+    return elementEl && panel.el.contains(elementEl) ? { panel, elementId: elementEl.dataset.elementId } : { panel };
+}
+
+// Drops a variable from the picker: onto an element it replaces that
+// element's binding; onto a panel it adds a new element at the pointer.
+export function dropVariableAt(name, clientX, clientY) {
+    const target = dropTargetAt(clientX, clientY);
+    if (!target) return false;
+    const { panel, elementId } = target;
+    if (!panel.canEdit()) {
+        notify('warning', 'Unlock this panel to change its elements.');
+        return false;
+    }
+    if (elementId) {
+        rebindElement(panel, elementId, name);
+        panel.selectElement(elementId);
+    } else {
+        const rect = panel.body.getBoundingClientRect();
+        addVariableElement(panel, name, {
+            x: clientX - rect.left + panel.body.scrollLeft - 12,
+            y: clientY - rect.top + panel.body.scrollTop - DEFAULT_ELEMENT_HEIGHT / 2,
+        });
+    }
+    panel.openProperties();
     return true;
 }
 

@@ -1,6 +1,7 @@
 // The Layout Library and Panel Library sections of the Pretty Panels
-// drawer (markup in settings.html). Layout actions: select active, new,
-// duplicate, rename, delete, export, import. Panel Library management:
+// drawer (markup in settings.html). Layout actions: choose this chat's
+// layout (src/chat/chat-session.js), new, duplicate, rename, make
+// default, delete, export, import. Panel Library management:
 // view, rename, delete, export, import - none of which touch the active
 // layout or create instances. Both lists re-render on any library change.
 
@@ -8,6 +9,7 @@ import {
     listLayouts,
     getLayout,
     getActiveLayoutId,
+    setDefaultLayoutId,
     createLayout,
     duplicateLayout,
     renameLayout,
@@ -23,7 +25,8 @@ import {
 } from '../library/panel-library.js';
 import { KIND, readPayload } from '../library/format.js';
 import { onLibraryChange } from '../storage/store.js';
-import { switchLayout, removeLayout } from '../panels/panel-manager.js';
+import { removeLayout } from '../panels/panel-manager.js';
+import { chooseLayout, showChatLayout, getSessionState, onSessionChange } from '../chat/chat-session.js';
 import { confirmYesNo, promptText, notify } from './dialogs.js';
 import { downloadJson, pickJsonFile, safeFilename } from './files.js';
 
@@ -34,10 +37,20 @@ function renderLayouts() {
     select.replaceChildren(...listLayouts().map((layout) => {
         const option = document.createElement('option');
         option.value = layout.id;
-        option.textContent = layout.name;
+        option.textContent = layout.isDefault ? `${layout.name} ★` : layout.name;
         option.selected = layout.id === activeId;
         return option;
     }));
+    renderChatHint();
+}
+
+function renderChatHint() {
+    const hint = document.getElementById('pp_layout_chat_hint');
+    if (!hint) return;
+    const { chatId, chosen } = getSessionState();
+    if (!chatId) hint.textContent = 'No chat open - choosing a layout only changes what is on screen.';
+    else if (chosen) hint.textContent = 'This chat\'s layout.';
+    else hint.textContent = 'This chat hasn\'t chosen a layout, so it shows the default. Pick one to remember it for this chat.';
 }
 
 function renderTemplates() {
@@ -88,7 +101,10 @@ const layoutActions = {
     async new() {
         const name = await promptText('Name for the new layout:', 'New Layout');
         if (!name) return;
-        switchLayout(createLayout(name));
+        await chooseLayout(createLayout(name));
+    },
+    default(id) {
+        if (setDefaultLayoutId(id)) notify('success', `"${getLayout(id).name}" is now the default layout.`);
     },
     duplicate(id) {
         const newId = duplicateLayout(id);
@@ -107,7 +123,7 @@ const layoutActions = {
             return;
         }
         const ok = await confirmYesNo(`Delete the layout "${layout.name}" and its ${layout.panelCount} panel(s)? This cannot be undone.`);
-        if (ok) removeLayout(id);
+        if (ok && removeLayout(id)) await showChatLayout();
     },
     export(id) {
         const payload = exportLayout(id);
@@ -149,7 +165,7 @@ export function initLibraryDrawer() {
     const root = document.getElementById('pretty_panels_settings');
     if (!root) return;
 
-    document.getElementById('pp_layout_select').addEventListener('change', (e) => switchLayout(e.target.value));
+    document.getElementById('pp_layout_select').addEventListener('change', (e) => void chooseLayout(e.target.value));
 
     root.querySelectorAll('[data-layout-action]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -166,4 +182,5 @@ export function initLibraryDrawer() {
 
     render();
     onLibraryChange(render);
+    onSessionChange(renderLayouts);
 }

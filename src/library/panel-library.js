@@ -1,11 +1,17 @@
 // Panel Library: reusable panel templates. A template is a design asset
 // (see src/storage/design.js) - inserting one creates an independent
 // instance, and editing either side never affects the other. Nothing in
-// here reads or writes the active layout.
+// here reads or writes the active layout. Templates never carry variable
+// bindings: every design entering or leaving the library goes through
+// templateDesign().
 
 import { getStore, save, generateId, uniqueName, emitLibraryChange } from '../storage/store.js';
-import { pickDesign } from '../storage/design.js';
+import { pickDesign, stripBindings } from '../storage/design.js';
 import { KIND, makePayload } from './format.js';
+
+function templateDesign(source) {
+    return stripBindings(pickDesign(source));
+}
 
 function templateNames(store) {
     return Object.values(store.templates).map((t) => t.name);
@@ -25,7 +31,7 @@ export function listTemplates() {
 // A full copy of the template's design, safe to hand to an instance.
 export function getTemplate(id) {
     const template = getStore().templates[id];
-    return template ? { id: template.id, name: template.name, ...pickDesign(template) } : null;
+    return template ? { id: template.id, name: template.name, ...templateDesign(template) } : null;
 }
 
 // Creates a template from any design source (a panel instance or
@@ -38,7 +44,7 @@ export function createTemplate(name, source) {
         name: uniqueName(name || 'Panel Template', templateNames(store)),
         createdAt: now,
         updatedAt: now,
-        ...pickDesign(source),
+        ...templateDesign(source),
     };
     store.templates[template.id] = template;
     save();
@@ -56,7 +62,7 @@ export function overwriteTemplate(id, source) {
         name: current.name,
         createdAt: current.createdAt,
         updatedAt: Date.now(),
-        ...pickDesign(source),
+        ...templateDesign(source),
     };
     save();
     emitLibraryChange();
@@ -85,7 +91,7 @@ export function deleteTemplate(id) {
 // Export payload for any design source - a stored template or a live
 // panel instance straight from its properties pane.
 export function templatePayload(name, source) {
-    return makePayload(KIND.PANEL_TEMPLATE, { name, ...pickDesign(source) });
+    return makePayload(KIND.PANEL_TEMPLATE, { name, ...templateDesign(source) });
 }
 
 export function exportTemplate(id) {

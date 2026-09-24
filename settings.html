@@ -20,6 +20,17 @@
                 </label>
             </div>
 
+            <div class="pp-settings-row pp-grid-row">
+                <label class="checkbox_label" title="Panels and elements lean gently onto grid lines while you drag them. Moving a little further always escapes the pull.">
+                    <input id="pp_snap_to_grid" type="checkbox" />
+                    <span>Snap to grid</span>
+                </label>
+                <label class="pp-grid-size" title="Grid size in pixels, for both the layout grid (panels) and each panel's grid (elements).">
+                    <input id="pp_grid_size" type="number" class="text_pole" min="2" max="64" step="1" />
+                    <span>px</span>
+                </label>
+            </div>
+
             <!-- Future global settings go here. -->
             <div id="pp_global_settings" class="pp-settings-section"></div>
 
@@ -30,12 +41,14 @@
                     <i class="fa-solid fa-layer-group"></i>
                     <b>Layout Library</b>
                 </div>
-                <small class="pp-library-hint">Complete HUD designs, shared across all chats. Only the active layout is shown and edited.</small>
-                <select id="pp_layout_select" class="text_pole" title="Active layout"></select>
+                <small class="pp-library-hint">Complete HUD designs, shared across all chats. Each chat remembers which layout it shows; a chat that hasn't chosen one shows the default (★).</small>
+                <select id="pp_layout_select" class="text_pole" title="Layout for this chat"></select>
+                <small id="pp_layout_chat_hint" class="pp-library-hint"></small>
                 <div class="pp-library-actions">
                     <div class="menu_button fa-solid fa-plus" data-layout-action="new" title="New layout"></div>
                     <div class="menu_button fa-solid fa-clone" data-layout-action="duplicate" title="Duplicate active layout"></div>
                     <div class="menu_button fa-solid fa-pen" data-layout-action="rename" title="Rename active layout"></div>
+                    <div class="menu_button fa-solid fa-star" data-layout-action="default" title="Make the active layout the default"></div>
                     <div class="menu_button fa-solid fa-file-export" data-layout-action="export" title="Export active layout"></div>
                     <div class="menu_button fa-solid fa-file-import" data-layout-action="import" title="Import a layout"></div>
                     <div class="menu_button fa-solid fa-trash-can" data-layout-action="delete" title="Delete active layout"></div>

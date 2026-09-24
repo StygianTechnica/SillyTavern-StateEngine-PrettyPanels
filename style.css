@@ -19,10 +19,18 @@
 }
 
 .pp-panel-body {
+    position: relative;
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
-    padding: 8px 10px;
+}
+
+/* The panel grid elements snap to - only visible while editing with
+   snapping on. --pp-grid is set by panel-manager.js. */
+body.pp-editing.pp-snap .pp-panel-body {
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--SmartThemeBodyColor) 22%, transparent) 0.75px, transparent 1px);
+    background-size: var(--pp-grid, 8px) var(--pp-grid, 8px);
+    background-position: 0 0;
 }
 
 /* ---------- Editing chrome (hidden unless Editing Mode is on) ---------- */
@@ -130,7 +138,9 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
     position: fixed;
     z-index: 3100;
     box-sizing: border-box;
-    width: 220px;
+    width: 280px;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     padding: 8px 10px 10px;
     color: var(--SmartThemeBodyColor);
     background-color: var(--SmartThemeBlurTintColor);
@@ -387,4 +397,304 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
 .pp-modal-empty {
     padding: 8px 2px;
     opacity: 0.7;
+}
+
+/* ---------- Variable elements ---------- */
+
+.pp-element {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
+    line-height: 1.2;
+}
+
+.pp-element-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.pp-element-label[hidden] {
+    display: none;
+}
+
+.pp-element-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    overflow: hidden;
+    white-space: pre-line;
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-element-label[hidden] + .pp-element-value {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.pp-element-value img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.pp-element-missing .pp-element-value,
+.pp-element-unbound .pp-element-value {
+    opacity: 0.45;
+    font-weight: normal;
+}
+
+.pp-element-resize {
+    display: none;
+}
+
+body.pp-editing .pp-element {
+    border-color: color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-style: dashed;
+    cursor: move;
+    touch-action: none;
+}
+
+body.pp-editing .pp-element:hover {
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+body.pp-editing .pp-element.pp-element-selected {
+    border-style: solid;
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, transparent);
+}
+
+body.pp-editing .pp-element-resize {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 8px;
+    height: 8px;
+    cursor: nwse-resize;
+    touch-action: none;
+    background: linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--SmartThemeQuoteColor) 80%, transparent) 50%);
+    opacity: 0.8;
+}
+
+body.pp-editing .pp-panel.pp-locked .pp-element {
+    cursor: pointer;
+}
+
+body.pp-editing .pp-panel.pp-locked .pp-element-resize {
+    display: none;
+}
+
+.pp-element.pp-element-dragging {
+    opacity: 0.85;
+    user-select: none;
+}
+
+/* Drop feedback while dragging a variable from the picker. */
+.pp-panel.pp-drop-target {
+    outline: 2px solid var(--SmartThemeQuoteColor) !important;
+}
+
+.pp-element.pp-drop-target {
+    border-style: solid !important;
+    border-color: var(--SmartThemeQuoteColor) !important;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+}
+
+/* ---------- Properties: sections, element fields, preview ---------- */
+
+.pp-properties-section-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pp-properties-section-row .pp-properties-close {
+    padding: 0 4px;
+}
+
+.pp-properties-element {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pp-properties-element[hidden] {
+    display: none;
+}
+
+.pp-field {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.pp-field > span {
+    opacity: 0.7;
+}
+
+.pp-field .text_pole {
+    margin: 0;
+    min-width: 0;
+}
+
+.pp-field-info {
+    margin-left: 64px;
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+
+.pp-field-check {
+    margin: 0 0 0 64px;
+}
+
+.pp-field-caption {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.pp-element-preview-frame {
+    display: flex;
+    justify-content: center;
+    padding: 6px;
+    overflow: hidden;
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-radius: 6px;
+}
+
+.pp-element.pp-element-preview {
+    position: relative;
+    max-width: 100%;
+    flex: 0 0 auto;
+    cursor: default;
+}
+
+/* ---------- Variable picker ---------- */
+
+.pp-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pp-picker-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.pp-picker-controls .text_pole {
+    margin: 0;
+    min-width: 0;
+}
+
+.pp-picker-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+    border-radius: 6px;
+    padding: 2px;
+}
+
+.pp-picker-group {
+    padding: 4px 4px 2px;
+    font-size: 0.8em;
+    font-weight: 600;
+    opacity: 0.75;
+}
+
+.pp-picker-group.pp-picker-inactive::after {
+    content: " · inactive";
+    font-weight: normal;
+    font-style: italic;
+}
+
+.pp-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.pp-picker-item:hover {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+}
+
+.pp-picker-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-picker-type {
+    flex: 0 0 auto;
+    font-size: 0.8em;
+    opacity: 0.55;
+}
+
+.pp-picker-empty {
+    padding: 6px;
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.pp-picker-hint {
+    opacity: 0.6;
+}
+
+.pp-picker-ghost {
+    position: fixed;
+    z-index: 3300;
+    pointer-events: none;
+    padding: 3px 8px;
+    border-radius: 5px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeQuoteColor);
+    box-shadow: 0 2px 8px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.4));
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
+    white-space: nowrap;
+}
+
+/* ---------- Drawer: grid settings ---------- */
+
+.pp-grid-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pp-grid-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pp-grid-size .text_pole {
+    width: 4.5em;
+    margin: 0;
 }

@@ -8,7 +8,7 @@
 // callers never have to remember to persist. See src/storage/store.js
 // for the overall schema and src/library/ for layout/template management.
 
-import { getStore, getActiveLayout, save, generateId } from '../storage/store.js';
+import { getStore, getActiveLayout, save, generateId, MIN_GRID_SIZE, MAX_GRID_SIZE } from '../storage/store.js';
 import { pickDesign } from '../storage/design.js';
 
 // Fills any missing fields on a stored record with sane values, so a
@@ -90,4 +90,19 @@ export function isEditingMode() {
 export function setEditingModeFlag(enabled) {
     getStore().editingMode = enabled === true;
     save();
+}
+
+// Soft snap-to-grid (src/panels/snap.js): one grid size, shared by the
+// layout grid panels snap to and the panel grid elements snap to.
+export function getGridSettings() {
+    const store = getStore();
+    return { snap: store.snapToGrid, size: store.gridSize };
+}
+
+export function setGridSettings({ snap, size } = {}) {
+    const store = getStore();
+    if (typeof snap === 'boolean') store.snapToGrid = snap;
+    if (Number.isFinite(size)) store.gridSize = Math.min(MAX_GRID_SIZE, Math.max(MIN_GRID_SIZE, Math.round(size)));
+    save();
+    return getGridSettings();
 }

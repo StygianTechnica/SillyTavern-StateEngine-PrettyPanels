@@ -1,11 +1,16 @@
-// A panel's DESIGN: everything a template or layout carries between
-// chats - geometry, styling, widget composition and background layers.
-// pickDesign() is the whitelist: whatever else a record holds (IDs, lock
-// state, and especially chat-scoped variable bindings, visibility rules
-// and theme overrides) is dropped, so it can never leak into the Panel
-// Library, a layout export, or an import.
+// A panel's DESIGN: geometry, styling, widget composition (elements) and
+// background layers. pickDesign() is the whitelist: whatever else a
+// record holds (IDs, lock state, visibility rules, theme overrides) is
+// dropped, so it can never leak into the Panel Library, a layout export,
+// or an import.
+//
+// Element variable bindings ARE part of a layout's design (a chat
+// chooses a layout for what it displays) but never part of a panel
+// template's: the Panel Library runs every design through
+// stripBindings().
 
 import { clone } from './store.js';
+import { normalizeWidgets } from '../elements/element-model.js';
 
 export const DEFAULT_PANEL_WIDTH = 280;
 export const DEFAULT_PANEL_HEIGHT = 180;
@@ -31,7 +36,16 @@ export function pickDesign(source = {}) {
         width: Math.max(MIN_PANEL_WIDTH, finite(source.width, DEFAULT_PANEL_WIDTH)),
         height: Math.max(MIN_PANEL_HEIGHT, finite(source.height, DEFAULT_PANEL_HEIGHT)),
         style: plainObject(source.style),
-        widgets: list(source.widgets),
+        widgets: normalizeWidgets(list(source.widgets)),
         backgrounds: list(source.backgrounds),
+    };
+}
+
+// A design with every element's binding removed - what a panel template
+// may hold.
+export function stripBindings(design) {
+    return {
+        ...design,
+        widgets: design.widgets.map((w) => ('binding' in w ? { ...w, binding: null } : w)),
     };
 }

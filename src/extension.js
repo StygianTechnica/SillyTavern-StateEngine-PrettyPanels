@@ -3,32 +3,26 @@
 // discovery, and declares its capabilities - the things every State
 // Engine extension must do before it can create presets, variables, or
 // anything else. Once that succeeds, it restores saved panels and adds
-// the Magic Wand entry and the settings drawer. Panel logic itself
-// lives in src/panels/, UI wiring in src/ui/.
+// the Magic Wand entry and the settings drawer, and starts the chat
+// session (per-chat layout choice, live variable values). Panel logic
+// lives in src/panels/, elements in src/elements/, chat/State Engine
+// data in src/chat/, UI wiring in src/ui/.
 
 import { ensureStateEngineAvailable, warnStateEngineMissing } from './api/dependency-check.js';
 import { claimNamespace } from './api/namespace.js';
 import { registerWithStateEngine } from './api/registration.js';
 import { declareCapabilities } from './api/capabilities.js';
+import { loadDateTimeFormatter } from './api/format-datetime.js';
+import { EXTENSION_ID, NAMESPACE } from './constants.js';
 import { initPanels } from './panels/panel-manager.js';
+import { setDateTimeFormatter } from './elements/formats.js';
+import { startChatSession } from './chat/chat-session.js';
+import { LAYOUT_VARIABLE } from './chat/pp-config.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 
-// ---------------------------------------------------------------------
-// EXTENSION IDENTITY
-// ---------------------------------------------------------------------
-
-// Must be unique across every extension that talks to the State Engine
-// API on this SillyTavern install - it is how the State Engine tells
-// your extension's calls apart from anyone else's. Convention: match
-// your extension's own folder/repo name.
-const EXTENSION_ID = 'SillyTavern-StateEngine-PrettyPanels';
-
-// Prefixes every variable and preset your extension creates through the
-// State Engine (e.g. a variable named "mood" is stored as
-// "prettyPanels__mood"). Letters and digits only, starting with a
-// letter - see the State Engine API Reference, "Namespace Model".
-const NAMESPACE = 'prettyPanels';
+// EXTENSION_ID / NAMESPACE live in src/constants.js - every module that
+// calls the State Engine API needs them.
 
 // Plain strings describing what this extension provides, so other
 // extensions can discover it via getExtensionsProviding().
@@ -57,6 +51,7 @@ export async function initExtension() {
 
         await registerWithStateEngine(EXTENSION_ID, {
             namespace: NAMESPACE,
+            variables: [LAYOUT_VARIABLE],
             capabilities: CAPABILITIES,
             description: 'Free-floating, theme-aware HUD panels.',
         });
@@ -74,7 +69,14 @@ export async function initExtension() {
         return;
     }
 
+    try {
+        setDateTimeFormatter(await loadDateTimeFormatter(EXTENSION_ID));
+    } catch (err) {
+        console.warn(`[${EXTENSION_ID}] datetime formatting unavailable - datetime values show unformatted.`, err);
+    }
+
     initPanels();
     addWandMenuItems();
     await addSettingsDrawer();
+    await startChatSession();
 }

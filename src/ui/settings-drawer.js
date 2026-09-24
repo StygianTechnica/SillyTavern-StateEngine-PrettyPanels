@@ -5,7 +5,7 @@
 // registry and the page immediately. The Layout Library and Panel
 // Library sections are wired in src/ui/library-drawer.js.
 
-import { getState, onStateChange, setEnabled, setEditingMode } from '../panels/panel-manager.js';
+import { getState, onStateChange, setEnabled, setEditingMode, getGrid, setGrid } from '../panels/panel-manager.js';
 import { initLibraryDrawer } from './library-drawer.js';
 
 // SillyTavern resolves extension templates relative to
@@ -41,6 +41,17 @@ export async function addSettingsDrawer() {
 
     document.getElementById('pp_enabled').addEventListener('change', (e) => setEnabled(e.target.checked));
     document.getElementById('pp_editing_mode').addEventListener('change', (e) => setEditingMode(e.target.checked));
+
+    const snapBox = document.getElementById('pp_snap_to_grid');
+    const sizeInput = document.getElementById('pp_grid_size');
+    const renderGrid = ({ snap, size }) => {
+        snapBox.checked = snap;
+        sizeInput.value = String(size);
+        sizeInput.disabled = !snap;
+    };
+    snapBox.addEventListener('change', () => renderGrid(setGrid({ snap: snapBox.checked })));
+    sizeInput.addEventListener('change', () => renderGrid(setGrid({ size: Number(sizeInput.value) })));
+    renderGrid(getGrid());
 
     renderState(getState());
     onStateChange(renderState);
