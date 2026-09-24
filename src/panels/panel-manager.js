@@ -64,8 +64,7 @@ import { confirmYesNo, notify } from '../ui/dialogs.js';
 import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import {
-    measureAnchors, nearestAnchor, placeOnAnchor, offsetOnAnchor, resolveAnchoredPosition, showAnchorOverlay,
-    hideAnchorOverlay, watchAnchorLayout, topBarBottom,
+    anchorHost, isMarginAnchor, updateMarginLayout, measureDropZones, zoneAt, showAnchorOverlay, hideAnchorOverlay, topBarBottom,
 } from './anchors.js';
 
 // Panels sit above the chat but below SillyTavern's own popups/drawers:
@@ -83,30 +82,62 @@ const selectionListeners = new Set();
 let selection = [];
 let initialized = false;
 
-// While a single panel is dragged: the anchors measured at drag start and
-// the one it would snap to on release.
-let dragAnchors = null;
+// While a single panel is dragged: the drop zones measured once it left
+// its anchor, and the zone under the pointer.
+let dragZones = null;
 let pendingAnchor = null;
+// The panel being dragged (kept undocked until the drag ends).
+let draggingPanel = null;
+
+function anchoredTarget(record) {
+    return record.anchorMode === 'anchored' && record.anchorTarget ? record.anchorTarget : null;
+}
 
 const hooks = {
     onGeometryCommit(panel, geometry) {
-        const { width, height } = panel.record;
-        // An anchored panel is shown at its anchor, not its stored x/y.
-        const shown = resolveAnchoredPosition(panel.record) ?? panel.record;
-        const moved = geometry.x !== shown.x || geometry.y !== shown.y;
-        if (!moved && geometry.width === width && geometry.height === height) return;
-        // Moving an anchored panel detaches it (a drag may re-anchor it on
-        // release, see onPanelDragEnd); resizing keeps the anchor.
-        const patch = moved && panel.record.anchorTarget ? { ...geometry, anchorTarget: null } : geometry;
+        const { x, y, width, height } = panel.record;
+        // A docked panel has no position of its own: only its size counts,
+        // and in the chat column only its height (it spans the column).
+        const patch = panel.docked
+            ? { height: geometry.height, ...(isMarginAnchor(panel.record.anchorTarget) ? { width: geometry.width } : {}) }
+            : geometry;
+        if (Object.entries(patch).every(([key, value]) => ({ x, y, width, height })[key] === value)) return;
         const updated = updatePanelRecord(panel.id, patch);
         if (updated) panel.update(updated);
     },
-    resolveAnchor(record) {
-        return resolveAnchoredPosition(record);
+    // Docks the panel into SillyTavern's layout at its anchor, or takes it
+    // back out; true when it ends up docked.
+    placePanel(panel) {
+        const target = anchoredTarget(panel.record);
+        const host = target && panel !== draggingPanel ? anchorHost(target) : null;
+        if (host) {
+            if (panel.el.parentElement !== host) host.appendChild(panel.el);
+            panel.el.classList.add('pp-docked');
+            panel.el.classList.toggle('pp-docked-row', !isMarginAnchor(target));
+            panel.el.style.left = '';
+            panel.el.style.top = '';
+        } else if (panel.docked || panel.el.parentElement !== document.body) {
+            document.body.appendChild(panel.el);
+            panel.el.classList.remove('pp-docked', 'pp-docked-row');
+        }
+        updateMarginLayout();
+        return !!host;
+    },
+    // A drag really started: a docked panel leaves the layout (which
+    // reflows back) and floats where it was, under the pointer.
+    onDragBegin(panel) {
+        draggingPanel = panel;
+        if (!panel.docked) return;
+        const rect = panel.el.getBoundingClientRect();
+        document.body.appendChild(panel.el);
+        panel.el.classList.remove('pp-docked', 'pp-docked-row');
+        panel.el.style.left = `${Math.round(rect.left)}px`;
+        panel.el.style.top = `${Math.round(rect.top)}px`;
+        updateMarginLayout();
     },
     onAnchorChange(panel, patch) {
-        // Detaching keeps the panel where it is on screen.
-        const place = patch.anchorTarget === null ? (({ x, y }) => ({ x, y }))(panel.getRenderedGeometry()) : {};
+        // Going free keeps the panel where it is on screen.
+        const place = patch.anchorMode === 'free' ? (({ x, y }) => ({ x, y }))(panel.getRenderedGeometry()) : {};
         moveRecord(panel, { ...place, ...patch });
     },
     onLockChange(panel, locked) {
@@ -165,29 +196,38 @@ const hooks = {
     getGroupPeers(panel) {
         const group = groupOfPanel(panel.id);
         if (!group) return [];
+        // Docked group members stay in the layout.
         return group.panelIds
             .filter((id) => id !== panel.id)
             .map((id) => panels.get(id))
-            .filter((p) => p && !p.record.locked);
+            .filter((p) => p && !p.record.locked && !p.docked);
     },
-    onPanelDragging(panel, geometry, movingIds) {
+    onPanelDragging(panel, geometry, movingIds, pointer) {
         showGuides(computeGuides(geometry, new Set(movingIds)));
-        // Screen anchors: single-panel drags only (a group moves as one).
-        if (movingIds.length !== 1) return;
-        dragAnchors ??= measureAnchors();
-        pendingAnchor = nearestAnchor(dragAnchors, geometry, panel.record.anchorMode);
-        showAnchorOverlay(dragAnchors, pendingAnchor?.id ?? null);
+        // Layout anchors: single-panel drags only (a group moves as one).
+        if (movingIds.length !== 1 || !pointer) return;
+        dragZones ??= measureDropZones();
+        pendingAnchor = zoneAt(dragZones, pointer.x, pointer.y);
+        showAnchorOverlay(dragZones, pendingAnchor?.id ?? null);
     },
     onPanelDragEnd(panel, moved) {
         clearGuides();
         hideAnchorOverlay();
-        const anchor = pendingAnchor;
-        dragAnchors = null;
+        const zone = pendingAnchor;
+        dragZones = null;
         pendingAnchor = null;
-        if (!moved || !anchor) return;
-        const geometry = panel.getRenderedGeometry();
-        const anchorOffset = offsetOnAnchor(anchor, geometry);
-        moveRecord(panel, { ...placeOnAnchor(anchor, geometry, anchorOffset), anchorTarget: anchor.id, anchorOffset });
+        draggingPanel = null;
+        if (!moved) return;
+        if (zone) {
+            // Released over an anchor: docks there.
+            moveRecord(panel, { anchorMode: 'anchored', anchorTarget: zone.id });
+        } else if (anchoredTarget(panel.record)) {
+            // Dragged away from its anchor: free again, where it was dropped.
+            const { x, y } = panel.getRenderedGeometry();
+            moveRecord(panel, { anchorMode: 'free', anchorTarget: null, x, y });
+        } else {
+            panel.applyPosition();
+        }
     },
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
@@ -297,10 +337,10 @@ export function onSelectionChange(listener) {
 // ---------------------------------------------------------------------
 
 // Writes a panel's record. Any explicit move (x/y, e.g. Align or
-// Distribute) detaches it from its screen anchor unless the patch sets one.
+// Distribute) takes it out of its layout anchor unless the patch sets one.
 function moveRecord(panel, patch) {
-    const detach = ('x' in patch || 'y' in patch) && !('anchorTarget' in patch) && panel.record.anchorTarget;
-    const updated = updatePanelRecord(panel.id, detach ? { ...patch, anchorTarget: null } : patch);
+    const detach = ('x' in patch || 'y' in patch) && !('anchorMode' in patch) && anchoredTarget(panel.record);
+    const updated = updatePanelRecord(panel.id, detach ? { ...patch, anchorMode: 'free', anchorTarget: null } : patch);
     if (updated) panel.update(updated);
 }
 
@@ -494,6 +534,7 @@ function mountAllPanels() {
 function unmountAllPanels() {
     for (const panel of panels.values()) panel.destroy();
     panels.clear();
+    updateMarginLayout();
 }
 
 // Grid size as a CSS variable (the editing-mode grid overlay), and a
@@ -549,12 +590,7 @@ export function initPanels() {
         for (const panel of panels.values()) panel.renderValues();
     });
     void fontRegistry.load();
-    // Anchored panels follow SillyTavern's interface as it changes.
-    watchAnchorLayout(() => {
-        for (const panel of panels.values()) {
-            if (panel.record.anchorTarget) panel.applyPosition();
-        }
-    });
+
 
     // Re-clamp on-screen positions when the window changes size; stored
     // geometry is untouched (see Panel.applyRecord()).
@@ -580,7 +616,7 @@ export function insertTemplate(templateId) {
     if (!template) return null;
     // A new instance starts unanchored (it would otherwise land exactly on
     // top of any other panel anchored at the same spot).
-    const design = { ...pickDesign(template), anchorTarget: null };
+    const design = { ...pickDesign(template), anchorMode: 'free', anchorTarget: null };
     // Don't land exactly on top of an instance already at the template's
     // saved spot, or the insert looks like it did nothing.
     for (let i = 0; i < CASCADE_SLOTS && isOccupied(design.x, design.y); i++) {
@@ -616,6 +652,7 @@ export function deletePanel(id) {
     if (!panel) return false;
     const hadBindings = panel.record.widgets.some((w) => w.binding);
     panel.destroy();
+    updateMarginLayout();
     panels.delete(id);
     deletePanelRecord(id);
     setSelection(selection.filter((x) => x !== id));

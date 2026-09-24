@@ -1,57 +1,131 @@
-// Screen-level drag anchors: places in SillyTavern's own interface a panel
-// can snap to - under the top bar, against a screen edge, at the top or
-// bottom of the chat, beside an open sidebar or next to the input bar.
-// Every zone is measured live from SillyTavern's DOM, so an anchored panel
-// follows the interface when it changes (window size, sidebar opened or
-// closed, chat column width, theme, zoom).
+// SillyTavern layout anchors: places INSIDE SillyTavern's own layout a
+// panel can be attached to. An anchored ("docked") panel is not a floating
+// overlay - its element is moved into SillyTavern's DOM at the anchor, it
+// occupies real space, and SillyTavern reflows around it:
 //
-// A panel stores (panel-registry.js / design.js):
-//   anchorMode    'free' | 'snap' - how eagerly it snaps while dragged
-//   anchorTarget  null | an ANCHORS id
-//   anchorOffset  px along the anchor edge where it was dropped (e.g. how
-//                 far along the top bar), so it stays at that spot
+//   anchor_top_of_chat     in #sheld, before #chat        chat gets shorter
+//   anchor_bottom_of_chat  in #sheld, before #form_sheld  chat gets shorter
+//   anchor_above_input     in #form_sheld, before #send_form
+//   anchor_below_input     in #form_sheld, after #send_form
+//   anchor_sidebar_margin  in the right sidebar (#right-nav-panel), above
+//                          its scrolling list - shown while it is open
+//   anchor_left_margin     a column at the left / right screen edge, below
+//   anchor_right_margin    the top bar; the chat column (#sheld) and the
+//                          sidebars move over and narrow to make room
 //
-// Two kinds of anchor:
-//   edge    the panel's side sits on a line (`side` of the panel touches
-//           `line`), sliding freely along `span`
-//   point   a fixed corner position (the input margin)
-// An anchor whose SillyTavern element isn't on screen (a closed sidebar)
-// is unavailable: it isn't offered, and a panel anchored to it shows at
-// its last stored position until it comes back.
+// Each anchor has a host element (.pp-anchor-host) created on first use;
+// panels docked to the same anchor stack in it. Hosts inside the chat
+// column stretch a panel to the column's width (its height is kept);
+// margin columns are as wide as their widest panel.
+//
+// A panel stores (design.js):
+//   anchorMode    'free' | 'anchored'
+//   anchorTarget  null | an ANCHORS id (used when anchorMode is 'anchored')
 
 export const ANCHOR_MODES = [
     ['free', 'Free'],
-    ['snap', 'Snap'],
+    ['anchored', 'Anchored'],
 ];
 
 export const ANCHORS = [
-    ['top-bar', 'Top bar'],
-    ['bottom-bar', 'Bottom bar'],
-    ['left-margin', 'Left margin'],
-    ['right-margin', 'Right margin'],
-    ['chat-header', 'Chat header'],
-    ['chat-footer', 'Chat footer'],
-    ['sidebar-margin', 'Sidebar margin'],
-    ['input-margin', 'Input margin'],
+    ['anchor_top_of_chat', 'Top of chat'],
+    ['anchor_bottom_of_chat', 'Bottom of chat'],
+    ['anchor_above_input', 'Above input'],
+    ['anchor_below_input', 'Below input'],
+    ['anchor_left_margin', 'Left margin'],
+    ['anchor_right_margin', 'Right margin'],
+    ['anchor_sidebar_margin', 'Sidebar'],
 ];
 const ANCHOR_IDS = new Set(ANCHORS.map(([id]) => id));
 
+// Ids used by the earlier snap-zone version, mapped to their nearest anchor.
+const LEGACY_IDS = {
+    'top-bar': 'anchor_top_of_chat',
+    'chat-header': 'anchor_top_of_chat',
+    'chat-footer': 'anchor_bottom_of_chat',
+    'input-margin': 'anchor_above_input',
+    'bottom-bar': 'anchor_below_input',
+    'left-margin': 'anchor_left_margin',
+    'right-margin': 'anchor_right_margin',
+    'sidebar-margin': 'anchor_sidebar_margin',
+};
+
 export function isAnchorId(id) {
     return ANCHOR_IDS.has(id);
+}
+
+// A stored anchorTarget (current or legacy id) as a current id, or null.
+export function normalizeAnchorId(id) {
+    return ANCHOR_IDS.has(id) ? id : (LEGACY_IDS[id] ?? null);
 }
 
 export function anchorLabel(id) {
     return ANCHORS.find(([aid]) => aid === id)?.[1] ?? id;
 }
 
-// Gap between a snapped panel and the thing it snaps to, px.
-const GAP = 4;
-// Thickness of a highlighted zone, px.
-const ZONE = 24;
-// How close (px) a dragged panel's edge must come to snap, per mode.
-const SNAP_DISTANCE = { free: 24, snap: 96 };
+const MARGIN_SIDES = { anchor_left_margin: 'left', anchor_right_margin: 'right' };
 
-const TOP_BAR_SELECTORS = ['#top-settings-holder', '#top-bar'];
+export function isMarginAnchor(id) {
+    return id in MARGIN_SIDES;
+}
+
+// Where each non-margin host goes: inside `parent`, before the first
+// match of `before` (or at the end when there is none / `before` is null).
+const HOST_PLACES = {
+    anchor_top_of_chat: { parent: '#sheld', before: '#chat' },
+    anchor_bottom_of_chat: { parent: '#sheld', before: '#form_sheld' },
+    anchor_above_input: { parent: '#form_sheld', before: '#send_form' },
+    anchor_below_input: { parent: '#form_sheld', before: null },
+    anchor_sidebar_margin: { parent: '#right-nav-panel', before: ':scope > .scrollableInner' },
+};
+
+const hosts = new Map();
+
+// The host element for an anchor, created and (re)inserted as needed.
+// null when SillyTavern's element for it doesn't exist.
+export function anchorHost(id) {
+    let host = hosts.get(id);
+    if (!host) {
+        host = document.createElement('div');
+        host.className = 'pp-anchor-host';
+        host.dataset.anchor = id;
+        hosts.set(id, host);
+    }
+    if (isMarginAnchor(id)) {
+        host.classList.add('pp-anchor-column', `pp-anchor-column-${MARGIN_SIDES[id]}`);
+        if (host.parentElement !== document.body) document.body.appendChild(host);
+        return host;
+    }
+    const place = HOST_PLACES[id];
+    const parent = document.querySelector(place.parent);
+    if (!parent) {
+        host.remove();
+        return null;
+    }
+    const before = place.before ? parent.querySelector(place.before) : null;
+    if (host.parentElement !== parent || (before && host.nextElementSibling !== before)) {
+        parent.insertBefore(host, before);
+    }
+    return host;
+}
+
+// Sizes the margin columns to their panels and moves SillyTavern's chat
+// column and sidebars out of their way (CSS variables read by style.css,
+// "Layout anchors"). Call after panels were docked or undocked.
+export function updateMarginLayout() {
+    const root = document.documentElement;
+    let any = false;
+    for (const [id, side] of Object.entries(MARGIN_SIDES)) {
+        const host = hosts.get(id);
+        const panels = host ? [...host.children].filter((el) => el.classList.contains('pp-panel')) : [];
+        const width = panels.reduce((max, el) => Math.max(max, parseFloat(el.style.width) || 0), 0);
+        if (host) host.style.width = `${width}px`;
+        // The column's own padding (style.css .pp-anchor-column) included.
+        root.style.setProperty(`--pp-anchor-${side}`, `${width > 0 ? width + 8 : 0}px`);
+        if (width > 0) any = true;
+    }
+    document.body.classList.toggle('pp-anchor-margins', any);
+}
 
 function visibleRect(selector) {
     const el = document.querySelector(selector);
@@ -61,6 +135,8 @@ function visibleRect(selector) {
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 ? rect : null;
 }
+
+const TOP_BAR_SELECTORS = ['#top-settings-holder', '#top-bar'];
 
 // The bottom of SillyTavern's top bar (0 when there is none).
 export function topBarBottom() {
@@ -73,196 +149,77 @@ export function topBarBottom() {
     return top;
 }
 
-// The open sidebar (SillyTavern's left or right drawer panel), if any.
-function openSidebar() {
-    for (const selector of ['#right-nav-panel', '#left-nav-panel']) {
-        const rect = visibleRect(selector);
-        if (!rect) continue;
-        const onRight = rect.left + rect.width / 2 > window.innerWidth / 2;
-        return { rect, onRight };
-    }
-    return null;
-}
+// Drop targets while dragging: [{ id, label, rect }], most specific first
+// (the first one containing the pointer wins).
+const EDGE_STRIP = 40;
+const CHAT_STRIP = 64;
 
-// Every anchor available right now, with its geometry. `zone` is the
-// strip drawn while dragging - along the line the panel snaps to.
-export function measureAnchors() {
+export function measureDropZones() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const top = topBarBottom();
     const sheld = visibleRect('#sheld');
     const chat = visibleRect('#chat');
     const form = visibleRect('#form_sheld');
-    const anchors = [];
-    const edge = (id, side, line, span, zone) => anchors.push({ id, label: anchorLabel(id), kind: 'edge', side, line, span, zone });
-
-    edge('top-bar', 'top', top + GAP, [0, vw], { x: 0, y: top, width: vw, height: ZONE });
-    edge('bottom-bar', 'bottom', vh - GAP, [0, vw], { x: 0, y: vh - ZONE, width: vw, height: ZONE });
-    edge('left-margin', 'left', GAP, [top, vh], { x: 0, y: top, width: ZONE, height: vh - top });
-    edge('right-margin', 'right', vw - GAP, [top, vh], { x: vw - ZONE, y: top, width: ZONE, height: vh - top });
-
-    if (sheld && chat) {
-        edge('chat-header', 'top', chat.top + GAP, [sheld.left, sheld.right], { x: sheld.left, y: chat.top, width: sheld.width, height: ZONE });
-    }
-    if (sheld && form) {
-        edge('chat-footer', 'bottom', form.top - GAP, [sheld.left, sheld.right], { x: sheld.left, y: form.top - ZONE, width: sheld.width, height: ZONE });
-    }
-    const sidebar = openSidebar();
-    if (sidebar) {
-        const { rect, onRight } = sidebar;
-        if (onRight) edge('sidebar-margin', 'right', rect.left - GAP, [rect.top, rect.bottom], { x: rect.left - ZONE, y: rect.top, width: ZONE, height: rect.height });
-        else edge('sidebar-margin', 'left', rect.right + GAP, [rect.top, rect.bottom], { x: rect.right, y: rect.top, width: ZONE, height: rect.height });
-    }
-    if (form) {
-        // Beside the input bar, bottoms aligned: right of it if there is
-        // room, else left of it.
-        const roomRight = vw - form.right;
-        const onRight = roomRight >= form.left;
-        const width = Math.max(ZONE, Math.min(160, onRight ? roomRight : form.left));
-        anchors.push({
-            id: 'input-margin',
-            label: anchorLabel('input-margin'),
-            kind: 'point',
-            onRight,
-            point: { x: onRight ? form.right + GAP : form.left - GAP, y: form.bottom },
-            zone: { x: onRight ? form.right : form.left - width, y: form.top, width, height: form.height },
-        });
-    }
-    return anchors;
-}
-
-function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), Math.max(min, max));
-}
-
-const HORIZONTAL = new Set(['top', 'bottom']);
-
-// Where a panel of `geom` size sits on `anchor`, `offset` px along it.
-export function placeOnAnchor(anchor, geom, offset = 0) {
-    const { width: w, height: h } = geom;
-    if (anchor.kind === 'point') {
-        return { x: Math.round(anchor.onRight ? anchor.point.x : anchor.point.x - w), y: Math.round(anchor.point.y - h) };
-    }
-    const [from, to] = anchor.span;
-    if (HORIZONTAL.has(anchor.side)) {
-        return {
-            x: Math.round(clamp(from + offset, from, to - w)),
-            y: Math.round(anchor.side === 'top' ? anchor.line : anchor.line - h),
-        };
-    }
-    return {
-        x: Math.round(anchor.side === 'left' ? anchor.line : anchor.line - w),
-        y: Math.round(clamp(from + offset, from, to - h)),
+    const sidebar = visibleRect('#right-nav-panel');
+    const leftDrawer = visibleRect('#left-nav-panel');
+    const zones = [];
+    const zone = (id, x, y, width, height) => {
+        if (width > 0 && height > 0) zones.push({ id, label: anchorLabel(id), rect: { x, y, width, height } });
     };
-}
+    const rect = (r) => [r.left, r.top, r.width, r.height];
 
-// The offset along `anchor` for a panel at `geom` (what placeOnAnchor
-// needs to put it back there).
-export function offsetOnAnchor(anchor, geom) {
-    if (anchor.kind === 'point') return 0;
-    return Math.round(HORIZONTAL.has(anchor.side) ? geom.x - anchor.span[0] : geom.y - anchor.span[0]);
-}
-
-// How far `geom` is from snapping to `anchor` (Infinity if it isn't
-// alongside it at all).
-function distanceTo(anchor, geom) {
-    const { x, y, width: w, height: h } = geom;
-    if (anchor.kind === 'point') {
-        const cornerX = anchor.onRight ? x : x + w;
-        return Math.hypot(cornerX - anchor.point.x, y + h - anchor.point.y);
+    // Screen edges: always reachable, even with a sidebar open over the margin.
+    zone('anchor_left_margin', 0, top, EDGE_STRIP, vh - top);
+    zone('anchor_right_margin', vw - EDGE_STRIP, top, EDGE_STRIP, vh - top);
+    if (sidebar) zone('anchor_sidebar_margin', ...rect(sidebar));
+    if (form) {
+        zone('anchor_above_input', form.left, form.top, form.width, form.height / 2);
+        zone('anchor_below_input', form.left, form.top + form.height / 2, form.width, form.height / 2);
     }
-    const [from, to] = anchor.span;
-    if (HORIZONTAL.has(anchor.side)) {
-        if (x + w < from || x > to) return Infinity;
-        return Math.abs((anchor.side === 'top' ? y : y + h) - anchor.line);
+    if (chat) {
+        zone('anchor_top_of_chat', chat.left, chat.top, chat.width, Math.min(CHAT_STRIP, chat.height / 3));
+        zone('anchor_bottom_of_chat', chat.left, chat.bottom - Math.min(CHAT_STRIP, chat.height / 3), chat.width, Math.min(CHAT_STRIP, chat.height / 3));
     }
-    if (y + h < from || y > to) return Infinity;
-    return Math.abs((anchor.side === 'left' ? x : x + w) - anchor.line);
-}
-
-// The anchor a panel dragged to `geom` would snap to, or null. `anchors`:
-// from measureAnchors() (measured once per drag).
-export function nearestAnchor(anchors, geom, mode = 'free') {
-    const limit = SNAP_DISTANCE[mode] ?? SNAP_DISTANCE.free;
-    let best = null;
-    let bestDistance = limit;
-    for (const anchor of anchors) {
-        const d = distanceTo(anchor, geom);
-        if (d <= bestDistance) {
-            best = anchor;
-            bestDistance = d;
-        }
+    // The whole margin, where no sidebar covers it.
+    if (sheld) {
+        if (!leftDrawer) zone('anchor_left_margin', EDGE_STRIP, top, sheld.left - EDGE_STRIP, vh - top);
+        if (!sidebar) zone('anchor_right_margin', sheld.right, top, vw - EDGE_STRIP - sheld.right, vh - top);
     }
-    return best;
+    return zones;
 }
 
-// Position for a record anchored to `record.anchorTarget`, or null when
-// it isn't anchored or that anchor is unavailable right now.
-export function resolveAnchoredPosition(record) {
-    if (!isAnchorId(record?.anchorTarget)) return null;
-    const anchor = measureAnchors().find((a) => a.id === record.anchorTarget);
-    return anchor ? placeOnAnchor(anchor, record, record.anchorOffset ?? 0) : null;
+export function zoneAt(zones, x, y) {
+    return zones.find(({ rect }) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) ?? null;
 }
 
-// ---- Drag overlay: every zone outlined, the one that would be used
-// highlighted. Only exists while a panel is being dragged.
+// ---- Drag overlay: every drop target outlined, the one under the
+// pointer highlighted. Only exists while a panel is being dragged.
 
 let overlay = null;
 
-export function showAnchorOverlay(anchors, activeId) {
+export function showAnchorOverlay(zones, activeId) {
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.className = 'pp-anchor-overlay';
         overlay.setAttribute('aria-hidden', 'true');
         document.body.appendChild(overlay);
-        overlay.replaceChildren(...anchors.map((anchor) => {
-            const zone = document.createElement('div');
-            zone.className = 'pp-anchor-zone';
-            zone.dataset.anchor = anchor.id;
-            zone.classList.toggle('pp-anchor-vertical', anchor.zone.height > anchor.zone.width * 2);
-            Object.assign(zone.style, {
-                left: `${anchor.zone.x}px`,
-                top: `${anchor.zone.y}px`,
-                width: `${anchor.zone.width}px`,
-                height: `${anchor.zone.height}px`,
-            });
-            const label = document.createElement('span');
-            label.textContent = anchor.label;
-            zone.appendChild(label);
-            return zone;
+        overlay.replaceChildren(...zones.map(({ id, label, rect }) => {
+            const el = document.createElement('div');
+            el.className = 'pp-anchor-zone';
+            el.dataset.anchor = id;
+            el.classList.toggle('pp-anchor-vertical', rect.height > rect.width * 2 && rect.width < 80);
+            Object.assign(el.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+            const text = document.createElement('span');
+            text.textContent = label;
+            el.appendChild(text);
+            return el;
         }));
     }
-    for (const zone of overlay.children) zone.classList.toggle('pp-anchor-active', zone.dataset.anchor === activeId);
+    for (const el of overlay.children) el.classList.toggle('pp-anchor-active', el.dataset.anchor === activeId);
 }
 
 export function hideAnchorOverlay() {
     overlay?.remove();
     overlay = null;
-}
-
-// Calls `onChange` (at most once per frame) whenever something anchors
-// depend on may have moved: the window, SillyTavern's top bar, chat
-// column, input bar or sidebars changing size, or a sidebar opening or
-// closing.
-export function watchAnchorLayout(onChange) {
-    let queued = false;
-    const schedule = () => {
-        if (queued) return;
-        queued = true;
-        requestAnimationFrame(() => {
-            queued = false;
-            onChange();
-        });
-    };
-    window.addEventListener('resize', schedule);
-    const selectors = [...TOP_BAR_SELECTORS, '#sheld', '#chat', '#form_sheld', '#left-nav-panel', '#right-nav-panel'];
-    const elements = selectors.map((s) => document.querySelector(s)).filter(Boolean);
-    if (typeof ResizeObserver !== 'undefined') {
-        const resize = new ResizeObserver(schedule);
-        for (const el of elements) resize.observe(el);
-    }
-    if (typeof MutationObserver !== 'undefined') {
-        const mutation = new MutationObserver(schedule);
-        for (const el of elements) mutation.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
-    }
 }

@@ -54,8 +54,10 @@ export class Panel {
     //   dropTargetAt(clientX, clientY) -> { panel, elementId? } | null,
     //   onPanelPress(panel, additive), onPanelClick(panel, additive),
     //   getGroupPeers(panel) -> Panel[],
-    //   onPanelDragging(panel, geometry, movingIds), onPanelDragEnd(panel, moved),
-    //   resolveAnchor(record) -> { x, y } | null  (screen anchoring, anchors.js),
+    //   onPanelDragging(panel, geometry, movingIds, pointer), onPanelDragEnd(panel, moved),
+    //   placePanel(panel) -> true when the panel is docked into SillyTavern's
+    //     layout at its anchor (anchors.js); false = position it freely,
+    //   onDragBegin(panel) - a drag really started (undocks a docked panel),
     //   onAnchorChange(panel, patch),
     // }
     constructor(record, hooks) {
@@ -91,7 +93,14 @@ export class Panel {
     }
 
     mount() {
+        this.mounted = true;
         document.body.appendChild(this.el);
+        this.applyPosition();
+    }
+
+    // Docked into SillyTavern's layout at an anchor (not floating).
+    get docked() {
+        return this.el.classList.contains('pp-docked');
     }
 
     destroy() {
@@ -115,15 +124,14 @@ export class Panel {
         this.popup?.refresh();
     }
 
-    // Positions the panel: at its screen anchor when it has one that is
-    // available right now (anchors.js), else at its stored x/y.
+    // Places the panel: docked into SillyTavern's layout when it is
+    // anchored and its anchor exists (the manager moves it there), else
+    // floating at its stored x/y.
     applyPosition() {
-        const anchored = this.hooks.resolveAnchor?.(this.record) ?? null;
-        const { x, y } = anchored ?? this.record;
-        const pos = this.#clampPosition(x, y, this.record.width);
+        if (this.mounted && this.hooks.placePanel?.(this)) return;
+        const pos = this.#clampPosition(this.record.x, this.record.y, this.record.width);
         this.el.style.left = `${pos.x}px`;
         this.el.style.top = `${pos.y}px`;
-        this.el.classList.toggle('pp-anchored', !!this.record.anchorTarget);
     }
 
     // Replaces the working copy after the registry accepted a change.
@@ -218,6 +226,10 @@ export class Panel {
 
     // Current on-screen geometry (what the user actually sees).
     getRenderedGeometry() {
+        if (this.docked) {
+            const rect = this.el.getBoundingClientRect();
+            return { x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) };
+        }
         return {
             x: Math.round(parseFloat(this.el.style.left) || 0),
             y: Math.round(parseFloat(this.el.style.top) || 0),
@@ -303,7 +315,7 @@ export class Panel {
                 const dy = ev.clientY - startY;
                 if (!moved && Math.hypot(dx, dy) < 2) return;
                 moved = true;
-                onMove(dx, dy);
+                onMove(dx, dy, ev);
                 this.popup?.refresh(this.getRenderedGeometry());
             };
             const end = () => {
@@ -338,10 +350,19 @@ export class Panel {
         this.#trackPointer(handle, {
             select: true,
             onStart: () => {
-                origin = this.getRenderedGeometry();
-                peers = this.hooks.getGroupPeers(this).map((panel) => ({ panel, origin: panel.getRenderedGeometry() }));
+                origin = null;
             },
-            onMove: (dx, dy) => {
+            onMove: (dx, dy, ev) => {
+                // Set up on the first real movement, so a plain click never
+                // undocks an anchored panel.
+                if (!origin) {
+                    this.hooks.onDragBegin?.(this);
+                    // Undocking moves the element in the DOM, which drops
+                    // its pointer capture - take it back so the drag goes on.
+                    if (!handle.hasPointerCapture(ev.pointerId)) handle.setPointerCapture(ev.pointerId);
+                    origin = this.getRenderedGeometry();
+                    peers = this.hooks.getGroupPeers(this).map((panel) => ({ panel, origin: panel.getRenderedGeometry() }));
+                }
                 const grid = this.gridSize();
                 const x = softSnapSpan(origin.x + dx, origin.width, grid);
                 const y = softSnapSpan(origin.y + dy, origin.height, grid);
@@ -351,7 +372,7 @@ export class Panel {
                 const shiftX = Math.round(pos.x) - origin.x;
                 const shiftY = Math.round(pos.y) - origin.y;
                 for (const peer of peers) peer.panel.previewPosition(peer.origin.x + shiftX, peer.origin.y + shiftY);
-                this.hooks.onPanelDragging(this, this.getRenderedGeometry(), [this.id, ...peers.map((p) => p.panel.id)]);
+                this.hooks.onPanelDragging(this, this.getRenderedGeometry(), [this.id, ...peers.map((p) => p.panel.id)], { x: ev.clientX, y: ev.clientY });
             },
             onEnd: (moved) => {
                 for (const peer of peers) this.hooks.onGeometryCommit(peer.panel, peer.panel.getRenderedGeometry());
@@ -373,7 +394,9 @@ export class Panel {
                 const bottom = softSnap(origin.y + origin.height + dy, grid);
                 const width = clamp(right - origin.x, MIN_PANEL_WIDTH, window.innerWidth - origin.x);
                 const height = clamp(bottom - origin.y, MIN_PANEL_HEIGHT, window.innerHeight - origin.y);
-                this.el.style.width = `${Math.round(width)}px`;
+                // A panel docked in the chat column spans its width: only
+                // its height can change.
+                if (!this.el.classList.contains('pp-docked-row')) this.el.style.width = `${Math.round(width)}px`;
                 this.el.style.height = `${Math.round(height)}px`;
             },
         });

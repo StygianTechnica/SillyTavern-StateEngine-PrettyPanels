@@ -52,8 +52,8 @@ Three collapsible sections; which are open is remembered per panel while it's on
 selecting a panel or element expands its section.
 
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
-  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Screen Anchor** (Anchor
-  mode Free / Snap, which anchor the panel is attached to, Detach); **Panel Library** (Save
+  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Layout Anchor** (Anchor
+  mode Free / Anchored, and where it is anchored); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
   (background colour and Panel opacity, border colour/thickness/radius, drop shadow,
   padding, and margin - the visible panel is inset by the margin inside its stored bounds;
@@ -120,14 +120,19 @@ selecting a panel or element expands its section.
   PNG/WebP transparency and add opacity, fit and clipping: a rectangle clip (with corner
   radius) or an ellipse clip always fills the element (cover). Binding a Text element to an
   image variable turns its label off and gives it these settings.
-- **Screen anchors**: while a panel is dragged, SillyTavern's anchor zones are outlined - Top
-  bar, Bottom bar, Left and Right margin, Chat header, Chat footer, Sidebar margin (beside an
-  open sidebar) and Input margin (beside the input bar). Drop the panel on a highlighted zone
-  to anchor it: it then follows that part of SillyTavern as the interface changes (window
-  size, chat width, input height, sidebar opening). Dragging it away, or moving it with Align
-  / Distribute, detaches it. Anchor mode **Free** snaps only when dropped right on a zone
-  (within 24px); **Snap** prefers zones (within 96px). A panel anchored to a closed sidebar
-  waits at its last position until the sidebar opens again. Group drags don't anchor.
+- **Layout anchors**: a panel can become part of SillyTavern's own layout instead of floating
+  over it. While a panel is dragged, the places it can go are outlined: **Top of chat**,
+  **Bottom of chat**, **Above input**, **Below input**, **Left margin**, **Right margin** and
+  **Sidebar** (inside the open right sidebar, above its list). Release it over one and it is
+  moved into SillyTavern's page there and takes up real space: the chat gets shorter, the
+  sidebar list moves down, or - for the margins - the chat column moves over (and narrows if
+  it must) and the side drawers shrink to fit, so nothing overlaps. Panels in the chat column,
+  input area or sidebar span its width (their height is kept and can still be resized);
+  margin columns are as wide as their widest panel. Several panels on one anchor stack.
+  Dragging a docked panel away floats it again where you drop it. Anchor mode can also be set
+  in the panel's settings (Free, or Anchored + where). A Sidebar panel shows only while that
+  sidebar is open. If SillyTavern's MovingUI has placed the chat column by hand, the margin
+  anchors can't move it.
 - **Fonts**: ten bundled open-licence fonts (UI, fantasy, sci-fi, gothic, handwritten, HUD;
   most are variable fonts) plus your own uploads. Pretty Panels keeps only a sanitized,
   subsetted WOFF2 copy of an uploaded font, never the original file. Fonts are embedded in
@@ -183,7 +188,7 @@ selecting a panel or element expands its section.
 | `src/panels/properties-popup.js` | Per-panel properties pane |
 | `src/panels/snap.js` | Soft snap-to-grid |
 | `src/panels/panel-style.js` | Panel Styling model and CSS variables |
-| `src/panels/anchors.js` | Screen anchors: SillyTavern zones, snapping, drag overlay, layout watching |
+| `src/panels/anchors.js` | Layout anchors: hosts inside SillyTavern's DOM, margin reflow, drop zones, drag overlay |
 | `src/elements/element-model.js` | VariableElement records, labels, geometry clamping |
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
 | `src/elements/formats.js` | Value formats per variable type |

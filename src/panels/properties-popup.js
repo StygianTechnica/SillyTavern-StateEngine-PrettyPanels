@@ -2,8 +2,8 @@
 // (created on open, discarded on close), so several panels' popups can
 // be open at once without sharing state. Three collapsible sections:
 //   - Panel Properties: name, position and size (read-only), lock toggle,
-//     delete, Layering (z-index), Screen Anchor (Free/Snap, the anchor it
-//     is attached to, Detach), Panel Library (save/export template),
+//     delete, Layering (z-index), Layout Anchor (Free/Anchored and the
+//     anchor target), Panel Library (save/export template),
 //     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
 //     Width/Height, Z Index, then per type: Show Label, Label Override,
@@ -23,7 +23,7 @@
 import { VariablePicker, ElementPalette } from '../ui/variable-picker.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
-import { ANCHOR_MODES, anchorLabel } from './anchors.js';
+import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
 import {
     ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
@@ -243,11 +243,16 @@ export class PanelPropertiesPopup {
 
         const zField = this.el.querySelector('[data-field="zIndex"]');
         if (zField !== document.activeElement) zField.value = String(record.zIndex);
-        this.el.querySelector('[data-field="anchorMode"]').value = record.anchorMode ?? 'free';
-        this.el.querySelector('[data-field="anchorStatus"]').textContent = record.anchorTarget
-            ? `Anchored to: ${anchorLabel(record.anchorTarget)}`
-            : 'Not anchored - drag the panel onto a highlighted zone to anchor it.';
-        this.el.querySelector('[data-action="detach"]').hidden = !record.anchorTarget;
+        const anchored = record.anchorMode === 'anchored';
+        this.el.querySelector('[data-field="anchorMode"]').value = anchored ? 'anchored' : 'free';
+        const targetSelect = this.el.querySelector('[data-field="anchorTarget"]');
+        targetSelect.value = record.anchorTarget ?? '';
+        targetSelect.closest('.pp-anchor-target').hidden = !anchored;
+        this.el.querySelector('[data-field="anchorStatus"]').textContent = !anchored
+            ? 'Floating. Drag it onto a highlighted SillyTavern area to anchor it there.'
+            : !record.anchorTarget ? 'Choose where to anchor it.'
+                : this.panel.docked ? `Part of SillyTavern's layout: ${anchorLabel(record.anchorTarget)}. Drag it away to float it again.`
+                    : `${anchorLabel(record.anchorTarget)} isn't on screen right now (e.g. the sidebar is closed) - shown floating until it is.`;
         this.#fillPanelStyle();
 
         this.#applySections();
@@ -742,16 +747,19 @@ export class PanelPropertiesPopup {
                     <button type="button" class="menu_button" data-restack="front" title="Bring to Front"><i class="fa-solid fa-angles-up"></i></button>
                 </div>
             </div>
-            <div class="pp-properties-section-label">Screen Anchor</div>
+            <div class="pp-properties-section-label">Layout Anchor</div>
             <div class="pp-anchor-row">
                 <label class="pp-layering-z"><span>Anchor mode</span>
-                    <select class="text_pole" data-field="anchorMode" title="Free: snaps only when dropped right on a highlighted zone. Snap: prefers zones - snaps from further away.">
+                    <select class="text_pole" data-field="anchorMode" title="Free: floats over SillyTavern. Anchored: becomes part of SillyTavern's layout at the chosen place, which moves out of its way.">
                         ${ANCHOR_MODES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
                     </select>
                 </label>
-                <button type="button" class="menu_button pp-properties-button" data-action="detach" title="Stop following the anchor; the panel stays where it is">
-                    <i class="fa-solid fa-link-slash"></i><span>Detach</span>
-                </button>
+                <label class="pp-layering-z pp-anchor-target"><span>At</span>
+                    <select class="text_pole" data-field="anchorTarget">
+                        <option value="">Choose…</option>
+                        ${ANCHORS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                    </select>
+                </label>
             </div>
             <small class="pp-field-info" data-field="anchorStatus"></small>
             <div class="pp-properties-section-label">Panel Library</div>
@@ -1014,8 +1022,12 @@ export class PanelPropertiesPopup {
         for (const button of el.querySelectorAll('[data-restack]')) {
             button.addEventListener('click', () => this.hooks.onRestack(button.dataset.restack));
         }
-        el.querySelector('[data-field="anchorMode"]').addEventListener('change', (e) => this.hooks.onAnchorChange({ anchorMode: e.target.value }));
-        el.querySelector('[data-action="detach"]').addEventListener('click', () => this.hooks.onAnchorChange({ anchorTarget: null }));
+        el.querySelector('[data-field="anchorMode"]').addEventListener('change', (e) => {
+            this.hooks.onAnchorChange(e.target.value === 'free' ? { anchorMode: 'free', anchorTarget: null } : { anchorMode: 'anchored' });
+        });
+        el.querySelector('[data-field="anchorTarget"]').addEventListener('change', (e) => {
+            this.hooks.onAnchorChange({ anchorMode: 'anchored', anchorTarget: e.target.value || null });
+        });
 
         const field = (key) => el.querySelector(`[data-el="${key}"]`);
         // Switching type: an element still at the old type's default size

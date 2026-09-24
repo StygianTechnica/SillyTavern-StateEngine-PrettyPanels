@@ -1671,13 +1671,13 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
     font-family: inherit;
 }
 
-/* ---------- Screen anchors (src/panels/anchors.js) ---------- */
+/* ---------- Layout anchors (src/panels/anchors.js) ---------- */
 
 .pp-anchor-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 4px 10px;
 }
 
 .pp-anchor-row select.text_pole {
@@ -1685,8 +1685,88 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
     width: auto;
 }
 
-.pp-anchor-row [data-action="detach"][hidden] {
+.pp-anchor-target[hidden] {
     display: none;
+}
+
+/* Hosts inserted into SillyTavern's layout; empty ones take no space. */
+.pp-anchor-host {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    padding: 4px 0;
+}
+
+.pp-anchor-host:empty {
+    display: none;
+}
+
+/* A docked panel is part of the layout: in the flow, not floating. */
+.pp-panel.pp-docked {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    z-index: auto !important;
+    flex: 0 0 auto;
+    max-width: 100%;
+    white-space: normal;
+}
+
+/* In the chat column / input area / sidebar: spans its width. */
+.pp-panel.pp-docked-row {
+    width: 100% !important;
+}
+
+/* Margin columns at the screen edges, below the top bar. */
+.pp-anchor-column {
+    /* width (set by anchors.js) is the widest panel; padding is outside it */
+    box-sizing: content-box;
+    position: fixed;
+    top: var(--topBarBlockSize, 0px);
+    bottom: 0;
+    z-index: 31;
+    padding: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.pp-anchor-column-left {
+    left: 0;
+    align-items: flex-start;
+}
+
+.pp-anchor-column-right {
+    right: 0;
+    align-items: flex-end;
+}
+
+/* SillyTavern reflows around the margin columns: the chat column moves
+   over (and narrows if it must), and the side drawers fill what is left
+   of each margin. */
+body.pp-anchor-margins #sheld {
+    left: var(--pp-anchor-left, 0px);
+    right: var(--pp-anchor-right, 0px);
+    max-width: calc(100dvw - var(--pp-anchor-left, 0px) - var(--pp-anchor-right, 0px));
+}
+
+body.pp-anchor-margins #left-nav-panel,
+body.pp-anchor-margins .fillLeft,
+body.pp-anchor-margins #right-nav-panel,
+body.pp-anchor-margins .fillRight {
+    width: calc((100dvw - var(--pp-anchor-left, 0px) - var(--pp-anchor-right, 0px) - min(var(--sheldWidth), 100dvw - var(--pp-anchor-left, 0px) - var(--pp-anchor-right, 0px))) / 2);
+}
+
+body.pp-anchor-margins #left-nav-panel,
+body.pp-anchor-margins .fillLeft {
+    left: var(--pp-anchor-left, 0px);
+}
+
+body.pp-anchor-margins #right-nav-panel,
+body.pp-anchor-margins .fillRight {
+    right: var(--pp-anchor-right, 0px);
+    left: auto;
 }
 
 /* Shown only while a panel is being dragged; above panels, below popups. */

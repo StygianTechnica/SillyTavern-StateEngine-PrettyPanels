@@ -11,7 +11,7 @@
 
 import { clone } from './store.js';
 import { normalizeWidgets } from '../elements/element-model.js';
-import { isAnchorId } from '../panels/anchors.js';
+import { normalizeAnchorId } from '../panels/anchors.js';
 
 export const DEFAULT_PANEL_WIDTH = 280;
 export const DEFAULT_PANEL_HEIGHT = 180;
@@ -39,11 +39,17 @@ export function pickDesign(source = {}) {
         style: plainObject(source.style),
         widgets: normalizeWidgets(list(source.widgets)),
         backgrounds: list(source.backgrounds),
-        // Screen anchoring (src/panels/anchors.js): part of placement, like x/y.
-        anchorMode: source.anchorMode === 'snap' ? 'snap' : 'free',
-        anchorTarget: isAnchorId(source.anchorTarget) ? source.anchorTarget : null,
-        anchorOffset: Number.isFinite(source.anchorOffset) ? Math.round(source.anchorOffset) : 0,
+        ...anchorFields(source),
     };
+}
+
+// Layout anchoring (src/panels/anchors.js): part of placement, like x/y.
+// Records from the earlier snap-zone version ('snap' mode, old ids) map to
+// the nearest anchor.
+function anchorFields(source) {
+    const target = normalizeAnchorId(source.anchorTarget);
+    const anchored = source.anchorMode === 'anchored' || (source.anchorMode === 'snap' && !!target);
+    return { anchorMode: anchored ? 'anchored' : 'free', anchorTarget: target };
 }
 
 // A design with every variable binding removed - elements' bindings and
