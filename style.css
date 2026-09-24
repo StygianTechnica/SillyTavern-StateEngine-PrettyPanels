@@ -859,17 +859,38 @@ body.pp-editing .pp-element.pp-element-outline {
 .pp-element {
     font-size: var(--pp-el-font-size, calc(var(--mainFontSize, 15px) * 0.9));
     font-family: var(--pp-el-font-family, inherit);
+    font-style: var(--pp-el-font-style, normal);
+    font-variation-settings: var(--pp-el-font-variation, normal);
+    letter-spacing: var(--pp-el-letter-spacing, normal);
+    line-height: var(--pp-el-line-height, 1.2);
+    text-transform: var(--pp-el-transform, none);
+    text-shadow: var(--pp-el-shadow, none);
     background-color: var(--pp-el-bg, transparent);
     border-radius: var(--pp-el-radius, 5px);
 }
 
 .pp-element .pp-element-label {
     color: var(--pp-el-label-color, inherit);
+    font-family: var(--pp-el-label-font-family, inherit);
 }
 
 .pp-element .pp-element-value {
     color: var(--pp-el-text-color, inherit);
     font-weight: var(--pp-el-font-weight, 600);
+    text-decoration-line: var(--pp-el-decoration, none);
+}
+
+/* Free text: the element's own text, wrapping, normal weight by default. */
+.pp-element.pp-kind-free-text .pp-element-value {
+    font-weight: var(--pp-el-font-weight, 400);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+body.pp-editing .pp-element.pp-kind-free-text.pp-element-empty .pp-element-value::before {
+    content: "Empty text";
+    opacity: 0.4;
+    font-style: italic;
 }
 
 .pp-element-icon {
@@ -1391,4 +1412,239 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
 
 .pp-element-order .pp-layering-buttons {
     justify-content: flex-start;
+}
+
+/* ---------- Font picker (src/ui/font-picker.js) ---------- */
+
+.pp-font-picker {
+    position: fixed;
+    z-index: 3150;
+    box-sizing: border-box;
+    --pp-label-col: 6.4em;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 340px;
+    max-width: calc(100vw - 8px);
+    max-height: calc(100vh - 8px);
+    overflow-y: auto;
+    padding: 8px 10px 10px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeQuoteColor);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.45));
+    font-size: calc(var(--mainFontSize, 15px) * 0.9);
+}
+
+.pp-font-picker .pp-properties-header {
+    margin-bottom: 0;
+}
+
+.pp-font-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.pp-font-chip {
+    padding: 1px 7px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+.pp-font-chip.pp-active {
+    border-color: var(--SmartThemeQuoteColor);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 25%, transparent);
+}
+
+.pp-font-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.pp-font-controls .text_pole {
+    margin: 0;
+    min-width: 0;
+}
+
+.pp-font-list {
+    max-height: 210px;
+    overflow-y: auto;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+    border-radius: 6px;
+    padding: 2px;
+}
+
+.pp-font-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.pp-font-row:hover {
+    background-color: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+}
+
+.pp-font-row.pp-selected {
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 25%, transparent);
+}
+
+.pp-font-row-name {
+    grid-column: 1;
+    font-size: 1.2em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-font-row-meta {
+    grid-column: 1;
+    font-size: 0.75em;
+    opacity: 0.6;
+}
+
+.pp-font-row [data-delete] {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+}
+
+.pp-font-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    border-radius: 6px;
+}
+
+.pp-font-details-name {
+    font-weight: 600;
+}
+
+.pp-font-preview {
+    min-height: 2.4em;
+    padding: 4px 2px;
+    overflow-wrap: anywhere;
+    transition: opacity 0.15s;
+}
+
+.pp-font-preview.pp-font-preview-loading {
+    opacity: 0.5;
+}
+
+.pp-font-preview-sample {
+    line-height: 1.25;
+}
+
+.pp-font-axis {
+    display: grid;
+    grid-template-columns: var(--pp-label-col) 1fr 3em auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.pp-font-axis-label {
+    opacity: 0.7;
+}
+
+.pp-font-axis input[type="range"] {
+    min-width: 0;
+    width: 100%;
+}
+
+.pp-font-axis-value {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    font-size: 0.85em;
+}
+
+.pp-font-details .pp-field-check {
+    margin-left: 0;
+}
+
+.pp-font-italic-note {
+    opacity: 0.6;
+    margin-left: 4px;
+}
+
+.pp-font-info {
+    white-space: pre-line;
+    opacity: 0.65;
+    font-size: 0.8em;
+    overflow-wrap: anywhere;
+}
+
+.pp-font-upload summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.pp-font-upload[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pp-font-charsets {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 4px;
+}
+
+.pp-font-warning {
+    padding: 5px 7px;
+    border-left: 3px solid var(--SmartThemeQuoteColor);
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent);
+    border-radius: 3px;
+    line-height: 1.35;
+}
+
+.pp-font-upload-status:empty {
+    display: none;
+}
+
+.pp-font-upload-status.pp-font-upload-error {
+    color: var(--warning, #e0605a);
+}
+
+/* The Font buttons in Element Styling. */
+.pp-font-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 8px;
+    justify-content: flex-start;
+}
+
+.pp-font-button-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-field.pp-field-top {
+    align-items: start;
+}
+
+.pp-field textarea.text_pole {
+    margin: 0;
+    resize: vertical;
+    min-height: 3.5em;
+    font-family: inherit;
 }

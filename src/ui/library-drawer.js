@@ -29,6 +29,7 @@ import { removeLayout } from '../panels/panel-manager.js';
 import { chooseLayout, showChatLayout, getSessionState, onSessionChange } from '../chat/chat-session.js';
 import { confirmYesNo, promptText, notify } from './dialogs.js';
 import { downloadJson, pickJsonFile, safeFilename } from './files.js';
+import { attachFonts, receiveFonts } from './font-transfer.js';
 
 // When a chat is open but hasn't chosen a layout, the list starts with a
 // "Default (...)" entry that is selected - so picking ANY real layout,
@@ -104,7 +105,7 @@ async function importFile(kind, apply) {
     const text = await pickJsonFile();
     if (text === null) return;
     try {
-        apply(readPayload(text, kind));
+        apply(await receiveFonts(readPayload(text, kind)));
     } catch (err) {
         notify('error', err.message);
     }
@@ -138,8 +139,8 @@ const layoutActions = {
         const ok = await confirmYesNo(`Delete the layout "${layout.name}" and its ${layout.panelCount} panel(s)? This cannot be undone.`);
         if (ok && removeLayout(id)) await showChatLayout();
     },
-    export(id) {
-        const payload = exportLayout(id);
+    async export(id) {
+        const payload = exportLayout(id) && await attachFonts(exportLayout(id));
         if (payload) downloadJson(`${safeFilename(payload.data.name)}.layout.json`, payload);
     },
     import() {
@@ -156,8 +157,8 @@ const templateActions = {
         const name = current && await promptText('Rename template:', current.name);
         if (name) renameTemplate(id, name);
     },
-    export(id) {
-        const payload = exportTemplate(id);
+    async export(id) {
+        const payload = exportTemplate(id) && await attachFonts(exportTemplate(id));
         if (payload) downloadJson(`${safeFilename(payload.data.name)}.panel.json`, payload);
     },
     async delete(id) {

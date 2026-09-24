@@ -8,7 +8,9 @@
 // Like Panel, it reports committed changes through its panel's hooks
 // rather than writing anything itself.
 
-import { MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, elementLabel } from './element-model.js';
+import {
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel,
+} from './element-model.js';
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
 import { formatValue } from './formats.js';
@@ -24,7 +26,8 @@ function clamp(value, min, max) {
 
 // Fills `container` (built by buildElementContent()) with an element: a
 // text element's label, icon and formatted value (styled by Element
-// Styling), a bar/gauge widget (src/elements/widgets.js), or a shape
+// Styling), free text (the element's own `content`, same styling), a
+// bar/gauge widget (src/elements/widgets.js), or a shape
 // (src/elements/shapes.js). `entry` is
 // the variable service's { value, def } or undefined. Shared by the
 // on-panel view and the properties-pane preview.
@@ -39,6 +42,16 @@ export function renderElementContent(container, element, entry) {
         applyElementStyle(container, {});
         container.title = 'Shape';
         renderShape(container, element);
+        return;
+    }
+    container.classList.toggle('pp-kind-free-text', element.type === ELEMENT_TYPE_FREE_TEXT);
+    if (element.type === ELEMENT_TYPE_FREE_TEXT) {
+        container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
+        labelEl.hidden = true;
+        applyElementStyle(container, element.style);
+        valueEl.textContent = element.content || '';
+        container.classList.toggle('pp-element-empty', !element.content);
+        container.title = 'Free text';
         return;
     }
     if (element.type !== ELEMENT_TYPE_TEXT) {

@@ -7,6 +7,7 @@
 import { listTemplates, getTemplate, createTemplate, overwriteTemplate, templatePayload } from '../library/panel-library.js';
 import { chooseFromList, confirmYesNo, promptText, notify } from './dialogs.js';
 import { downloadJson, safeFilename } from './files.js';
+import { attachFonts } from './font-transfer.js';
 
 const NEW_TEMPLATE = Symbol('new-template');
 
@@ -45,6 +46,7 @@ export async function saveInstanceToLibrary(record) {
     notify('success', `Updated "${existing.name}" in the Panel Library.`);
 }
 
-export function exportInstanceTemplate(record) {
-    downloadJson(`${safeFilename(record.name)}.panel.json`, templatePayload(record.name, record));
+export async function exportInstanceTemplate(record) {
+    const payload = await attachFonts(templatePayload(record.name, record));
+    if (payload) downloadJson(`${safeFilename(record.name)}.panel.json`, payload);
 }

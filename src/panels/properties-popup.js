@@ -6,20 +6,25 @@
 //     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
 //     Width/Height, Order, then per type: Show Label, Label Override,
-//     Format (+ Custom pattern) and Element Styling (text), Widget
-//     Properties (bars/gauges) or Shape Properties (shapes); a live
+//     Format (+ Custom pattern) and Element Styling (text), Text + Preset
+//     and Element Styling (free text), Widget Properties (bars/gauges) or
+//     Shape Properties (shapes); fonts are chosen in the Font Picker
+//     (src/ui/font-picker.js); a live
 //     Preview, and delete. Rows carry data-for-types / data-widget-field
 //     and are hidden when they don't apply to the element's type.
-//   - Shapes & Variables: the shape palette and the variable picker
+//   - Add & Variables: the palette (free text, shapes) and the variable picker
 //     (src/ui/variable-picker.js)
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
 // through `hooks`; nothing is written here.
 
-import { VariablePicker, ShapePalette } from '../ui/variable-picker.js';
+import { VariablePicker, ElementPalette } from '../ui/variable-picker.js';
+import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
+import { fontRegistry } from '../fonts/font-registry.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
 import {
-    ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, elementLabel, localName, clampElementGeometry,
+    ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
+    isUnboundType,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import { formatsFor, DATETIME_PATTERN_HINT } from '../elements/formats.js';
@@ -27,8 +32,8 @@ import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS } from '../elements/shapes.js
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
-    FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, FONT_WEIGHTS, FONT_FAMILIES, ALIGNMENTS, ICON_SUGGESTIONS,
-    BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
+    FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, ALIGNMENTS, ICON_SUGGESTIONS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
+    LETTER_SPACING_LIMITS, LINE_HEIGHT_LIMITS, TEXT_TRANSFORMS, TEXT_DECORATIONS, TEXT_SHADOWS, TEXT_PRESETS, numericWeight,
 } from '../elements/element-style.js';
 
 const POPUP_GAP = 8;
@@ -92,9 +97,35 @@ function checkRow(label, scope, key) {
         </label>`;
 }
 
-const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== 'shape').join(' ');
-// Every type that shows a variable (all but shapes).
-const BOUND_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'shape').join(' ');
+const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && !isUnboundType(id)).join(' ');
+// Every type that shows a variable (all but shapes and free text).
+const BOUND_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => !isUnboundType(id)).join(' ');
+// Element Styling keys holding fractional numbers (not rounded).
+const FLOAT_STYLE_KEYS = new Set(['letterSpacing', 'lineHeight']);
+
+function floatRow(label, scope, key, [min, max], step, unit) {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <input type="number" class="text_pole" data-style="${scope}:${key}" min="${min}" max="${max}" step="${step}" placeholder="auto" />
+                <span class="pp-style-unit">${unit}</span>
+            </div>
+        </div>`;
+}
+
+// A Font row: a button showing the current font (in that font) that
+// opens the Font Picker.
+function fontRow(label, key, title) {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <button type="button" class="menu_button pp-font-button" data-font-field="${key}" title="${title}">
+                    <i class="fa-solid fa-font"></i><span class="pp-font-button-name">Default</span>
+                </button>
+                <button type="button" class="pp-properties-close pp-style-reset" data-font-reset="${key}" title="Back to the default font"><i class="fa-solid fa-rotate-left"></i></button>
+            </div>
+        </div>`;
+}
 // Types with a Format field.
 const FORMAT_TYPES = ['text', 'gauge-circle', 'gauge-semicircle'];
 
@@ -135,7 +166,7 @@ export class PanelPropertiesPopup {
     //          onZIndexChange(zIndex), onRestack(action), onPanelStyleChange(patch),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
-    //          onAddShape(kind), onDropShape(kind, x, y), onArrangeElement(elementId, action),
+    //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
     //          getValue(name), onClose() }
     constructor(panel, hooks) {
         this.panel = panel;
@@ -145,9 +176,9 @@ export class PanelPropertiesPopup {
             onDrop: (name, x, y) => hooks.onDropVariable(name, x, y),
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
-        this.shapes = new ShapePalette({
-            onPick: (kind) => hooks.onAddShape(kind),
-            onDrop: (kind, x, y) => hooks.onDropShape(kind, x, y),
+        this.shapes = new ElementPalette({
+            onPick: (kind) => hooks.onAddPaletteItem(kind),
+            onDrop: (kind, x, y) => hooks.onDropPaletteItem(kind, x, y),
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
         this.el = this.#build();
@@ -161,6 +192,8 @@ export class PanelPropertiesPopup {
             document.body.appendChild(this.el);
             document.addEventListener('keydown', this.onKeyDown);
             this.stopCatalogWatch = onCatalogChange((catalog) => this.#applyCatalog(catalog));
+            this.stopFontWatch = fontRegistry.onChange(() => this.#refreshElement());
+            void fontRegistry.load().then(() => this.#refreshElement());
             void loadCatalog();
         }
         this.refresh();
@@ -170,6 +203,8 @@ export class PanelPropertiesPopup {
         if (!this.el.isConnected) return;
         document.removeEventListener('keydown', this.onKeyDown);
         this.stopCatalogWatch?.();
+        this.stopFontWatch?.();
+        closeFontPicker();
         this.el.remove();
         this.hooks.onClose();
     }
@@ -315,6 +350,7 @@ export class PanelPropertiesPopup {
         const format = section.querySelector('[data-el="format"]').value;
         section.querySelector('[data-el="pattern-row"]').hidden = !(FORMAT_TYPES.includes(element.type) && format === 'custom');
         set('formatPattern', (f) => { f.value = element.formatPattern ?? ''; });
+        set('content', (f) => { f.value = element.content ?? ''; });
         this.#fillGeometry(element);
 
         Object.assign(this.preview.style, { width: `${element.width}px`, height: `${element.height}px` });
@@ -440,8 +476,14 @@ export class PanelPropertiesPopup {
         const inherited = getComputedStyle(this.preview).color;
         const icon = this.preview.querySelector('.pp-element-icon');
         this.#fillValue('element', 'fontSize', style.fontSize);
-        this.#fillValue('element', 'fontWeight', style.fontWeight ?? '');
-        this.#fillValue('element', 'fontFamily', style.fontFamily ?? 'inherit');
+        this.#fillFontButton('fontFamily', style, true);
+        this.#fillFontButton('labelFontFamily', style, false);
+        this.#fillValue('element', 'letterSpacing', style.letterSpacing);
+        this.#fillValue('element', 'lineHeight', style.lineHeight);
+        this.#fillValue('element', 'textTransform', style.textTransform ?? '');
+        this.#fillValue('element', 'textDecoration', style.textDecoration ?? '');
+        this.#fillValue('element', 'textShadow', style.textShadow ?? '');
+        this.#fillColor('element', 'shadowColor', style.shadowColor, 'rgba(0, 0, 0, 0.85)');
         this.#fillValue('element', 'align', style.align ?? '');
         this.#fillColor('element', 'textColor', style.textColor, inherited);
         this.#fillColor('element', 'labelColor', style.labelColor, inherited);
@@ -454,6 +496,58 @@ export class PanelPropertiesPopup {
         this.#fillValue('element', 'conditionThreshold', style.condition?.threshold);
         const conditionColor = this.#styleField('element', 'conditionColor');
         if (conditionColor !== document.activeElement) conditionColor.value = toHex(style.condition?.color ?? '#e0605a');
+    }
+
+    // The Font button: the font's name drawn in that font, plus weight,
+    // italic and axes for the main font.
+    #fillFontButton(key, style, withVariation) {
+        const button = this.el.querySelector(`[data-font-field="${key}"]`);
+        const id = style[key];
+        const font = id ? fontRegistry.list().find((f) => f.font_id === id) : null;
+        const parts = [font?.display_name ?? (id ? `${id} (missing)` : (key === 'labelFontFamily' ? 'Same as text' : 'Default'))];
+        if (withVariation) {
+            const weight = numericWeight(style.fontWeight);
+            if (weight) parts.push(String(weight));
+            if (style.fontStyle === 'italic') parts.push('italic');
+            for (const [tag, v] of Object.entries(style.fontAxes ?? {})) parts.push(`${tag} ${v}`);
+        }
+        const name = button.querySelector('.pp-font-button-name');
+        name.textContent = parts.join(' · ');
+        name.style.fontFamily = id ? fontRegistry.cssFamily(id) : '';
+        this.el.querySelector(`[data-font-reset="${key}"]`).hidden = !id && !(withVariation && (style.fontWeight || style.fontStyle || style.fontAxes));
+    }
+
+    // Opens the Font Picker for the selected element's `key` font.
+    #openFontPicker(key, anchor) {
+        const element = this.#selected();
+        if (!element) return;
+        const style = element.style ?? {};
+        const main = key === 'fontFamily';
+        openFontPicker({
+            anchor,
+            title: main ? 'Font' : 'Label font',
+            value: main
+                ? { fontFamily: style.fontFamily, fontWeight: numericWeight(style.fontWeight), fontStyle: style.fontStyle, fontAxes: style.fontAxes }
+                : { fontFamily: style.labelFontFamily },
+            previewText: element.type === 'free-text' ? element.content : elementLabel(element, this.#def(element)),
+            getLayoutText: () => [...document.querySelectorAll('.pp-panel')].map((p) => p.textContent).join(''),
+            onChange: (value) => {
+                if (main) this.#commitStyles(value);
+                else this.#commitStyles({ labelFontFamily: value.fontFamily });
+            },
+        });
+    }
+
+    // Commits several Element Styling values at once (null removes one).
+    #commitStyles(patch) {
+        const element = this.#selected();
+        if (!element) return;
+        const style = { ...element.style };
+        for (const [key, value] of Object.entries(patch)) {
+            if (value === null || value === '' || value === undefined) delete style[key];
+            else style[key] = value;
+        }
+        this.hooks.onElementChange(element.id, { style });
     }
 
     // Commits one styling value. null/'' removes it (back to the default).
@@ -493,6 +587,8 @@ export class PanelPropertiesPopup {
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
         if (key === 'backgroundRadius') return BACKGROUND_RADIUS_LIMITS;
+        if (key === 'letterSpacing') return LETTER_SPACING_LIMITS;
+        if (key === 'lineHeight') return LINE_HEIGHT_LIMITS;
         return null; // conditionThreshold: any number
     }
 
@@ -508,8 +604,9 @@ export class PanelPropertiesPopup {
                 if (!Number.isFinite(input.valueAsNumber)) return undefined;
                 const limits = this.#numberLimits(scope, key);
                 if (!limits) return key === 'maxValue' && input.valueAsNumber <= 0 ? undefined : input.valueAsNumber;
-                return scope === 'panel' ? clampStyleNumber(key, input.valueAsNumber)
-                    : Math.min(limits[1], Math.max(limits[0], Math.round(input.valueAsNumber)));
+                if (scope === 'panel') return clampStyleNumber(key, input.valueAsNumber);
+                const n = FLOAT_STYLE_KEYS.has(key) ? Math.round(input.valueAsNumber * 100) / 100 : Math.round(input.valueAsNumber);
+                return Math.min(limits[1], Math.max(limits[0], n));
             };
             input.addEventListener('input', () => {
                 const value = read();
@@ -727,14 +824,31 @@ export class PanelPropertiesPopup {
                     ${widgetField('animate', checkRow('Animate changes', 'widget', 'animate'))}
                 `, 'pp-subsection')}
                 </div>
-                <div data-for-types="text">
+                <div data-for-types="free-text">
+                    <label class="pp-field pp-field-top"><span>Text</span>
+                        <textarea class="text_pole" data-el="content" rows="3" maxlength="${MAX_FREE_TEXT_LENGTH}" placeholder="Type the text to show"></textarea>
+                    </label>
+                    <div class="pp-field"><span>Preset</span>
+                        <select class="text_pole" data-el="preset" title="Apply ready-made formatting (size, weight, spacing, case). You can adjust everything afterwards.">
+                            <option value="">Apply formatting…</option>
+                            ${TEXT_PRESETS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div data-for-types="text free-text">
                 ${sectionMarkup('elementStyle', 'Element Styling', '', `
+                    ${fontRow('Font', 'fontFamily', 'Choose the font, weight, italic and variable-font settings')}
+                    <div data-for-types="text">${fontRow('Label font', 'labelFontFamily', 'A different font for the label only')}</div>
                     ${numberRow('Font size', 'element', 'fontSize', FONT_SIZE_LIMITS)}
-                    ${selectRow('Weight', 'element', 'fontWeight', [['', 'Default'], ...FONT_WEIGHTS])}
-                    ${selectRow('Font', 'element', 'fontFamily', FONT_FAMILIES)}
+                    ${floatRow('Spacing', 'element', 'letterSpacing', LETTER_SPACING_LIMITS, 0.01, 'em')}
+                    ${floatRow('Line height', 'element', 'lineHeight', LINE_HEIGHT_LIMITS, 0.05, '×')}
+                    ${selectRow('Case', 'element', 'textTransform', TEXT_TRANSFORMS)}
+                    ${selectRow('Decoration', 'element', 'textDecoration', TEXT_DECORATIONS)}
+                    ${selectRow('Shadow', 'element', 'textShadow', TEXT_SHADOWS)}
+                    ${colorRow('Shadow color', 'element', 'shadowColor')}
                     ${selectRow('Align', 'element', 'align', [['', 'Default'], ...ALIGNMENTS])}
                     ${colorRow('Text', 'element', 'textColor')}
-                    ${colorRow('Label', 'element', 'labelColor')}
+                    <div data-for-types="text">${colorRow('Label', 'element', 'labelColor')}</div>
                     ${colorRow('Background', 'element', 'backgroundColor')}
                     ${numberRow('Bg opacity', 'element', 'backgroundOpacity', BACKGROUND_OPACITY_LIMITS, '%')}
                     ${numberRow('Bg corners', 'element', 'backgroundRadius', BACKGROUND_RADIUS_LIMITS)}
@@ -758,7 +872,7 @@ export class PanelPropertiesPopup {
             </div>
         `);
 
-        const variablesSection = sectionMarkup('variables', 'Shapes & Variables', `
+        const variablesSection = sectionMarkup('variables', 'Add & Variables', `
             <button type="button" class="pp-properties-close" data-action="reload-variables" title="Reload the variable list">
                 <i class="fa-solid fa-rotate"></i>
             </button>
@@ -840,9 +954,10 @@ export class PanelPropertiesPopup {
             if (!element) return;
             const type = e.target.value;
             const patch = { type };
-            // Shapes show no variable - drop the binding so its preset
-            // isn't kept active for nothing.
-            if (type === 'shape') patch.binding = null;
+            // Shapes and free text show no variable - drop the binding so
+            // its preset isn't kept active for nothing.
+            if (isUnboundType(type)) patch.binding = null;
+            if (type === 'free-text' && !element.content) patch.content = elementLabel(element, this.#def(element));
             const [oldW, oldH] = DEFAULT_TYPE_SIZES[element.type] ?? [];
             const [newW, newH] = DEFAULT_TYPE_SIZES[type] ?? [];
             if (newW && element.width === oldW && element.height === oldH) {
@@ -862,6 +977,23 @@ export class PanelPropertiesPopup {
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));
         field('format').addEventListener('change', (e) => this.#change({ format: e.target.value }));
         field('formatPattern').addEventListener('input', (e) => this.#change({ formatPattern: e.target.value }));
+        field('content').addEventListener('input', (e) => this.#change({ content: e.target.value.slice(0, MAX_FREE_TEXT_LENGTH) }));
+        field('preset').addEventListener('change', (e) => {
+            const preset = TEXT_PRESETS.find(([id]) => id === e.target.value);
+            e.target.value = '';
+            if (preset) this.#commitStyles(preset[2]);
+        });
+        for (const button of el.querySelectorAll('[data-font-field]')) {
+            button.addEventListener('click', () => this.#openFontPicker(button.dataset.fontField, button));
+        }
+        for (const button of el.querySelectorAll('[data-font-reset]')) {
+            button.addEventListener('click', () => {
+                closeFontPicker();
+                this.#commitStyles(button.dataset.fontReset === 'fontFamily'
+                    ? { fontFamily: null, fontWeight: null, fontStyle: null, fontAxes: null }
+                    : { labelFontFamily: null });
+            });
+        }
         for (const button of el.querySelectorAll('[data-arrange]')) {
             button.addEventListener('click', () => {
                 const element = this.#selected();

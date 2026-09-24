@@ -3,7 +3,8 @@
 // Drag an entry onto a panel to add a VariableElement there, or onto an
 // existing element to replace its binding; click an entry to add it to
 // this panel. Pointer-based drag (works with touch as well as a mouse).
-// ShapePalette offers the unbound shape elements the same way.
+// ElementPalette offers the unbound elements (free text, shapes) the
+// same way.
 
 import { localName } from '../elements/element-model.js';
 import { SHAPE_KINDS } from '../elements/shapes.js';
@@ -61,24 +62,30 @@ function bindPaletteDrag(item, ghostText, { onClick, onDrop, dropTargetAt }) {
     });
 }
 
-// The Shapes row above the variable list: drag a shape onto a panel, or
-// click it to add it to this panel.
-export class ShapePalette {
+const PALETTE_ITEMS = [
+    ['free-text', 'Text', 'fa-font', 'Free text you type yourself, with its own font and formatting'],
+    ...SHAPE_KINDS.map(([kind, label, icon]) => [kind, label, icon, `${label} shape - shapes sit behind text and other elements`]),
+];
+
+// The "Add" row above the variable list: drag free text or a shape onto
+// a panel, or click it to add it to this panel.
+export class ElementPalette {
     // hooks: { onPick(kind), onDrop(kind, clientX, clientY), dropTargetAt(clientX, clientY) }
+    // kind: 'free-text' | a shape kind ('rectangle', 'ellipse')
     constructor(hooks) {
         this.el = document.createElement('div');
         this.el.className = 'pp-shape-palette';
-        this.el.innerHTML = '<span class="pp-shape-palette-caption">Shapes</span>';
-        for (const [kind, label, icon] of SHAPE_KINDS) {
+        this.el.innerHTML = '<span class="pp-shape-palette-caption">Add</span>';
+        for (const [kind, label, icon, hint] of PALETTE_ITEMS) {
             const item = document.createElement('div');
             item.className = 'pp-picker-item pp-shape-palette-item';
-            item.title = `${label}: drag onto a panel, or click to add it here. Shapes sit behind text and other elements.`;
+            item.title = `${hint}. Drag onto a panel, or click to add it here.`;
             item.innerHTML = `<i class="fa-solid ${icon}"></i><span></span>`;
             item.querySelector('span').textContent = label;
             bindPaletteDrag(item, label, {
                 onClick: () => hooks.onPick(kind),
                 onDrop: (x, y) => hooks.onDrop(kind, x, y),
-                // Shapes are always added, never dropped "onto" an element.
+                // Always added, never dropped "onto" an element.
                 dropTargetAt: (x, y) => {
                     const target = hooks.dropTargetAt(x, y);
                     return target ? { panel: target.panel } : null;

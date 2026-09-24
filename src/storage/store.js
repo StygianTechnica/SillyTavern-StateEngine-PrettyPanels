@@ -17,6 +17,8 @@
 //                layout.groups: { [id]: { id, panelIds: [...] } } - panels that move
 //                together; a panel is in at most one group, a group has 2+ panels
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
+//     userFonts: { [font_id]: sanitized user font record } - see
+//                src/fonts/font-registry.js; never a raw font file
 //   }
 //
 // Layouts hold design data plus their elements' variable bindings - a
@@ -189,6 +191,10 @@ export function getStore() {
     }
     if (!isObject(store.templates)) {
         store.templates = {};
+        changed = true;
+    }
+    if (!isObject(store.userFonts)) {
+        store.userFonts = {};
         changed = true;
     }
 

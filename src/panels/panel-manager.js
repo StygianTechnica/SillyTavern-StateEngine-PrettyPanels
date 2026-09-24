@@ -53,7 +53,8 @@ import {
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
-    isVariableElement, isShapeElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE, createVariableElement,
+    isVariableElement, isShapeElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
+    ELEMENT_TYPE_FREE_TEXT, createVariableElement,
 } from '../elements/element-model.js';
 import { getValue, getImage, onValuesChange } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
@@ -61,6 +62,7 @@ import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/l
 import { getTemplate } from '../library/panel-library.js';
 import { confirmYesNo, notify } from '../ui/dialogs.js';
 import { saveInstanceToLibrary, exportInstanceTemplate } from '../ui/template-actions.js';
+import { fontRegistry } from '../fonts/font-registry.js';
 
 // Panels sit above the chat but below SillyTavern's own popups/drawers:
 // CSS z-index = BASE_Z_INDEX + the panel's stored zIndex (0..99).
@@ -97,7 +99,7 @@ const hooks = {
         void saveInstanceToLibrary(panel.record);
     },
     onExportTemplateRequest(panel) {
-        exportInstanceTemplate(panel.record);
+        void exportInstanceTemplate(panel.record);
     },
     getGrid() {
         return getGridSettings();
@@ -165,11 +167,11 @@ const hooks = {
     dropTargetAt(clientX, clientY) {
         return dropTargetAt(clientX, clientY);
     },
-    onAddShape(panel, kind) {
-        addShapeElement(panel, kind);
+    onAddPaletteItem(panel, kind) {
+        addPaletteElement(panel, kind);
     },
-    onDropShape(kind, clientX, clientY) {
-        return dropShapeAt(kind, clientX, clientY);
+    onDropPaletteItem(kind, clientX, clientY) {
+        return dropPaletteElementAt(kind, clientX, clientY);
     },
     onArrangeElement(panel, elementId, action) {
         arrangeElement(panel, elementId, action);
@@ -513,6 +515,12 @@ export function initPanels() {
     onValuesChange(() => {
         for (const panel of panels.values()) panel.renderValues();
     });
+    // Fonts arriving (the curated manifest, an upload, an import) change
+    // what an element's font id resolves to.
+    fontRegistry.onChange(() => {
+        for (const panel of panels.values()) panel.renderValues();
+    });
+    void fontRegistry.load();
 
     // Re-clamp on-screen positions when the window changes size; stored
     // geometry is untouched (see Panel.applyRecord()).
@@ -646,10 +654,11 @@ export function addVariableElement(panel, name, at = null) {
     return element;
 }
 
-// Adds a shape element ('rectangle' | 'ellipse'). `at` ({ x, y } in body
-// coordinates, its top-left) defaults to the panel's top-left corner.
-// The new element is selected.
-export function addShapeElement(panel, kind, at = null) {
+// Adds an unbound element from the palette: free text ('free-text') or a
+// shape ('rectangle' | 'ellipse'). `at` ({ x, y } in body coordinates,
+// its top-left) defaults to the panel's top-left corner. The new element
+// is selected.
+export function addPaletteElement(panel, kind, at = null) {
     if (!panel.canEdit()) {
         notify('warning', 'Unlock this panel (and turn on Editing Mode) to add elements to it.');
         return null;
@@ -657,19 +666,22 @@ export function addShapeElement(panel, kind, at = null) {
     const grid = panel.gridSize() || 1;
     const bodyWidth = panel.body.clientWidth || panel.record.width;
     const bodyHeight = panel.body.clientHeight || panel.record.height;
-    const [defaultW, defaultH] = DEFAULT_TYPE_SIZES[ELEMENT_TYPE_SHAPE];
+    const type = kind === ELEMENT_TYPE_FREE_TEXT ? ELEMENT_TYPE_FREE_TEXT : ELEMENT_TYPE_SHAPE;
+    const [defaultW, defaultH] = DEFAULT_TYPE_SIZES[type];
     const width = Math.max(24, Math.min(defaultW, bodyWidth));
     const height = Math.max(16, Math.min(defaultH, bodyHeight));
     const x = Math.max(0, Math.min(Math.round(at ? softSnap(at.x, grid) : 0), bodyWidth - width));
     const y = Math.max(0, Math.min(Math.round(at ? softSnap(at.y, grid) : 0), bodyHeight - height));
-    const element = createVariableElement({ type: ELEMENT_TYPE_SHAPE, x, y, width, height, shape: { kind } });
+    const element = type === ELEMENT_TYPE_FREE_TEXT
+        ? createVariableElement({ type, x, y, width, height, content: 'Text', showLabel: false })
+        : createVariableElement({ type, x, y, width, height, shape: { kind } });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);
     return element;
 }
 
-// Drops a shape from the palette onto a panel, centred on the pointer.
-export function dropShapeAt(kind, clientX, clientY) {
+// Drops a palette item onto a panel, centred on the pointer.
+export function dropPaletteElementAt(kind, clientX, clientY) {
     const target = dropTargetAt(clientX, clientY);
     if (!target) return false;
     const { panel } = target;
@@ -678,8 +690,8 @@ export function dropShapeAt(kind, clientX, clientY) {
         return false;
     }
     const rect = panel.body.getBoundingClientRect();
-    const [w, h] = DEFAULT_TYPE_SIZES[ELEMENT_TYPE_SHAPE];
-    addShapeElement(panel, kind, {
+    const [w, h] = DEFAULT_TYPE_SIZES[kind === ELEMENT_TYPE_FREE_TEXT ? ELEMENT_TYPE_FREE_TEXT : ELEMENT_TYPE_SHAPE];
+    addPaletteElement(panel, kind, {
         x: clientX - rect.left + panel.body.scrollLeft - w / 2,
         y: clientY - rect.top + panel.body.scrollTop - h / 2,
     });

@@ -1,20 +1,22 @@
 // Element records: the widgets that live INSIDE a panel instance
 // (panel.widgets[]). Plain data only - src/elements/element-view.js
-// renders them. Every element except a shape is bound to one variable;
+// renders them. Every element except a shape or free text is bound to
+// one variable;
 // its `type` picks how it is drawn (see ELEMENT_TYPES):
 //
 //   {
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
 //                              'gauge-circle' | 'gauge-semicircle' |
-//                              'composite-bar' | 'shape'
+//                              'composite-bar' | 'shape' | 'free-text'
 //     x, y, width, height,     position/size inside the panel body, px
 //     role,                    optional conceptual tag ("health", ...)
 //     binding: { name } | null fully-qualified State Engine variable name
-//                              (always null for a shape)
+//                              (always null for a shape or free text)
+//     content,                 free text only: the text it shows
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
 //     formatPattern,           the 'custom' datetime format's pattern
-//     style,                   Element Styling - text elements only
+//     style,                   Element Styling - text and free text
 //                              (src/elements/element-style.js)
 //     widget,                  Widget Properties - bars/gauges only
 //                              (src/elements/widgets.js)
@@ -34,6 +36,10 @@
 
 export const ELEMENT_TYPE_TEXT = 'text';
 export const ELEMENT_TYPE_SHAPE = 'shape';
+export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
+// Types that show no variable.
+const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT]);
+export const MAX_FREE_TEXT_LENGTH = 2000;
 const LEGACY_TYPE_VARIABLE = 'variable';
 
 export const ELEMENT_TYPES = [
@@ -43,6 +49,7 @@ export const ELEMENT_TYPES = [
     ['gauge-circle', 'Circular Gauge'],
     ['gauge-semicircle', 'Semi-Circular Gauge'],
     ['composite-bar', 'Composite Bar'],
+    ['free-text', 'Free Text'],
     ['shape', 'Shape'],
 ];
 const TYPE_IDS = new Set(ELEMENT_TYPES.map(([id]) => id));
@@ -56,6 +63,7 @@ export const DEFAULT_TYPE_SIZES = {
     'gauge-semicircle': [96, 56],
     'composite-bar': [160, 24],
     'shape': [120, 64],
+    'free-text': [160, 32],
 };
 
 // True for any element this version draws (every bound element type).
@@ -65,6 +73,10 @@ export function isVariableElement(widget) {
 
 export function isShapeElement(widget) {
     return widget?.type === ELEMENT_TYPE_SHAPE;
+}
+
+export function isUnboundType(type) {
+    return UNBOUND_TYPES.has(type);
 }
 export const DEFAULT_ELEMENT_WIDTH = 136;
 export const DEFAULT_ELEMENT_HEIGHT = 32;
@@ -104,7 +116,8 @@ export function normalizeVariableElement(element) {
         width: Math.max(MIN_ELEMENT_WIDTH, finite(element.width, DEFAULT_ELEMENT_WIDTH)),
         height: Math.max(MIN_ELEMENT_HEIGHT, finite(element.height, DEFAULT_ELEMENT_HEIGHT)),
         role: text(element.role),
-        binding: type === ELEMENT_TYPE_SHAPE ? null : normalizeBinding(element.binding),
+        binding: UNBOUND_TYPES.has(type) ? null : normalizeBinding(element.binding),
+        content: text(element.content).slice(0, MAX_FREE_TEXT_LENGTH),
         showLabel: element.showLabel !== false,
         labelOverride: text(element.labelOverride),
         format: typeof element.format === 'string' && element.format ? element.format : 'auto',
@@ -141,6 +154,7 @@ export function localName(qualifiedName) {
 // the variable's own label, else its local name.
 export function elementLabel(element, def) {
     if (element.type === ELEMENT_TYPE_SHAPE) return 'Shape';
+    if (element.type === ELEMENT_TYPE_FREE_TEXT) return 'Text';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
     return element.binding ? localName(element.binding.name) : 'Unbound';
