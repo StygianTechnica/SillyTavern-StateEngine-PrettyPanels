@@ -109,8 +109,10 @@ function checkRow(label, scope, key) {
 }
 
 const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== ELEMENT_TYPE_ANALOG_CLOCK && !isUnboundType(id)).join(' ');
-// A clock image selector's "Image URL" choice (the URL field shows).
+// A clock image selector's "Image URL" choice (the URL field shows), and
+// the prefix of its theme-asset choices.
 const CLOCK_URL_CHOICE = '__url';
+const CLOCK_ASSET_CHOICE = 'asset:';
 // Every type that shows a variable (all but shapes and free text).
 const BOUND_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => !isUnboundType(id)).join(' ');
 // Element Styling keys holding fractional numbers (not rounded).
@@ -512,11 +514,21 @@ export class PanelPropertiesPopup {
     #fillClockImage(key, stored, themeSource) {
         const select = this.el.querySelector(`[data-clock-image="${key}"]`);
         const url = this.el.querySelector(`[data-clock-url="${key}"]`);
+        // The panel theme's assets (Theme Editor uploads) are offered too; a
+        // chosen one is stored as its variable name, like a URL.
+        const assets = Object.entries(resolvePanelTheme(this.panel.record).theme.assets ?? {});
+        const isAsset = typeof stored === 'string' && assets.some(([, ref]) => ref === stored);
         const variable = typeof stored === 'string' ? null : clockImageSource(stored)?.variable ?? null;
-        const current = typeof stored === 'string' ? CLOCK_URL_CHOICE : (variable ?? '');
+        const current = isAsset ? `${CLOCK_ASSET_CHOICE}${stored}` : typeof stored === 'string' ? CLOCK_URL_CHOICE : (variable ?? '');
         if (select !== document.activeElement) {
             const none = themeSource ? 'Theme image' : (key === 'backdropImage' ? 'None (drawn face)' : 'None (drawn hand)');
             const options = [new Option(none, ''), new Option('Image URL…', CLOCK_URL_CHOICE)];
+            if (assets.length) {
+                const group = document.createElement('optgroup');
+                group.label = 'Theme assets';
+                for (const [assetName, ref] of assets) group.appendChild(new Option(assetName, `${CLOCK_ASSET_CHOICE}${ref}`));
+                options.push(group);
+            }
             const groups = getCatalog()
                 .map((preset) => ({ preset, vars: preset.variables.filter((v) => ['image', 'imageList', 'imageMap'].includes(v.type)) }))
                 .filter((g) => g.vars.length > 0);
@@ -533,7 +545,7 @@ export class PanelPropertiesPopup {
             select.value = current;
         }
         this.el.querySelector(`[data-clock-url-row="${key}"]`).hidden = current !== CLOCK_URL_CHOICE;
-        if (url !== document.activeElement) url.value = typeof stored === 'string' ? stored : '';
+        if (url !== document.activeElement) url.value = typeof stored === 'string' && !isAsset ? stored : '';
     }
 
     // Stores one clock image: a URL string ('' while one is being typed),
@@ -1289,6 +1301,7 @@ export class PanelPropertiesPopup {
             select.addEventListener('change', () => {
                 if (select.value === '') this.#commitClockImage(key, null);
                 else if (select.value === CLOCK_URL_CHOICE) this.#commitClockImage(key, el.querySelector(`[data-clock-url="${key}"]`).value.trim());
+                else if (select.value.startsWith(CLOCK_ASSET_CHOICE)) this.#commitClockImage(key, select.value.slice(CLOCK_ASSET_CHOICE.length));
                 else this.#commitClockImage(key, { variable: select.value });
             });
         }

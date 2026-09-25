@@ -32,6 +32,7 @@
 // rotate with CSS transforms about the clock's centre.
 
 import { getImage } from '../chat/variable-service.js';
+import { resolveImageRef } from '../storage/pp-variables.js';
 
 export const ELEMENT_TYPE_ANALOG_CLOCK = 'analogClock';
 
@@ -179,10 +180,11 @@ function build(holder) {
     holder.appendChild(cap);
 }
 
-// A display-safe image URL for a source, or null.
+// A display-safe image URL for a source, or null. A URL-type source may
+// name a theme asset (a Pretty Panels image variable) instead.
 function resolveImage(source) {
     if (!source) return null;
-    if (source.url) return source.url;
+    if (source.url) return resolveImageRef(source.url);
     return getImage(source.variable) || null;
 }
 

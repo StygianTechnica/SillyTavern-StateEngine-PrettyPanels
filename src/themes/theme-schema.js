@@ -19,7 +19,15 @@
 //     components:  { sceneCard, questCard, timeCard, clockCard } - card looks
 //                  ({ variant, accent, icon, titleSize }), shown in the editor's
 //                  preview
+//     assets:      { [assetName]: 'pp_theme_<themeId>_<assetName>' } - images
+//                  uploaded in the Theme Editor, each stored as a Pretty Panels
+//                  image variable (src/storage/pp-variables.js)
 //   }
+//
+// Every image field (a variant's background/texture/accent/corner image,
+// the clock defaults' face and hands, a component's icon) holds either a
+// URL or an asset's variable name - pp-variables.js resolveImageRef()
+// shows either.
 //
 // Where each colour and font is used:
 //   primary     bar and gauge fills          titleFont   free text, card titles
@@ -88,12 +96,26 @@ export const VARIANT_SHADOWS = [
 export const BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'darken', 'lighten', 'luminosity']
     .map((mode) => [mode, mode === 'normal' ? 'Normal' : mode.replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase())]);
 
+// Theme assets: suggested names (any name matching ASSET_NAME_PATTERN works).
+export const ASSET_SUGGESTIONS = ['backdrop', 'panelTexture', 'accentStripe', 'cornerGlyph', 'clockFace', 'hourHand', 'minuteHand', 'secondHand'];
+export const ASSET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
+
+export const ACCENT_POSITIONS = [
+    ['top', 'Top edge'],
+    ['bottom', 'Bottom edge'],
+    ['left', 'Left edge'],
+    ['right', 'Right edge'],
+];
+
 export const VARIANT_LIMITS = {
     borderWidth: [0, 20],
     borderRadius: [0, 50],
     padding: [0, 64],
     margin: [0, 64],
     opacity: [0, 100],
+    textureOpacity: [0, 100],
+    accentSize: [1, 200],
+    cornerSize: [4, 200],
 };
 
 // The look panels had before themes: SillyTavern's own colours (unset),
@@ -111,6 +133,14 @@ export const FALLBACK_VARIANT = Object.freeze({
     shape: 'rounded',
     accent: '',
     opacity: 100,
+    textureImage: '',
+    textureBlend: 'normal',
+    textureOpacity: 100,
+    accentImage: '',
+    accentPosition: 'top',
+    accentSize: 8,
+    cornerImage: '',
+    cornerSize: 24,
 });
 
 // Variant fields, for the editor.
@@ -127,6 +157,14 @@ export const VARIANT_FIELDS = [
     { key: 'padding', type: 'number', label: 'Padding', limits: VARIANT_LIMITS.padding, unit: 'px' },
     { key: 'margin', type: 'number', label: 'Margin', limits: VARIANT_LIMITS.margin, unit: 'px' },
     { key: 'accent', type: 'color', label: 'Accent', hint: 'Blank: the theme\'s accent colour' },
+    { key: 'textureImage', type: 'image', label: 'Texture', hint: 'Tiled over the background, e.g. a panelTexture asset' },
+    { key: 'textureBlend', type: 'select', label: 'Texture blend', options: BLEND_MODES },
+    { key: 'textureOpacity', type: 'number', label: 'Texture opacity', limits: VARIANT_LIMITS.textureOpacity, unit: '%' },
+    { key: 'accentImage', type: 'image', label: 'Accent stripe', hint: 'Stretched along one edge, e.g. an accentStripe asset' },
+    { key: 'accentPosition', type: 'select', label: 'Stripe edge', options: ACCENT_POSITIONS },
+    { key: 'accentSize', type: 'number', label: 'Stripe size', limits: VARIANT_LIMITS.accentSize, unit: 'px' },
+    { key: 'cornerImage', type: 'image', label: 'Corner glyph', hint: 'Drawn in all four corners (mirrored), e.g. a cornerGlyph asset' },
+    { key: 'cornerSize', type: 'number', label: 'Glyph size', limits: VARIANT_LIMITS.cornerSize, unit: 'px' },
 ];
 
 // Element defaults: the element properties a theme can set, per group.
@@ -207,7 +245,7 @@ export const COMPONENTS = [
 export const COMPONENT_FIELDS = [
     { key: 'variant', type: 'variant', label: 'Variant' },
     { key: 'accent', type: 'color', label: 'Accent', hint: 'Blank: the variant\'s accent' },
-    { key: 'icon', type: 'text', label: 'Icon', placeholder: 'e.g. scroll' },
+    { key: 'icon', type: 'icon', label: 'Icon', hint: 'A theme asset (e.g. cornerGlyph) or a Font Awesome icon name' },
     { key: 'titleSize', type: 'number', label: 'Title size', limits: [8, 48], unit: 'px' },
 ];
 
@@ -222,6 +260,7 @@ function baseTheme(id, name, description, createdAt) {
         variants: { [DEFAULT_VARIANT]: { ...FALLBACK_VARIANT } },
         elementDefaults: { text: {}, shapes: {}, images: {}, gauges: {}, clock: {} },
         components: Object.fromEntries(COMPONENTS.map(([key]) => [key, {}])),
+        assets: {},
     };
 }
 
@@ -293,6 +332,14 @@ export function normalizeVariant(raw) {
         shape: oneOf(v.shape, VARIANT_SHAPES, FALLBACK_VARIANT.shape),
         accent: text(v.accent),
         opacity: clampNumber(v.opacity, VARIANT_LIMITS.opacity, FALLBACK_VARIANT.opacity),
+        textureImage: text(v.textureImage),
+        textureBlend: oneOf(v.textureBlend, BLEND_MODES, FALLBACK_VARIANT.textureBlend),
+        textureOpacity: clampNumber(v.textureOpacity, VARIANT_LIMITS.textureOpacity, FALLBACK_VARIANT.textureOpacity),
+        accentImage: text(v.accentImage),
+        accentPosition: oneOf(v.accentPosition, ACCENT_POSITIONS, FALLBACK_VARIANT.accentPosition),
+        accentSize: clampNumber(v.accentSize, VARIANT_LIMITS.accentSize, FALLBACK_VARIANT.accentSize),
+        cornerImage: text(v.cornerImage),
+        cornerSize: clampNumber(v.cornerSize, VARIANT_LIMITS.cornerSize, FALLBACK_VARIANT.cornerSize),
     };
 }
 
@@ -307,6 +354,10 @@ export function normalizeTheme(raw) {
     if (Object.keys(variants).length === 0) variants[DEFAULT_VARIANT] = { ...FALLBACK_VARIANT };
     const defaults = isObject(t.elementDefaults) ? t.elementDefaults : {};
     const components = isObject(t.components) ? t.components : {};
+    const assets = {};
+    for (const [name, ref] of Object.entries(isObject(t.assets) ? t.assets : {})) {
+        if (ASSET_NAME_PATTERN.test(name) && typeof ref === 'string' && ref) assets[name] = ref;
+    }
     return {
         ...t,
         id: typeof t.id === 'string' && t.id ? t.id : '',
@@ -320,6 +371,7 @@ export function normalizeTheme(raw) {
         variants,
         elementDefaults: Object.fromEntries(ELEMENT_DEFAULT_GROUPS.map(([key]) => [key, isObject(defaults[key]) ? { ...defaults[key] } : {}])),
         components: Object.fromEntries(COMPONENTS.map(([key]) => [key, isObject(components[key]) ? { ...components[key] } : {}])),
+        assets,
     };
 }
 

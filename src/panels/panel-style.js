@@ -59,7 +59,7 @@ const IMAGE_MODE_CSS = {
 
 // A CSS url() for a user-entered URL, or null. Quoted and escaped so a
 // URL can never break out of the declaration.
-function cssUrl(url) {
+export function cssUrl(url) {
     if (typeof url !== 'string') return null;
     // Drop control characters; percent-encode the two characters that
     // could end a quoted CSS string (" and backslash, codes 34 and 92).

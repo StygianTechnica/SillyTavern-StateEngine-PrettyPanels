@@ -8,8 +8,14 @@
 // style.css reads the --ppt-* variables wherever it used to read
 // SillyTavern's; a theme colour left blank still falls back to
 // SillyTavern's own there.
+//
+// Image fields may name a theme asset (a Pretty Panels image variable,
+// src/storage/pp-variables.js) instead of a URL; resolveImageRef() turns
+// both into something displayable. A variant's images fill the panel's
+// background, texture, accent stripe and corner glyph layers.
 
-import { panelStyleVars, isColor } from '../panels/panel-style.js';
+import { panelStyleVars, isColor, cssUrl } from '../panels/panel-style.js';
+import { resolveImageRef } from '../storage/pp-variables.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { resolveTheme, getTheme } from './theme-store.js';
 import { variantNameFor } from './theme-schema.js';
@@ -73,7 +79,10 @@ export function themedPanelStyle(variant, style = {}) {
         backgroundImage: variant.backgroundImage || undefined,
     };
     const own = Object.fromEntries(Object.entries(style ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== ''));
-    return { ...base, ...own };
+    const merged = { ...base, ...own };
+    // A theme asset name becomes its image's URL.
+    if (merged.backgroundImage) merged.backgroundImage = resolveImageRef(merged.backgroundImage) ?? undefined;
+    return merged;
 }
 
 // Every CSS variable a themed panel needs. `image` is the resolved
@@ -85,7 +94,30 @@ export function themedPanelVars(theme, variant, style = {}, image = undefined) {
     // "Drop shadow" off (or a clear panel) still wins; otherwise the variant's.
     if (vars['--pp-shadow'] === null) vars['--pp-shadow'] = SHADOW_CSS[variant.shadow] ?? null;
     vars['--pp-bg-blend'] = variant.backgroundBlend && variant.backgroundBlend !== 'normal' ? variant.backgroundBlend : null;
+    // Decoration layers: a tiled texture, an accent stripe along one edge
+    // and a glyph in each corner.
+    const layerUrl = (ref) => cssUrl(resolveImageRef(ref));
+    const texture = layerUrl(variant.textureImage);
+    vars['--pp-texture-image'] = texture;
+    vars['--pp-texture-blend'] = texture && variant.textureBlend !== 'normal' ? variant.textureBlend : null;
+    vars['--pp-texture-opacity'] = texture && variant.textureOpacity !== 100 ? String(variant.textureOpacity / 100) : null;
+    const accent = layerUrl(variant.accentImage);
+    vars['--pp-accent-image'] = accent;
+    vars['--pp-accent-size'] = accent ? `${variant.accentSize}px` : null;
+    const corner = layerUrl(variant.cornerImage);
+    vars['--pp-corner-image'] = corner;
+    vars['--pp-corner-size'] = corner ? `${variant.cornerSize}px` : null;
     return vars;
+}
+
+// Which decoration layers show, as data attributes on the panel element
+// (style.css places the accent stripe by edge).
+export function applyDecorations(el, variant) {
+    const accent = resolveImageRef(variant.accentImage);
+    if (accent) el.dataset.ppAccent = variant.accentPosition;
+    else delete el.dataset.ppAccent;
+    if (resolveImageRef(variant.cornerImage)) el.dataset.ppCorners = '';
+    else delete el.dataset.ppCorners;
 }
 
 export function applyVars(el, vars) {
@@ -100,6 +132,7 @@ export function applyVars(el, vars) {
 export function applyPanelTheme(el, record, image = undefined) {
     const resolved = resolvePanelTheme(record);
     applyVars(el, themedPanelVars(resolved.theme, resolved.variant, record?.style ?? {}, image));
+    applyDecorations(el, resolved.variant);
     el.dataset.themeId = resolved.theme.id;
     el.dataset.themeVariant = resolved.variantName;
     return resolved;

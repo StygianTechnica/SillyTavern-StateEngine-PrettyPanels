@@ -279,6 +279,9 @@ export class Panel {
         el.innerHTML = `
             <div class="pp-panel-box">
                 <div class="pp-panel-image" aria-hidden="true"></div>
+                <div class="pp-panel-texture" aria-hidden="true"></div>
+                <div class="pp-panel-accent" aria-hidden="true"></div>
+                <div class="pp-panel-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
                 <i class="pp-panel-lock fa-solid fa-lock" title="Locked"></i>
                 <i class="pp-panel-group fa-solid fa-link" title="In a group - moves with its group"></i>
                 <div class="pp-panel-drag-handle" title="Drag to move"></div>

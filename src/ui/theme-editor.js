@@ -2,8 +2,8 @@
 // (src/themes/theme-store.js), opened from the Pretty Panels drawer.
 //
 //   header   theme dropdown; New, Duplicate, Delete, Import, Export; close
-//   left     sections: Theme Identity, Colors, Fonts, Formatting, Variants,
-//            Element Defaults, Components
+//   left     sections: Theme Identity, Colors, Fonts, Formatting, Assets,
+//            Variants, Element Defaults, Components
 //   centre   a live preview - an example panel, scene card, variable block,
 //            gauges, clock, text block and the component cards - drawn by
 //            the real renderers (theme-apply.js, renderElementContent)
@@ -11,16 +11,23 @@
 //
 // Every field saves as it changes (like the rest of Pretty Panels) and the
 // preview, and every panel on screen using the theme, update live.
+//
+// Assets: uploaded images, each stored as a Pretty Panels image variable
+// pp_theme_<themeId>_<assetName> (theme-store.js setThemeAsset). Every
+// image field - variant images, clock images, component icons - offers the
+// theme's assets beside a URL.
 
 import {
     listThemes, getTheme, firstTheme, onThemesChange, updateTheme, createTheme, duplicateTheme, deleteTheme,
-    addVariant, renameVariant, deleteVariant, exportThemePayload, importThemeText,
+    addVariant, renameVariant, deleteVariant, exportThemePayload, importThemeText, setThemeAsset, removeThemeAsset,
 } from '../themes/theme-store.js';
+import { getPPVariable, resolveImageRef } from '../storage/pp-variables.js';
+import { pickImageFile, prepareImage } from './image-upload.js';
 import {
     THEME_COLORS, THEME_FONTS, THEME_FORMATTING, NUMBER_FORMATS, VARIANT_FIELDS, ELEMENT_DEFAULT_FIELDS,
-    ELEMENT_DEFAULT_GROUPS, COMPONENTS, COMPONENT_FIELDS, FALLBACK_VARIANT, variantNameFor,
+    ELEMENT_DEFAULT_GROUPS, COMPONENTS, COMPONENT_FIELDS, FALLBACK_VARIANT, ASSET_SUGGESTIONS, ASSET_NAME_PATTERN, variantNameFor,
 } from '../themes/theme-schema.js';
-import { themedPanelVars, themeVars, applyVars } from '../themes/theme-apply.js';
+import { themedPanelVars, themeVars, applyVars, applyDecorations } from '../themes/theme-apply.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { iconClass } from '../elements/element-style.js';
 import { DATETIME_PATTERN_HINT } from '../elements/formats.js';
@@ -47,6 +54,7 @@ const SECTIONS = [
     ['colors', 'Colors', 'fa-palette'],
     ['fonts', 'Fonts', 'fa-font'],
     ['formatting', 'Formatting', 'fa-calendar-day'],
+    ['assets', 'Assets', 'fa-images'],
     ['variants', 'Variants', 'fa-clone'],
     ['elementDefaults', 'Element Defaults', 'fa-sliders'],
     ['components', 'Components', 'fa-id-badge'],
@@ -311,6 +319,8 @@ class ThemeEditor {
                 }
             }
             add(make('small', 'pp-field-info', escapeHtml(DATETIME_PATTERN_HINT)));
+        } else if (this.section === 'assets') {
+            this.#renderAssets(add);
         } else if (this.section === 'variants') {
             this.#renderVariants(add);
         } else if (this.section === 'elementDefaults') {
@@ -325,6 +335,72 @@ class ThemeEditor {
                 add(make('div', 'pp-te-group', escapeHtml(label)));
                 for (const field of COMPONENT_FIELDS) add(this.#defaultField(`components.${key}`, field));
             }
+        }
+    }
+
+    // Uploads an image as asset `assetName` (new or replacing).
+    async #upload(assetName) {
+        const file = await pickImageFile();
+        if (!file) return;
+        try {
+            setThemeAsset(this.themeId, assetName, await prepareImage(file));
+            this.#renderProperties();
+        } catch (err) {
+            notify('error', err.message);
+        }
+    }
+
+    #renderAssets(add) {
+        const assets = Object.entries(this.theme.assets);
+        add(make('small', 'pp-field-info', 'Images stored with this theme (in Pretty Panels\' settings, as variables named pp_theme_&lt;theme&gt;_&lt;asset&gt;). Pick them in any image field: variant images, clock images, component icons. Uploads are scaled to fit 1024px.'));
+
+        const row = make('div', 'pp-te-asset-add');
+        const nameInput = make('input', 'text_pole');
+        nameInput.type = 'text';
+        nameInput.placeholder = 'asset name, e.g. backdrop';
+        const list = make('datalist');
+        list.id = `pp-te-asset-names-${Math.random().toString(36).slice(2, 8)}`;
+        list.replaceChildren(...ASSET_SUGGESTIONS.filter((n) => !this.theme.assets[n]).map((n) => new Option(n, n)));
+        nameInput.setAttribute('list', list.id);
+        const upload = make('button', 'menu_button', '<i class="fa-solid fa-upload"></i><span>Upload image…</span>');
+        upload.type = 'button';
+        upload.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!ASSET_NAME_PATTERN.test(name)) {
+                notify('warning', 'Give the asset a name first: letters, digits, "_" and "-", starting with a letter or digit.');
+                nameInput.focus();
+                return;
+            }
+            void this.#upload(name);
+        });
+        row.append(nameInput, list, upload);
+        add(row);
+
+        if (assets.length === 0) add(make('div', 'pp-te-empty', 'No assets yet.'));
+        for (const [assetName, ref] of assets) {
+            const record = getPPVariable(ref);
+            const item = make('div', 'pp-te-asset');
+            const thumb = make('div', 'pp-te-asset-thumb');
+            const url = resolveImageRef(ref);
+            if (url) thumb.style.backgroundImage = `url("${url}")`;
+            const info = make('div', 'pp-te-asset-info', `
+                <b>${escapeHtml(assetName)}</b>
+                <code>${escapeHtml(ref)}</code>
+                <small>${record ? `${record.width} × ${record.height} · ${Math.max(1, Math.round(record.bytes / 1024))} KB · ${escapeHtml(record.mime)}` : 'Missing image'}</small>`);
+            const replace = make('button', 'menu_button', '<i class="fa-solid fa-arrow-up-from-bracket"></i>');
+            replace.type = 'button';
+            replace.title = 'Replace the image (everything using it updates)';
+            replace.addEventListener('click', () => void this.#upload(assetName));
+            const remove = make('button', 'menu_button pp-danger', '<i class="fa-solid fa-trash-can"></i>');
+            remove.type = 'button';
+            remove.title = 'Delete this asset';
+            remove.addEventListener('click', async () => {
+                if (!(await confirmYesNo(`Delete the asset "${assetName}"? Anything using it shows no image.`))) return;
+                removeThemeAsset(this.themeId, assetName);
+                this.#renderProperties();
+            });
+            item.append(thumb, info, replace, remove);
+            add(item);
         }
     }
 
@@ -510,22 +586,51 @@ class ThemeEditor {
             });
             show(value);
             controls.append(button, reset);
-        } else if (type === 'image') {
+        } else if (type === 'image' || type === 'icon') {
+            // A dropdown - none, a URL (or, for icons, a Font Awesome icon
+            // name), or one of the theme's assets - plus the text field for
+            // the URL / icon name and a thumbnail.
+            const TEXT = '__text';
+            const assets = Object.entries(this.theme.assets);
+            const refs = new Set(assets.map(([, ref]) => ref));
+            const stored = typeof value === 'string' ? value : '';
+            const select = make('select', 'text_pole');
+            const options = [new Option(type === 'icon' ? 'Default icon' : 'None', ''), new Option(type === 'icon' ? 'Font Awesome icon…' : 'Image URL…', TEXT)];
+            if (assets.length) {
+                const group = document.createElement('optgroup');
+                group.label = 'Theme assets';
+                for (const [assetName, ref] of assets) group.appendChild(new Option(assetName, ref));
+                options.push(group);
+            }
+            select.replaceChildren(...options);
             const input = make('input', 'text_pole');
             input.type = 'text';
-            input.placeholder = 'image URL';
-            input.value = typeof value === 'string' ? value : '';
+            input.placeholder = type === 'icon' ? 'e.g. scroll' : 'image URL';
+            input.value = stored && !refs.has(stored) ? stored : '';
+            select.value = !stored ? '' : refs.has(stored) ? stored : TEXT;
             const thumb = make('div', 'pp-te-thumb');
             const show = () => {
-                thumb.style.backgroundImage = input.value.trim() ? `url("${input.value.trim().replace(/["\\]/g, '')}")` : '';
-                thumb.hidden = !input.value.trim();
+                const ref = select.value === TEXT ? input.value.trim() : select.value;
+                const icon = type === 'icon' && select.value === TEXT;
+                const url = icon ? null : resolveImageRef(ref);
+                thumb.style.backgroundImage = url ? `url("${url.replace(/["\\]/g, '')}")` : '';
+                thumb.innerHTML = icon && iconClass(ref) ? `<i class="${escapeHtml(iconClass(ref))}"></i>` : '';
+                thumb.hidden = !url && !thumb.innerHTML;
+                input.hidden = select.value !== TEXT;
             };
+            select.addEventListener('change', () => {
+                show();
+                onChange(select.value === TEXT ? input.value.trim() : select.value);
+                if (select.value === TEXT) input.focus();
+            });
             input.addEventListener('input', () => {
                 show();
                 onChange(input.value.trim());
             });
             show();
-            controls.append(input, thumb);
+            const box = make('div', 'pp-te-image-field');
+            box.append(select, input);
+            controls.append(box, thumb);
         }
         return row;
     }
@@ -550,10 +655,14 @@ class ThemeEditor {
         const panel = make('div', 'pp-panel pp-te-sample', `
             <div class="pp-panel-box">
                 <div class="pp-panel-image" aria-hidden="true"></div>
+                <div class="pp-panel-texture" aria-hidden="true"></div>
+                <div class="pp-panel-accent" aria-hidden="true"></div>
+                <div class="pp-panel-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
                 <div class="pp-panel-body"><div class="pp-panel-canvas"></div></div>
             </div>`);
         Object.assign(panel.style, { width: `${width}px`, height: `${height}px` });
         applyVars(panel, { ...themedPanelVars(theme, variant, {}), ...extraVars });
+        applyDecorations(panel, variant);
         return { panel, canvas: panel.querySelector('.pp-panel-canvas') };
     }
 
@@ -579,10 +688,14 @@ class ThemeEditor {
         const settings = this.theme.components[key] ?? {};
         const extra = settings.accent ? { '--ppt-accent': settings.accent } : {};
         const { panel, canvas } = this.#panel(230, 84, settings.variant || this.variantName, extra);
-        const icon = iconClass(settings.icon) ?? `fa-solid fa-${fallbackIcon}`;
         const size = Number.isFinite(settings.titleSize) ? settings.titleSize : 16;
+        const asset = typeof settings.icon === 'string' && this.theme.assets && Object.values(this.theme.assets).includes(settings.icon)
+            ? resolveImageRef(settings.icon) : null;
+        const iconHtml = asset
+            ? `<img class="pp-te-component-image" src="${escapeHtml(asset)}" alt="" />`
+            : `<i class="${escapeHtml(iconClass(settings.icon) ?? `fa-solid fa-${fallbackIcon}`)} pp-te-component-icon"></i>`;
         canvas.appendChild(make('div', 'pp-te-component', `
-            <i class="${escapeHtml(icon)} pp-te-component-icon"></i>
+            ${iconHtml}
             <div>
                 <div class="pp-te-component-title" style="font-size:${size}px">${escapeHtml(title)}</div>
                 <div class="pp-te-component-sub">${escapeHtml(subtitle)}</div>

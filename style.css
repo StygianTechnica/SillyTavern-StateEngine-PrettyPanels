@@ -1316,6 +1316,55 @@ body.pp-editing .pp-element.pp-kind-free-text.pp-element-empty .pp-element-value
     mix-blend-mode: var(--pp-bg-blend, normal);
 }
 
+/* Theme variant decorations (src/themes/theme-apply.js), above the
+   background image and below the elements: a tiled texture, an accent
+   stripe along one edge, and a glyph mirrored into each corner. */
+.pp-panel-texture,
+.pp-panel-accent,
+.pp-panel-corners {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.pp-panel-texture {
+    inset: 0;
+    background-image: var(--pp-texture-image, none);
+    background-repeat: repeat;
+    mix-blend-mode: var(--pp-texture-blend, normal);
+    opacity: var(--pp-texture-opacity, 1);
+}
+
+.pp-panel-accent {
+    display: none;
+    background: var(--pp-accent-image, none) center / 100% 100% no-repeat;
+}
+
+.pp-panel[data-pp-accent] .pp-panel-accent { display: block; }
+.pp-panel[data-pp-accent="top"] .pp-panel-accent { left: 0; right: 0; top: 0; height: var(--pp-accent-size, 8px); }
+.pp-panel[data-pp-accent="bottom"] .pp-panel-accent { left: 0; right: 0; bottom: 0; height: var(--pp-accent-size, 8px); }
+.pp-panel[data-pp-accent="left"] .pp-panel-accent { top: 0; bottom: 0; left: 0; width: var(--pp-accent-size, 8px); }
+.pp-panel[data-pp-accent="right"] .pp-panel-accent { top: 0; bottom: 0; right: 0; width: var(--pp-accent-size, 8px); }
+
+.pp-panel-corners {
+    display: none;
+    inset: 0;
+}
+
+.pp-panel[data-pp-corners] .pp-panel-corners { display: block; }
+
+.pp-panel-corners > i {
+    position: absolute;
+    width: var(--pp-corner-size, 24px);
+    height: var(--pp-corner-size, 24px);
+    background: var(--pp-corner-image, none) center / contain no-repeat;
+}
+
+.pp-panel-corners > i:nth-child(1) { top: 0; left: 0; }
+.pp-panel-corners > i:nth-child(2) { top: 0; right: 0; transform: scaleX(-1); }
+.pp-panel-corners > i:nth-child(3) { bottom: 0; left: 0; transform: scaleY(-1); }
+.pp-panel-corners > i:nth-child(4) { bottom: 0; right: 0; transform: scale(-1, -1); }
+
 .pp-panel-drag-handle {
     position: relative;
     z-index: 1;
@@ -2314,4 +2363,95 @@ body.pp-anchor-margins .fillRight {
     .pp-te-props {
         border-left: none;
     }
+}
+
+/* Theme Editor: assets and image fields */
+
+.pp-te-asset-add {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.pp-te-asset-add .text_pole {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+}
+
+.pp-te-asset-add .menu_button,
+.pp-te-asset .menu_button {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.pp-te-empty {
+    font-size: 0.9em;
+    font-style: italic;
+    opacity: 0.6;
+}
+
+.pp-te-asset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
+    border-radius: 6px;
+}
+
+.pp-te-asset-thumb {
+    flex: 0 0 48px;
+    height: 48px;
+    border-radius: 4px;
+    background: center / contain no-repeat, repeating-conic-gradient(#555 0% 25%, #777 0% 50%) 50% / 12px 12px;
+}
+
+.pp-te-asset-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pp-te-asset-info code,
+.pp-te-asset-info small {
+    font-size: 0.75em;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-te-image-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pp-te-image-field > .text_pole {
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pp-te-image-field > .text_pole[hidden] {
+    display: none;
+}
+
+.pp-te-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.pp-te-component-image {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
 }
