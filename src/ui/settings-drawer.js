@@ -7,6 +7,7 @@
 
 import { getState, onStateChange, setEnabled, setEditingMode, getGrid, setGrid } from '../panels/panel-manager.js';
 import { initLibraryDrawer } from './library-drawer.js';
+import { openThemeEditor } from './theme-editor.js';
 
 // SillyTavern resolves extension templates relative to
 // public/scripts/extensions/, i.e. "third-party/<folder name>". Derived
@@ -41,6 +42,7 @@ export async function addSettingsDrawer() {
 
     document.getElementById('pp_enabled').addEventListener('change', (e) => setEnabled(e.target.checked));
     document.getElementById('pp_editing_mode').addEventListener('change', (e) => setEditingMode(e.target.checked));
+    document.getElementById('pp_theme_editor').addEventListener('click', () => openThemeEditor());
 
     const snapBox = document.getElementById('pp_snap_to_grid');
     const sizeInput = document.getElementById('pp_grid_size');

@@ -2,8 +2,8 @@
 // behind them - backdrops that keep text readable over a panel's
 // background image, dividers, frames. Shape Properties are stored in
 // element.shape (saved with the layout, carried by templates). Every
-// property is optional - unset uses SHAPE_DEFAULTS (colours: the
-// SillyTavern theme).
+// property is optional - unset uses the panel theme's shape defaults, then
+// SHAPE_DEFAULTS (colours: the panel theme's).
 //
 //   kind          'rectangle' | 'ellipse'
 //   fillColor     CSS color
@@ -44,7 +44,7 @@ export function renderShape(container, element) {
     const shape = element.shape ?? {};
     const set = (prop, v) => (v === null ? container.style.removeProperty(prop) : container.style.setProperty(prop, v));
     const kind = SHAPE_KINDS.some(([id]) => id === shape.kind) ? shape.kind : SHAPE_DEFAULTS.kind;
-    const fill = isColor(shape.fillColor) ? shape.fillColor : 'var(--SmartThemeBlurTintColor)';
+    const fill = isColor(shape.fillColor) ? shape.fillColor : 'var(--ppt-background, var(--SmartThemeBlurTintColor))';
     set('--pp-shape-fill', `color-mix(in srgb, ${fill} ${limited(shape.fillOpacity, 'fillOpacity')}%, transparent)`);
     set('--pp-shape-border-color', isColor(shape.borderColor) ? shape.borderColor : null);
     set('--pp-shape-border-width', `${limited(shape.borderWidth, 'borderWidth')}px`);

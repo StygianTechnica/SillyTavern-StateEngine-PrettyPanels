@@ -49,7 +49,10 @@ import {
     ungroupPanels,
     isShowGrid,
     setShowGridFlag,
+    assignMissingThemes,
 } from './panel-registry.js';
+import { defaultThemeChoice, onThemesChange } from '../themes/theme-store.js';
+import { resolvePanelTheme } from '../themes/theme-apply.js';
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
@@ -170,6 +173,7 @@ const hooks = {
         panel.popup?.refreshElementGeometry(elementId, geometry);
     },
     onElementClick(panel, elementId) {
+        closeOtherProperties(panel);
         panel.selectElement(elementId);
         panel.openProperties('element');
     },
@@ -182,6 +186,9 @@ const hooks = {
     onStyleChange(panel, patch) {
         updatePanelStyle(panel, patch);
     },
+    onThemeChange(panel, patch) {
+        setPanelTheme(panel, patch);
+    },
     // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
     // toggles it in the selection; a plain press selects it (keeping a
     // multi-selection it's already part of, so a drag doesn't drop it).
@@ -189,9 +196,12 @@ const hooks = {
         if (additive) togglePanelSelection(panel.id);
         else if (!selection.includes(panel.id)) setSelection([panel.id]);
     },
-    // A plain click that didn't turn into a drag selects just that panel.
+    // A plain click that didn't turn into a drag selects just that panel -
+    // and if another panel's properties were open, they move to this one.
     onPanelClick(panel, additive) {
-        if (!additive) setSelection([panel.id]);
+        if (additive) return;
+        setSelection([panel.id]);
+        if (closeOtherProperties(panel)) panel.openProperties('panel');
     },
     // Other panels of this panel's group that move with it (unlocked only).
     getGroupPeers(panel) {
@@ -312,6 +322,19 @@ function applyPanelMarkers() {
     }
     const state = getSelectionState();
     for (const listener of selectionListeners) listener(state);
+}
+
+// Closes every other panel's properties pane, so the pane follows the
+// panel being worked on. Returns whether any was open.
+function closeOtherProperties(panel) {
+    let closed = false;
+    for (const other of panels.values()) {
+        if (other !== panel && other.popup) {
+            other.closeProperties();
+            closed = true;
+        }
+    }
+    return closed;
 }
 
 function setSelection(ids) {
@@ -491,6 +514,17 @@ export function updatePanelStyle(panel, patch) {
     if (before !== after) emitBindingsChange(after ? [after] : []);
 }
 
+// Sets a panel's theme and/or variant ({ themeId?, themeVariant? }). A new
+// theme starts on its own default variant unless one is given.
+export function setPanelTheme(panel, { themeId, themeVariant } = {}) {
+    const next = {};
+    if (themeId) next.themeId = themeId;
+    if (themeVariant) next.themeVariant = themeVariant;
+    else if (themeId && themeId !== panel.record.themeId) next.themeVariant = resolvePanelTheme({ themeId }).variantName;
+    const updated = updatePanelRecord(panel.id, next);
+    if (updated) panel.update(updated);
+}
+
 // Layering buttons: 'forward' (+1), 'backward' (-1), 'front' (one above
 // every other panel), 'back' (0).
 export function restackPanel(panel, action) {
@@ -531,6 +565,9 @@ async function confirmAndDelete(id) {
 }
 
 function mountAllPanels() {
+    // Panels from before themes (or an imported layout's) get the first
+    // theme and its default variant.
+    assignMissingThemes(defaultThemeChoice());
     for (const record of listPanels()) {
         if (!panels.has(record.id)) mountPanel(record);
     }
@@ -596,6 +633,11 @@ export function initPanels() {
         for (const panel of panels.values()) panel.renderValues();
     });
     void fontRegistry.load();
+    // Theme edits (the Theme Editor, an import, a deleted theme) restyle
+    // every panel live.
+    onThemesChange(() => {
+        for (const panel of panels.values()) panel.applyRecord();
+    });
 
 
     // Re-clamp on-screen positions when the window changes size; stored
@@ -610,7 +652,7 @@ export function initPanels() {
 // the wand entry is shown).
 export function createPanel() {
     if (!isEnabled() || !isEditingMode()) return null;
-    const record = createPanelRecord(defaultPlacement());
+    const record = createPanelRecord({ ...defaultPlacement(), ...defaultThemeChoice() });
     return mountPanel(record);
 }
 
@@ -623,6 +665,7 @@ export function insertTemplate(templateId) {
     // A new instance starts unanchored (it would otherwise land exactly on
     // top of any other panel anchored at the same spot).
     const design = { ...pickDesign(template), anchorMode: 'free', anchorTarget: null };
+    if (!design.themeId) Object.assign(design, defaultThemeChoice());
     // Don't land exactly on top of an instance already at the template's
     // saved spot, or the insert looks like it did nothing.
     for (let i = 0; i < CASCADE_SLOTS && isOccupied(design.x, design.y); i++) {
@@ -703,18 +746,25 @@ function variableDef(name) {
     return name ? (getValue(name)?.def ?? findVariable(name)?.def ?? null) : null;
 }
 
+// The image styling fields a new image element starts with: the panel
+// theme's image defaults, else IMAGE_DEFAULTS.
+function imageDefaultsFor(panel) {
+    const themed = resolvePanelTheme(panel.record).theme.elementDefaults.images ?? {};
+    return Object.fromEntries(Object.entries(IMAGE_DEFAULTS).map(([key, value]) => [key, themed[key] !== undefined && themed[key] !== '' ? themed[key] : value]));
+}
+
 // Binding a text element to an image variable gives it the image
 // styling fields (if it has none yet) and hides its label.
-function imageFieldsFor(element, name) {
+function imageFieldsFor(panel, element, name) {
     if (element.type !== ELEMENT_TYPE_TEXT || !isImageDefinition(variableDef(name))) return {};
-    const missing = Object.fromEntries(Object.entries(IMAGE_DEFAULTS).filter(([key]) => element[key] === undefined));
+    const missing = Object.fromEntries(Object.entries(imageDefaultsFor(panel)).filter(([key]) => element[key] === undefined));
     return Object.keys(missing).length ? { ...missing, showLabel: false } : {};
 }
 
 export function rebindElement(panel, elementId, name) {
     const current = panel.getElement(elementId);
     if (!current) return false;
-    return updateElement(panel, elementId, { binding: name ? { name } : null, ...imageFieldsFor(current, name) });
+    return updateElement(panel, elementId, { binding: name ? { name } : null, ...imageFieldsFor(panel, current, name) });
 }
 
 export function deleteElement(panel, elementId) {
@@ -752,7 +802,7 @@ export function addVariableElement(panel, name, at = null) {
     const image = isImageDefinition(variableDef(name));
     const element = createVariableElement({
         x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? { name } : null,
-        ...(image ? { ...IMAGE_DEFAULTS, showLabel: false, zIndex: IMAGE_Z_INDEX } : {}),
+        ...(image ? { ...imageDefaultsFor(panel), showLabel: false, zIndex: IMAGE_Z_INDEX } : {}),
     });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);

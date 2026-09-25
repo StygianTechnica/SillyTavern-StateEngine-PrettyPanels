@@ -9,11 +9,13 @@ const FORMAT_VERSION = 1;
 export const KIND = {
     LAYOUT: 'layout',
     PANEL_TEMPLATE: 'panel-template',
+    THEME: 'theme',
 };
 
 const KIND_LABELS = {
     [KIND.LAYOUT]: 'layout',
     [KIND.PANEL_TEMPLATE]: 'panel template',
+    [KIND.THEME]: 'theme',
 };
 
 export function makePayload(kind, data) {

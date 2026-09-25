@@ -1,5 +1,5 @@
-// A panel's DESIGN: geometry, styling, widget composition (elements) and
-// background layers. pickDesign() is the whitelist: whatever else a
+// A panel's DESIGN: geometry, styling, theme and variant, widget
+// composition (elements) and background layers. pickDesign() is the whitelist: whatever else a
 // record holds (IDs, lock state, visibility rules, theme overrides) is
 // dropped, so it can never leak into the Panel Library, a layout export,
 // or an import.
@@ -41,7 +41,16 @@ export function pickDesign(source = {}) {
         widgets: normalizeWidgets(list(source.widgets)),
         backgrounds: list(source.backgrounds),
         ...anchorFields(source),
+        ...themeFields(source),
     };
+}
+
+// The panel's theme (src/themes/): a theme id and one of its variants.
+// Kept as stored even when the theme no longer exists - rendering then
+// falls back to the first theme (theme-apply.js resolvePanelTheme).
+function themeFields(source) {
+    const name = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+    return { themeId: name(source.themeId), themeVariant: name(source.themeVariant) };
 }
 
 // Layout anchoring (src/panels/anchors.js): part of placement, like x/y.

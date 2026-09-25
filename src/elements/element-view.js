@@ -18,6 +18,7 @@ import { formatValue } from './formats.js';
 import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 import { isColor } from '../panels/panel-style.js';
+import { themedElement, clockDefaultsFor } from '../themes/theme-apply.js';
 
 // Pointer travel (px) before a press becomes a drag instead of a click.
 const DRAG_THRESHOLD = 3;
@@ -31,9 +32,12 @@ function clamp(value, min, max) {
 // Styling), free text (the element's own `content`, same styling), a
 // bar/gauge widget (src/elements/widgets.js), an analog clock
 // (src/elements/clock.js), or a shape (src/elements/shapes.js). `entry` is
-// the variable service's { value, def } or undefined. Shared by the
-// on-panel view and the properties-pane preview.
-export function renderElementContent(container, element, entry) {
+// the variable service's { value, def } or undefined. `theme` is the
+// panel's theme: its element defaults fill whatever the element leaves
+// unset, and its formatting shapes values. Shared by the on-panel view,
+// the properties-pane preview and the Theme Editor preview.
+export function renderElementContent(container, stored, entry, theme = null) {
+    const element = themedElement(stored, theme);
     const labelEl = container.querySelector('.pp-element-label');
     const valueEl = container.querySelector('.pp-element-value');
     const def = entry?.def ?? null;
@@ -66,8 +70,8 @@ export function renderElementContent(container, element, entry) {
         container.title = !element.binding
             ? 'Unbound - drag a variable onto this element to bind it'
             : `${element.binding.name}${entry === undefined ? ': no value in this chat (is its preset active?)' : ''}`;
-        if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry);
-        else renderWidget(container, element, entry);
+        if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry, clockDefaultsFor(element, theme));
+        else renderWidget(container, element, entry, theme?.formatting);
         return;
     }
     container.classList.remove('pp-kind-widget');
@@ -91,7 +95,7 @@ export function renderElementContent(container, element, entry) {
         return;
     }
     container.title = element.role ? `${element.binding.name} (${element.role})` : element.binding.name;
-    const shown = formatValue(entry.value, def, element.format, element.formatPattern);
+    const shown = formatValue(entry.value, def, element.format, element.formatPattern, theme?.formatting);
     if (shown.image) {
         const img = document.createElement('img');
         img.src = shown.image;
@@ -168,7 +172,7 @@ export class ElementView {
 
     render() {
         const entry = this.element.binding ? this.panel.hooks.getValue(this.element.binding.name) : undefined;
-        renderElementContent(this.el, this.element, entry);
+        renderElementContent(this.el, this.element, entry, this.panel.theme);
     }
 
     setSelected(selected) {

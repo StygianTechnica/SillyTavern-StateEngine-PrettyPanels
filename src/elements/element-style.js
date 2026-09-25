@@ -118,7 +118,7 @@ export function numericWeight(weight) {
 }
 
 function shadowCss(kind, color) {
-    const c = isColor(color) ? color : (kind === 'glow' ? 'var(--SmartThemeQuoteColor)' : 'rgba(0, 0, 0, 0.85)');
+    const c = isColor(color) ? color : (kind === 'glow' ? 'var(--ppt-glow, var(--SmartThemeQuoteColor))' : 'rgba(0, 0, 0, 0.85)');
     switch (kind) {
         case 'soft': return `0 1px 3px ${c}`;
         case 'hard': return `2px 2px 0 ${c}`;

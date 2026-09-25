@@ -125,7 +125,7 @@ function updateBar(holder, widget, pct, vertical) {
 
 // Gauge geometry from the element's own size (so the properties preview,
 // which isn't laid out inside a panel, draws identically).
-function updateGauge(holder, element, entry, pct, semi) {
+function updateGauge(holder, element, entry, pct, semi, formatting) {
     const widget = element.widget;
     const stroke = num(widget, 'strokeWidth');
     const width = Math.max(8, element.width - 4);
@@ -167,7 +167,7 @@ function updateGauge(holder, element, entry, pct, semi) {
 
     const valueEl = holder.querySelector('.pp-gauge-value');
     valueEl.hidden = !flag(widget, 'showValue');
-    valueEl.textContent = entry === undefined ? '—' : formatValue(entry.value, entry.def, element.format, element.formatPattern).text;
+    valueEl.textContent = entry === undefined ? '—' : formatValue(entry.value, entry.def, element.format, element.formatPattern, formatting).text;
     valueEl.style.fontSize = `${Math.max(9, Math.round(r * (semi ? 0.42 : 0.5)))}px`;
     holder.classList.toggle('pp-gauge-semi', semi);
 }
@@ -192,7 +192,8 @@ function updateComposite(holder, element, entry, pct) {
 }
 
 // Draws (or updates) a widget element inside `container`'s .pp-widget.
-export function renderWidget(container, element, entry) {
+// `formatting` is the panel theme's formatting (for a gauge's value).
+export function renderWidget(container, element, entry, formatting = null) {
     const holder = container.querySelector('.pp-widget');
     if (holder.dataset.type !== element.type) build(holder, element.type);
     const pct = entry === undefined ? null : percentOf(entry.value, entry.def, element.widget);
@@ -200,7 +201,7 @@ export function renderWidget(container, element, entry) {
     holder.classList.toggle('pp-widget-nodata', pct === null);
     if (element.type === 'bar-horizontal') updateBar(holder, element.widget, pct, false);
     else if (element.type === 'bar-vertical') updateBar(holder, element.widget, pct, true);
-    else if (element.type === 'gauge-circle') updateGauge(holder, element, entry, pct, false);
-    else if (element.type === 'gauge-semicircle') updateGauge(holder, element, entry, pct, true);
+    else if (element.type === 'gauge-circle') updateGauge(holder, element, entry, pct, false, formatting);
+    else if (element.type === 'gauge-semicircle') updateGauge(holder, element, entry, pct, true, formatting);
     else if (element.type === 'composite-bar') updateComposite(holder, element, entry, pct);
 }

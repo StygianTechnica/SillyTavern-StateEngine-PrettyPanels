@@ -11,10 +11,12 @@
 //   secondAngle = 360 * second / secondsPerMinute
 //
 // Clock Properties live in element.clock (saved with the layout); every
-// one is optional. Unset ones come from the element's theme
-// (src/elements/themes.js), then CLOCK_DEFAULTS:
+// one is optional. Unset ones come from a theme's elementDefaults.clock
+// (src/themes/) - the theme named by themeStyle, else the panel's - then
+// CLOCK_FALLBACK / CLOCK_DEFAULTS:
 //
-//   themeStyle                    theme id (blank: the default theme)
+//   themeStyle                    a theme id whose clock defaults to use
+//                                 (blank: the panel's theme)
 //   style, numerals, tickMarks    override the theme's drawn face
 //   backdropImage                 face image: a URL string, or
 //   hourHandImage                 { variable: '<image variable name>' }
@@ -29,7 +31,6 @@
 // element.opacity and element.zIndex apply as for any element. Hands
 // rotate with CSS transforms about the clock's centre.
 
-import { getTheme, CLOCK_FALLBACK } from './themes.js';
 import { getImage } from '../chat/variable-service.js';
 
 export const ELEMENT_TYPE_ANALOG_CLOCK = 'analogClock';
@@ -52,6 +53,9 @@ export const CLOCK_LIMITS = {
     minuteHandOffset: [0, 100],
     secondHandOffset: [0, 100],
 };
+
+// The drawn face when neither the clock nor its theme chooses one.
+export const CLOCK_FALLBACK = Object.freeze({ style: 'classic', numerals: 'arabic', tickMarks: 'all' });
 
 export const CLOCK_DEFAULTS = {
     hourHandLength: 50,
@@ -102,10 +106,10 @@ function limited(value, key) {
     return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : null;
 }
 
-// The Clock Properties actually in effect: the element's own, else its
-// theme's, else the defaults. Images stay as sources ({ url } / { variable }).
-export function effectiveClock(clock = {}) {
-    const theme = getTheme(clock.themeStyle).clock ?? {};
+// The Clock Properties actually in effect: the element's own, else the
+// theme's clock defaults (`theme`, an elementDefaults.clock object), else
+// the fallbacks. Images stay as sources ({ url } / { variable }).
+export function effectiveClock(clock = {}, theme = {}) {
     const pick = (key, allowed) => {
         const valid = (v) => allowed.some(([id]) => id === v);
         if (valid(clock[key])) return clock[key];
@@ -117,7 +121,7 @@ export function effectiveClock(clock = {}) {
         tickMarks: pick('tickMarks', CLOCK_TICKS),
     };
     for (const key of CLOCK_IMAGE_KEYS) out[key] = clockImageSource(clock[key]) ?? clockImageSource(theme[key]);
-    for (const key of Object.keys(CLOCK_DEFAULTS)) out[key] = limited(clock[key], key) ?? CLOCK_DEFAULTS[key];
+    for (const key of Object.keys(CLOCK_DEFAULTS)) out[key] = limited(clock[key], key) ?? limited(theme[key], key) ?? CLOCK_DEFAULTS[key];
     return out;
 }
 
@@ -278,10 +282,11 @@ function momentOf(entry) {
 const FALLBACK_CALENDAR = { hoursPerDay: 12, minutesPerHour: 60, secondsPerMinute: 60 };
 
 // Draws (or updates) an analog clock element inside `holder` (.pp-widget).
-export function renderClock(holder, element, entry) {
+// `themeClock` is the theme's elementDefaults.clock (see effectiveClock).
+export function renderClock(holder, element, entry, themeClock = {}) {
     if (holder.dataset.type !== ELEMENT_TYPE_ANALOG_CLOCK) build(holder);
     const clock = element.clock ?? {};
-    const eff = effectiveClock(clock);
+    const eff = effectiveClock(clock, themeClock);
     // The element's content box: its 1px (transparent) border inset.
     const width = Math.max(1, element.width - 2);
     const height = Math.max(1, element.height - 2);

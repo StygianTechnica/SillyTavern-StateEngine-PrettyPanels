@@ -18,7 +18,7 @@ import { isVariableElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
-import { applyPanelStyle } from './panel-style.js';
+import { applyPanelTheme } from '../themes/theme-apply.js';
 
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
 // imports this module).
@@ -48,6 +48,7 @@ export class Panel {
     //   onZIndexChange(panel, zIndex),
     //   onRestack(panel, 'forward' | 'backward' | 'front' | 'back'),
     //   onStyleChange(panel, stylePatch),
+    //   onThemeChange(panel, { themeId?, themeVariant? }),
     //   onElementDelete(panel, elementId),
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
@@ -140,10 +141,13 @@ export class Panel {
         this.applyRecord();
     }
 
-    // Panel Styling, with the background image variable (if any) resolved.
+    // Theme + variant + Panel Styling, with the background image variable
+    // (if any) resolved. Remembers the theme for the elements' rendering.
     #applyStyle() {
         const name = this.record.style?.backgroundImageVariable;
-        applyPanelStyle(this.el, this.record.style, name ? this.hooks.getImage(name) : undefined);
+        const { theme, variantName } = applyPanelTheme(this.el, this.record, name ? this.hooks.getImage(name) : undefined);
+        this.theme = theme;
+        this.themeVariant = variantName;
     }
 
     // Re-renders variable-driven content only (after the variable service
@@ -202,6 +206,7 @@ export class Panel {
                 onRestack: (action) => this.hooks.onRestack(this, action),
                 onAnchorChange: (patch) => this.hooks.onAnchorChange(this, patch),
                 onPanelStyleChange: (patch) => this.hooks.onStyleChange(this, patch),
+                onThemeChange: (patch) => this.hooks.onThemeChange(this, patch),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
                 onDropVariable: (name, x, y) => this.hooks.onDropVariable(name, x, y),

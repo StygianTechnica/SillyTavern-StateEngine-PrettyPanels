@@ -3,7 +3,8 @@
 // be open at once without sharing state. Three collapsible sections:
 //   - Panel Properties: name, position and size (read-only), lock toggle,
 //     delete, Layering (z-index), Layout Anchor (Free/Anchored and the
-//     anchor target), Panel Library (save/export template),
+//     anchor target), Theme (theme + variant, src/themes/), Panel Library
+//     (save/export template),
 //     and the collapsible Panel Styling subsection
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
 //     Width/Height, Z Index, then per type: Show Label, Label Override,
@@ -37,7 +38,8 @@ import {
     ELEMENT_TYPE_ANALOG_CLOCK, CLOCK_HANDS, CLOCK_IMAGE_KEYS, CLOCK_LIMITS, CLOCK_STYLES, CLOCK_NUMERALS, CLOCK_TICKS,
     clockImageSource, clockGeometry, effectiveClock,
 } from '../elements/clock.js';
-import { listThemes, getTheme, DEFAULT_THEME_ID } from '../elements/themes.js';
+import { listThemes, onThemesChange } from '../themes/theme-store.js';
+import { resolvePanelTheme, clockDefaultsFor, themeVars, applyVars } from '../themes/theme-apply.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
@@ -191,6 +193,7 @@ function toHex(color) {
 export class PanelPropertiesPopup {
     // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(),
     //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
+    //          onThemeChange({ themeId?, themeVariant? }),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
@@ -220,6 +223,7 @@ export class PanelPropertiesPopup {
             document.addEventListener('keydown', this.onKeyDown);
             this.stopCatalogWatch = onCatalogChange((catalog) => this.#applyCatalog(catalog));
             this.stopFontWatch = fontRegistry.onChange(() => this.#refreshElement());
+            this.stopThemeWatch = onThemesChange(() => this.refresh());
             void fontRegistry.load().then(() => this.#refreshElement());
             void loadCatalog();
         }
@@ -231,6 +235,7 @@ export class PanelPropertiesPopup {
         document.removeEventListener('keydown', this.onKeyDown);
         this.stopCatalogWatch?.();
         this.stopFontWatch?.();
+        this.stopThemeWatch?.();
         closeFontPicker();
         this.el.remove();
         this.hooks.onClose();
@@ -277,6 +282,7 @@ export class PanelPropertiesPopup {
             : !record.anchorTarget ? 'Choose where to anchor it.'
                 : this.panel.docked ? `Part of SillyTavern's layout: ${anchorLabel(record.anchorTarget)}. Drag it away to float it again.`
                     : `${anchorLabel(record.anchorTarget)} isn't on screen right now (e.g. the sidebar is closed) - shown floating until it is.`;
+        this.#fillTheme();
         this.#fillPanelStyle();
 
         this.#applySections();
@@ -296,11 +302,35 @@ export class PanelPropertiesPopup {
         }
     }
 
+    // The Theme and Variant dropdowns: every theme, and the chosen theme's
+    // variants (the panel's own choice, or what it falls back to).
+    #fillTheme() {
+        const { theme, variantName } = resolvePanelTheme(this.panel.record);
+        const themeSelect = this.el.querySelector('[data-field="themeId"]');
+        const variantSelect = this.el.querySelector('[data-field="themeVariant"]');
+        if (themeSelect !== document.activeElement) {
+            themeSelect.replaceChildren(...listThemes().map((t) => new Option(t.name, t.id)));
+            themeSelect.value = theme.id;
+        }
+        if (variantSelect !== document.activeElement) {
+            variantSelect.replaceChildren(...Object.keys(theme.variants).map((name) => new Option(name, name)));
+            variantSelect.value = variantName;
+        }
+        const missing = this.panel.record.themeId && this.panel.record.themeId !== theme.id;
+        this.el.querySelector('[data-field="themeStatus"]').textContent = missing
+            ? 'This panel\'s theme no longer exists - showing the first theme until you choose one.'
+            : 'Unset Panel Styling below comes from the theme and variant. Edit themes in the Theme Editor (Extensions drawer).';
+    }
+
     refreshElementPreview() {
         if (!this.el.isConnected) return;
         const element = this.#selected();
         if (!element) return;
-        renderElementContent(this.preview, element, this.#entry(element));
+        // The preview isn't inside the panel, so it gets the theme's colours
+        // and fonts itself.
+        const { theme, variant } = resolvePanelTheme(this.panel.record);
+        applyVars(this.el.querySelector('.pp-element-preview-frame'), themeVars(theme, variant));
+        renderElementContent(this.preview, element, this.#entry(element), theme);
         this.#refreshBindingInfo(element);
     }
 
@@ -436,7 +466,7 @@ export class PanelPropertiesPopup {
         const kind = shape.kind ?? SHAPE_DEFAULTS.kind;
         const body = this.preview.querySelector('.pp-shape');
         this.#fillValue('shape', 'kind', kind);
-        this.#fillColor('shape', 'fillColor', shape.fillColor, getComputedStyle(document.body).getPropertyValue('--SmartThemeBlurTintColor') || '#000000');
+        this.#fillColor('shape', 'fillColor', shape.fillColor, body ? getComputedStyle(body).backgroundColor : '#000000');
         this.#fillColor('shape', 'borderColor', shape.borderColor, body ? getComputedStyle(body).borderTopColor : '#888888');
         for (const key of Object.keys(SHAPE_LIMITS)) this.#fillValue('shape', key, shape[key]);
         this.#styleField('shape', 'cornerRadius').closest('.pp-style-row').hidden = kind === 'ellipse';
@@ -447,19 +477,19 @@ export class PanelPropertiesPopup {
         const clock = element.clock ?? {};
         const theme = this.#styleField('clock', 'themeStyle');
         if (theme !== document.activeElement) {
-            const defaultLabel = getTheme(DEFAULT_THEME_ID)?.label ?? DEFAULT_THEME_ID;
-            theme.replaceChildren(new Option(`Default (${defaultLabel})`, ''), ...listThemes().map(([id, label]) => new Option(label, id)));
-            if (clock.themeStyle && !listThemes().some(([id]) => id === clock.themeStyle)) theme.appendChild(new Option(`${clock.themeStyle} (not found)`, clock.themeStyle));
+            const themes = listThemes();
+            theme.replaceChildren(new Option('The panel\'s theme', ''), ...themes.map((t) => new Option(t.name, t.id)));
+            if (clock.themeStyle && !themes.some((t) => t.id === clock.themeStyle)) theme.appendChild(new Option(`${clock.themeStyle} (not found)`, clock.themeStyle));
         }
         this.#fillValue('clock', 'themeStyle', clock.themeStyle ?? '');
         // The "Theme" choices name what the theme gives.
-        const themed = effectiveClock({ themeStyle: clock.themeStyle });
+        const themeClock = clockDefaultsFor(element, this.panel.theme);
+        const themed = effectiveClock({}, themeClock);
         for (const [key, options] of [['style', CLOCK_STYLES], ['numerals', CLOCK_NUMERALS], ['tickMarks', CLOCK_TICKS]]) {
             const select = this.#styleField('clock', key);
             select.options[0].textContent = `Theme (${options.find(([id]) => id === themed[key])?.[1] ?? themed[key]})`;
             this.#fillValue('clock', key, clock[key] ?? '');
         }
-        const themeClock = getTheme(clock.themeStyle).clock ?? {};
         for (const key of CLOCK_IMAGE_KEYS) this.#fillClockImage(key, clock[key], clockImageSource(themeClock[key]));
         for (const key of Object.keys(CLOCK_LIMITS)) this.#fillValue('clock', key, clock[key]);
         // Blank geometry and hands: show what is in use.
@@ -579,7 +609,7 @@ export class PanelPropertiesPopup {
         const style = this.panel.record.style ?? {};
         const box = this.panel.el.querySelector('.pp-panel-box');
         const computed = getComputedStyle(box);
-        this.#fillColor('panel', 'backgroundColor', style.backgroundColor, getComputedStyle(document.body).getPropertyValue('--SmartThemeBlurTintColor') || computed.backgroundColor);
+        this.#fillColor('panel', 'backgroundColor', style.backgroundColor, computed.getPropertyValue('--ppt-background').trim() || computed.backgroundColor);
         this.#fillColor('panel', 'borderColor', style.borderColor, computed.borderTopColor);
         for (const key of Object.keys(PANEL_STYLE_LIMITS)) this.#fillValue('panel', key, style[key]);
         this.#fillValue('panel', 'shadow', style.shadow !== false);
@@ -870,6 +900,16 @@ export class PanelPropertiesPopup {
                 </label>
             </div>
             <small class="pp-field-info" data-field="anchorStatus"></small>
+            <div class="pp-properties-section-label">Theme</div>
+            <div class="pp-anchor-row">
+                <label class="pp-layering-z"><span>Theme</span>
+                    <select class="text_pole" data-field="themeId" title="The theme this panel is drawn with"></select>
+                </label>
+                <label class="pp-layering-z"><span>Variant</span>
+                    <select class="text_pole" data-field="themeVariant" title="Which of the theme's panel looks to use"></select>
+                </label>
+            </div>
+            <small class="pp-field-info" data-field="themeStatus"></small>
             <div class="pp-properties-section-label">Panel Library</div>
             <div class="pp-properties-actions">
                 <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library">
@@ -1170,6 +1210,8 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-field="anchorMode"]').addEventListener('change', (e) => {
             this.hooks.onAnchorChange(e.target.value === 'free' ? { anchorMode: 'free', anchorTarget: null } : { anchorMode: 'anchored' });
         });
+        el.querySelector('[data-field="themeId"]').addEventListener('change', (e) => this.hooks.onThemeChange({ themeId: e.target.value }));
+        el.querySelector('[data-field="themeVariant"]').addEventListener('change', (e) => this.hooks.onThemeChange({ themeVariant: e.target.value }));
         el.querySelector('[data-field="anchorTarget"]').addEventListener('change', (e) => {
             this.hooks.onAnchorChange({ anchorMode: 'anchored', anchorTarget: e.target.value || null });
         });

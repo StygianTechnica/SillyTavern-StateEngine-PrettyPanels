@@ -9,6 +9,11 @@
 // (a "Date only" variable shows its date, "Time only" its time); the other
 // datetime formats let one variable be shown several ways, and 'custom'
 // uses the element's own `formatPattern`.
+//
+// A theme's `formatting` (src/themes/theme-schema.js) replaces the
+// calendar's own patterns for Date and time (dateFull), Date only
+// (dateShort) and Time only (time), and picks how an "As stored" number
+// shows (number).
 
 const FORMATS = {
     number: [
@@ -128,13 +133,19 @@ function plain(value) {
     return String(value);
 }
 
+// Theme formatting key per datetime format.
+const THEME_DATETIME_KEYS = { full: 'dateFull', date: 'dateShort', time: 'time' };
+const THEME_NUMBER_FORMATS = new Set(['integer', 'fixed1', 'fixed2', 'grouped']);
+
 // Returns { text } or { image: url } for rendering. Never throws - a value
 // that can't be formatted as asked falls back to its plain text.
-// `pattern` is the element's formatPattern, used by the 'custom' format.
-export function formatValue(value, def, format = 'auto', pattern = '') {
+// `pattern` is the element's formatPattern, used by the 'custom' format;
+// `formatting` is the panel theme's formatting (see header).
+export function formatValue(value, def, format = 'auto', pattern = '', formatting = null) {
     const family = formatType(def, value);
     const known = FORMATS[family].some(([id]) => id === format);
-    const fmt = known ? format : 'auto';
+    let fmt = known ? format : 'auto';
+    if (family === 'number' && fmt === 'auto' && THEME_NUMBER_FORMATS.has(formatting?.number)) fmt = formatting.number;
     try {
         switch (family) {
             case 'number': {
@@ -177,9 +188,10 @@ export function formatValue(value, def, format = 'auto', pattern = '') {
                 if (formatDateTime && Number.isFinite(Number(value))) {
                     const key = fmt === 'auto' ? datetimeAuto(def) : fmt;
                     const custom = typeof pattern === 'string' ? pattern.trim() : '';
+                    const themed = typeof formatting?.[THEME_DATETIME_KEYS[key]] === 'string' ? formatting[THEME_DATETIME_KEYS[key]].trim() : '';
                     const options = key === 'custom'
                         ? (custom ? { style: 'custom', pattern: custom } : DATETIME_OPTIONS.full)
-                        : DATETIME_OPTIONS[key];
+                        : (themed ? { style: 'custom', pattern: themed } : DATETIME_OPTIONS[key]);
                     return { text: formatDateTime(def?.calendar || 'gregorian', Number(value), options) };
                 }
                 return { text: plain(value) };

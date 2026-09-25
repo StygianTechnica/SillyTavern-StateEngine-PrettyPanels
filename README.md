@@ -53,14 +53,15 @@ selecting a panel or element expands its section.
 
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
   0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Layout Anchor** (Anchor
-  mode Free / Anchored, and where it is anchored); **Panel Library** (Save
+  mode Free / Anchored, and where it is anchored); **Theme** (the panel's theme and which of
+  its variants - see [Themes](#themes)); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
   (background colour and Panel opacity, border colour/thickness/radius, drop shadow,
   padding, and margin - the visible panel is inset by the margin inside its stored bounds;
   a background image from a URL or from a State Engine **image variable** (image, image
   list or image map - the variable wins while set, and follows it live), with Cover /
-  Contain / Tile / Stretch and its own opacity). Anything left unset follows the
-  SillyTavern theme; ↺ resets a colour.
+  Contain / Tile / Stretch and its own opacity). Anything left unset comes from the panel's
+  theme and variant; ↺ resets a colour.
 - Layers, bottom to top: background colour, image, border, content. Panel opacity affects
   the colour layer only. At Panel opacity 0 there is no frosted backdrop and the drop shadow
   follows the image's own (transparent) shape; with image opacity 0 (or no image) and border
@@ -118,9 +119,10 @@ selecting a panel or element expands its section.
   (the theme's, an image URL, or an image variable); Radius and Center X/Y (blank = fit the
   element); each hand's Length and Offset (% of the radius - offset is how far it reaches back
   past the centre, i.e. where a hand image pivots; length 0 hides a hand); and Opacity. Hand
-  images are drawn pointing up (12 o'clock). Themes (`src/elements/themes.js`) supply the
-  defaults - `clock.backdropImage`, `hourHandImage`, `minuteHandImage`, `secondHandImage`,
-  `style`, `numerals` and `tickMarks` - and anything set on the element overrides them.
+  images are drawn pointing up (12 o'clock). The panel's theme supplies the defaults
+  (`elementDefaults.clock`: images, face, numerals, tick marks, hand lengths and offsets); a
+  clock's Theme property can borrow another theme's clock instead, and anything set on the
+  element overrides both.
   Templates drop a clock's image variables along with its binding. Needs a State Engine with
   `getDateTimeParts`.
 - Switching an element's type resizes it to the new type's default size only if it was still
@@ -165,6 +167,41 @@ selecting a panel or element expands its section.
   show their own month and season names. `{weekday}`, `{weekday_short}` and `{weekday_index}`
   show nothing for a calendar that doesn't define them (State Engine's calendar editor sets a
   calendar's week length and weekday names).
+
+## Themes
+
+Every panel is drawn with a **theme** and one of its **variants**, chosen in Panel
+Properties. Themes are global (`extensionSettings.prettyPanelsThemes`) and edited in the
+**Theme Editor** (the button in the Pretty Panels drawer): a sidebar of sections, a live
+preview (an example panel, scene card, variable block, gauges, clock, text block and the
+component cards) and the selected section's fields. Everything saves as you edit, and panels
+on screen update live.
+
+- **Theme Identity** - name, description, version.
+- **Colors** - primary (bar/gauge fills), secondary (tracks), accent (icons, clock second
+  hand), background, text, border and glow. Any CSS colour; blank uses SillyTavern's own.
+- **Fonts** - title (free text, card titles), label, value and accent (gauge values, clock
+  numerals), from the same fonts as the Font Picker.
+- **Formatting** - patterns replacing the calendar's own for Date and time, Date only and
+  Time only, and how "As stored" numbers show.
+- **Variants** - panel looks: background colour, opacity and image (with blend mode), border
+  colour/width, shape (rounded, square, pill, ellipse), corners, shadow (none, soft,
+  standard, strong, glow), padding, margin and an accent override. Add (copies the current
+  one), rename, delete; a theme always keeps at least one.
+- **Element Defaults** - defaults for text, shapes, images, bars and gauges, and clocks,
+  used wherever an element leaves a property unset.
+- **Components** - scene, quest, time and clock card looks (variant, accent, icon, title
+  size), shown in the preview.
+
+A panel is drawn from, in order: the theme's colours, fonts and formatting, its variant, the
+theme's element defaults, then the panel's own Panel Styling and each element's own
+properties (a set value always wins). New panels, and panels saved before themes existed,
+get the first theme in the list and its "default" variant; a panel whose theme was deleted
+shows the first theme, and one whose variant is gone shows "default". Three themes are
+built in - **SillyTavern** (follows your SillyTavern UI theme, exactly how panels looked
+before themes), **Parchment** and **Neon HUD** - and are ordinary, editable themes. Themes
+export and import as JSON (your own uploaded fonts a theme uses are embedded); importing
+always adds a new theme. Panel templates keep their theme and variant.
 
 ## Chats, layouts and State Engine
 
@@ -217,7 +254,10 @@ selecting a panel or element expands its section.
 | `src/elements/widgets.js` | Bars, gauges and composite bars; Widget Properties |
 | `src/elements/shapes.js` | Shape elements; Shape Properties |
 | `src/elements/clock.js` | Analog clock elements; Clock Properties; hand angles |
-| `src/elements/themes.js` | Themes (clock defaults) and `registerTheme()` |
+| `src/themes/theme-schema.js` | Theme shape, field definitions, built-in themes, normalization |
+| `src/themes/theme-store.js` | Theme Library (`prettyPanelsThemes`): CRUD, variants, import/export |
+| `src/themes/theme-apply.js` | Theme + variant + Panel Styling -> CSS variables; element defaults |
+| `src/ui/theme-editor.js` | The Theme Editor modal |
 | `src/fonts/` | Font system: registry, sanitizing converter, subsetter, preview, export ([docs/FONTS.md](docs/FONTS.md)) |
 | `src/ui/font-picker.js` | The Font Picker popover |
 | `fonts/curated/` | Bundled OFL fonts and their manifest (generated by `tools/build-curated-fonts.mjs`) |

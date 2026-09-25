@@ -1,7 +1,8 @@
 // Panel Styling: the visual properties stored in a panel instance's
 // `style` object (part of its design, so saved with the layout and
-// carried by templates). Every property is optional - unset means "follow
-// the SillyTavern theme", exactly as panels looked before styling existed.
+// carried by templates). Every property is optional - unset means "use
+// the panel's theme and variant" (src/themes/theme-apply.js merges the
+// variant underneath these before they reach panelStyleVars()).
 //
 //   backgroundColor    CSS color (the pickers store #rrggbb)
 //   panelOpacity       0-100 (%), the background colour layer only - never
@@ -110,7 +111,7 @@ export function panelStyleVars(style = {}, image = undefined) {
     const opacity = number(style, 'panelOpacity') ?? number({ panelOpacity: style.backgroundOpacity }, 'panelOpacity');
     let background = null;
     if (bgColor || opacity !== null) {
-        const base = bgColor ?? 'var(--SmartThemeBlurTintColor)';
+        const base = bgColor ?? 'var(--ppt-background, var(--SmartThemeBlurTintColor))';
         background = opacity === null ? base : `color-mix(in srgb, ${base} ${opacity}%, transparent)`;
     }
     const px = (v) => (v === null ? null : `${v}px`);

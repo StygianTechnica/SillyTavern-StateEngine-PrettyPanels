@@ -80,6 +80,21 @@ export function updatePanelRecord(id, patch) {
     return { ...panels[id] };
 }
 
+// Panels saved before themes existed (no themeId) get `choice` - the
+// first theme and its default variant - written into the active layout.
+export function assignMissingThemes(choice) {
+    let changed = false;
+    for (const record of Object.values(getActiveLayout().panels)) {
+        if (record && typeof record === 'object' && !(typeof record.themeId === 'string' && record.themeId)) {
+            record.themeId = choice.themeId;
+            record.themeVariant = choice.themeVariant;
+            changed = true;
+        }
+    }
+    if (changed) save();
+    return changed;
+}
+
 export function deletePanelRecord(id) {
     const layout = getActiveLayout();
     if (!layout.panels[id]) return false;
