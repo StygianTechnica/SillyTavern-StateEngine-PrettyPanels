@@ -7,7 +7,8 @@
 //   {
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
 //                              'gauge-circle' | 'gauge-semicircle' |
-//                              'composite-bar' | 'shape' | 'free-text'
+//                              'composite-bar' | 'shape' | 'free-text' |
+//                              'analogClock'
 //     x, y, width, height,     position/size inside the panel body, px
 //     role,                    optional conceptual tag ("health", ...)
 //     binding: { name } | null fully-qualified State Engine variable name
@@ -17,7 +18,8 @@
 //                              elements draw in ascending zIndex, ties in
 //                              stored order (DEFAULT_Z_INDEX per type)
 //     opacity, fit,            image variable elements (a text element whose
-//     clipShape, borderRadius  value is an image): see IMAGE_* below
+//     clipShape, borderRadius, value is an image): see IMAGE_* below;
+//     borderWidth, borderColor the border only shows with a clip shape
 //     showLabel, labelOverride,
 //     format,                  a key from formats.js ('auto' = by type)
 //     formatPattern,           the 'custom' datetime format's pattern
@@ -27,6 +29,10 @@
 //                              (src/elements/widgets.js)
 //     shape,                   Shape Properties - shapes only
 //                              (src/elements/shapes.js)
+//     clock,                   Clock Properties - analog clocks only
+//                              (src/elements/clock.js); an analog clock
+//                              binds a datetime variable and also uses
+//                              opacity
 //   }
 //
 // With the default zIndex values shapes sit behind images, images behind
@@ -55,6 +61,7 @@ export const ELEMENT_TYPES = [
     ['gauge-circle', 'Circular Gauge'],
     ['gauge-semicircle', 'Semi-Circular Gauge'],
     ['composite-bar', 'Composite Bar'],
+    ['analogClock', 'Analog Clock'],
     ['free-text', 'Free Text'],
     ['shape', 'Shape'],
 ];
@@ -70,6 +77,7 @@ export const DEFAULT_TYPE_SIZES = {
     'composite-bar': [160, 24],
     'shape': [120, 64],
     'free-text': [160, 32],
+    'analogClock': [120, 120],
 };
 
 // A new element's zIndex, per type. Image variable elements (text bound
@@ -84,6 +92,7 @@ export const DEFAULT_Z_INDEX = {
     'gauge-circle': 3,
     'gauge-semicircle': 3,
     'composite-bar': 3,
+    'analogClock': 3,
 };
 export const IMAGE_Z_INDEX = 1;
 export const TITLE_Z_INDEX = 4;
@@ -92,6 +101,8 @@ export const TITLE_Z_INDEX = 4;
 export const IMAGE_FITS = [['cover', 'Cover (fill, crop)'], ['contain', 'Contain (whole image)']];
 export const IMAGE_CLIP_SHAPES = [['none', 'None'], ['rectangle', 'Rectangle'], ['ellipse', 'Ellipse']];
 export const IMAGE_RADIUS_LIMITS = [0, 500];
+// Border drawn along a clipped image's edge (rectangle or ellipse), px.
+export const IMAGE_BORDER_WIDTH_LIMITS = [0, 50];
 // Set on an element when it is first bound to an image variable.
 export const IMAGE_DEFAULTS = { opacity: 1, fit: 'cover', clipShape: 'none', borderRadius: 0 };
 const IMAGE_VARIABLE_TYPES = new Set(['image', 'imageList', 'imageMap']);
@@ -154,6 +165,11 @@ function normalizeImageFields(element) {
         out.borderRadius = Number.isFinite(element.borderRadius)
             ? Math.min(IMAGE_RADIUS_LIMITS[1], Math.max(IMAGE_RADIUS_LIMITS[0], Math.round(element.borderRadius))) : 0;
     }
+    if (element.borderWidth !== undefined) {
+        out.borderWidth = Number.isFinite(element.borderWidth)
+            ? Math.min(IMAGE_BORDER_WIDTH_LIMITS[1], Math.max(IMAGE_BORDER_WIDTH_LIMITS[0], Math.round(element.borderWidth))) : 0;
+    }
+    if (element.borderColor !== undefined && typeof element.borderColor !== 'string') out.borderColor = '';
     return out;
 }
 
@@ -181,6 +197,7 @@ export function normalizeVariableElement(element) {
         style: object(element.style),
         widget: object(element.widget),
         shape: object(element.shape),
+        clock: object(element.clock),
     };
 }
 

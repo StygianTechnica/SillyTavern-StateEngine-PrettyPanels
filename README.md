@@ -69,7 +69,8 @@ selecting a panel or element expands its section.
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
   Shift+↑/↓ = one grid step), **Z Index** (any integer, plus Send to Back / Backward /
   Forward / Bring to Front); for a Text element showing an **image variable**: **Image**
-  (opacity, clip shape none / rectangle / ellipse, corner radius, fit cover / contain);
+  (opacity, clip shape none / rectangle / ellipse, corner radius, border width and colour along
+  the clip edge, fit cover / contain);
   for **Text** elements: Show Label, Label override, Format and
   **Element Styling** (a **Font** button opening the Font Picker - font, weight, italic and
   variable-font axes - plus a separate label font, font size, letter spacing, line height,
@@ -80,9 +81,9 @@ selecting a panel or element expands its section.
   "if value < threshold, colour the value"); for **widgets**: **Widget Properties** (below);
   for **Free Text**: its text, one-click presets (Title, Subtitle, Section heading, HUD label,
   Body text, Caption) and the same Element Styling;
-  for **shapes**: **Shape Properties** (below);
+  for **shapes**: **Shape Properties** (below); for **analog clocks**: **Clock Properties** (below);
   then a live Preview, and delete. Only the fields that apply to the element's type are shown.
-- **Add & Variables** - **Text** (free text), a **Rectangle** and an **Ellipse** to drag onto
+- **Add & Variables** - **Text** (free text), a **Clock**, a **Rectangle** and an **Ellipse** to drag onto
   a panel (or click to add here), then every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag a variable onto a panel to add an element, onto an element to rebind it, or
   click it to add it to this panel.
@@ -97,6 +98,7 @@ selecting a panel or element expands its section.
 | Circular Gauge | an SVG ring, value in the middle | radius (blank = fit), stroke, track/fill colour, show value, animate |
 | Semi-Circular Gauge | a 180° SVG arc, value underneath | as Circular Gauge |
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
+| Analog Clock | a clock face with hour, minute and second hands, for a datetime variable | (Clock Properties, below) |
 | Free Text | text you type, no variable | (Element Styling) |
 | Shape | a filled rectangle or ellipse, no variable | shape, fill colour/opacity, border colour/thickness, corners |
 
@@ -107,18 +109,33 @@ selecting a panel or element expands its section.
 - Animate Changes (on by default) eases width/height/arc changes over 200ms.
 - Composite Bar: an icon alone shows just the icon; icon and label text show both; with
   neither, the variable's label is shown.
+- **Analog clocks** show a datetime variable's time in its own calendar: the hands are placed
+  from State Engine's time primitives, so a fantasy calendar with a 30-hour day or 100-minute
+  hours gets a matching dial. The hour hand goes round once per calendar day
+  (`360 × hour / hoursPerDay + 360 × minute / (hoursPerDay × minutesPerHour)`), the minute
+  hand once per hour, the second hand once per minute. **Clock Properties**: Theme; Face,
+  Numerals and Tick marks (blank = the theme's); Backdrop, Hour, Minute and Second hand images
+  (the theme's, an image URL, or an image variable); Radius and Center X/Y (blank = fit the
+  element); each hand's Length and Offset (% of the radius - offset is how far it reaches back
+  past the centre, i.e. where a hand image pivots; length 0 hides a hand); and Opacity. Hand
+  images are drawn pointing up (12 o'clock). Themes (`src/elements/themes.js`) supply the
+  defaults - `clock.backdropImage`, `hourHandImage`, `minuteHandImage`, `secondHandImage`,
+  `style`, `numerals` and `tickMarks` - and anything set on the element overrides them.
+  Templates drop a clock's image variables along with its binding. Needs a State Engine with
+  `getDateTimeParts`.
 - Switching an element's type resizes it to the new type's default size only if it was still
   at the old type's default size.
 - Elements saved before types existed load as Text.
 - **Element stacking**: every element has a Z Index; higher draws on top, equal values keep
   the order they were added in. New elements start at: shapes 0, image variable elements 1,
-  text and free text 2, bars and gauges 3 (4 is kept for a future title element) - so a
+  text and free text 2, bars, gauges and clocks 3 (4 is kept for a future title element) - so a
   translucent rectangle under text makes a readable backdrop, and an icon can sit above text
   by raising its Z Index. Elements saved before Z Index existed get their type's default
   (an older text element showing an image gets 2, not 1).
 - **Image variable elements** (a Text element bound to an image or image list variable) keep
   PNG/WebP transparency and add opacity, fit and clipping: a rectangle clip (with corner
-  radius) or an ellipse clip always fills the element (cover). Binding a Text element to an
+  radius) or an ellipse clip always fills the element (cover), and can have a border along its
+  edge (width + colour; unaffected by image opacity). Binding a Text element to an
   image variable turns its label off and gives it these settings.
 - **Layout anchors**: a panel can become part of SillyTavern's own layout instead of floating
   over it. While a panel is dragged, the places it can go are outlined: **Top of chat**,
@@ -142,10 +159,12 @@ selecting a panel or element expands its section.
 - **Datetime formats**: Automatic follows the variable's own State Engine datetime mode (a
   "Date only" variable shows its date, "Time only" its time). Any datetime can also be shown
   as Date and time, Date only, Time only, Time (hours:minutes), Long date, Long date and
-  time, Month name, Year, Season, or a **Custom pattern** such as
-  `{monthName} {day}, {year}` - so one variable dragged in twice can show its date in one
+  time, Month name, Year, Season, Weekday, or a **Custom pattern** such as
+  `{weekday}, {monthName} {day}, {year}` - so one variable dragged in twice can show its date in one
   element and its time in another. Formats use the variable's calendar, so fantasy calendars
-  show their own month and season names.
+  show their own month and season names. `{weekday}`, `{weekday_short}` and `{weekday_index}`
+  show nothing for a calendar that doesn't define them (State Engine's calendar editor sets a
+  calendar's week length and weekday names).
 
 ## Chats, layouts and State Engine
 
@@ -197,6 +216,8 @@ selecting a panel or element expands its section.
 | `src/elements/element-style.js` | Element Styling: typography, icon, conditional colour |
 | `src/elements/widgets.js` | Bars, gauges and composite bars; Widget Properties |
 | `src/elements/shapes.js` | Shape elements; Shape Properties |
+| `src/elements/clock.js` | Analog clock elements; Clock Properties; hand angles |
+| `src/elements/themes.js` | Themes (clock defaults) and `registerTheme()` |
 | `src/fonts/` | Font system: registry, sanitizing converter, subsetter, preview, export ([docs/FONTS.md](docs/FONTS.md)) |
 | `src/ui/font-picker.js` | The Font Picker popover |
 | `fonts/curated/` | Bundled OFL fonts and their manifest (generated by `tools/build-curated-fonts.mjs`) |

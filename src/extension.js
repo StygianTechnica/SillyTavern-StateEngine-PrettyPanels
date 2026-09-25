@@ -13,9 +13,11 @@ import { claimNamespace } from './api/namespace.js';
 import { registerWithStateEngine } from './api/registration.js';
 import { declareCapabilities } from './api/capabilities.js';
 import { loadDateTimeFormatter } from './api/format-datetime.js';
+import { loadDateTimePartsReader } from './api/get-datetime-parts.js';
 import { EXTENSION_ID, NAMESPACE } from './constants.js';
 import { initPanels } from './panels/panel-manager.js';
 import { setDateTimeFormatter } from './elements/formats.js';
+import { setDateTimePartsReader } from './elements/clock.js';
 import { startChatSession } from './chat/chat-session.js';
 import { LAYOUT_VARIABLE } from './chat/pp-config.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
@@ -74,6 +76,11 @@ export async function initExtension() {
         setDateTimeFormatter(await loadDateTimeFormatter(EXTENSION_ID));
     } catch (err) {
         console.warn(`[${EXTENSION_ID}] datetime formatting unavailable - datetime values show unformatted.`, err);
+    }
+    try {
+        setDateTimePartsReader(await loadDateTimePartsReader(EXTENSION_ID));
+    } catch (err) {
+        console.warn(`[${EXTENSION_ID}] datetime parts unavailable - analog clocks show no time (update State Engine).`, err);
     }
 
     initPanels();

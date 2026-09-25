@@ -48,6 +48,7 @@ const FORMATS = {
         ['month', 'Month name'],
         ['year', 'Year'],
         ['season', 'Season'],
+        ['weekday', 'Weekday'],
         ['custom', 'Custom pattern…'],
     ],
     image: [
@@ -77,6 +78,8 @@ const DATETIME_OPTIONS = {
     month: { style: 'month' },
     year: { style: 'year' },
     season: { style: 'custom', pattern: '{season}' },
+    // Empty for a calendar without weekday names.
+    weekday: { style: 'custom', pattern: '{weekday}' },
 };
 
 // What 'auto' means for a datetime variable, by its datetimeMode.
@@ -88,7 +91,7 @@ function datetimeAuto(def) {
 }
 
 // Shown under a Custom pattern field.
-export const DATETIME_PATTERN_HINT = 'Placeholders: {monthName} {month} {day} {year} {HH} {mm} {ss} {season} {era} {cycle}. Or tokens: YYYY MM DD HH mm ss MMM MMMM.';
+export const DATETIME_PATTERN_HINT = 'Placeholders: {monthName} {month} {day} {year} {HH} {mm} {ss} {weekday} {weekday_short} {weekday_index} {season} {era} {cycle}. Or tokens: YYYY MM DD HH mm ss MMM MMMM.';
 
 let formatDateTime = null;
 

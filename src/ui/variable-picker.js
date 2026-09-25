@@ -64,6 +64,7 @@ function bindPaletteDrag(item, ghostText, { onClick, onDrop, dropTargetAt }) {
 
 const PALETTE_ITEMS = [
     ['free-text', 'Text', 'fa-font', 'Free text you type yourself, with its own font and formatting'],
+    ['analogClock', 'Clock', 'fa-clock', 'Analog clock - drop a datetime variable on it to show that time'],
     ...SHAPE_KINDS.map(([kind, label, icon]) => [kind, label, icon, `${label} shape - shapes sit behind text and other elements`]),
 ];
 
@@ -71,7 +72,7 @@ const PALETTE_ITEMS = [
 // a panel, or click it to add it to this panel.
 export class ElementPalette {
     // hooks: { onPick(kind), onDrop(kind, clientX, clientY), dropTargetAt(clientX, clientY) }
-    // kind: 'free-text' | a shape kind ('rectangle', 'ellipse')
+    // kind: 'free-text' | 'analogClock' | a shape kind ('rectangle', 'ellipse')
     constructor(hooks) {
         this.el = document.createElement('div');
         this.el.className = 'pp-shape-palette';

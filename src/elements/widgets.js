@@ -89,6 +89,9 @@ function barMarkup(orientation) {
 
 function build(holder, type) {
     holder.replaceChildren();
+    // Clear anything another element type (an analog clock) left behind.
+    holder.removeAttribute('style');
+    holder.removeAttribute('title');
     holder.dataset.type = type;
     if (type === 'bar-horizontal') holder.innerHTML = barMarkup('h');
     else if (type === 'bar-vertical') holder.innerHTML = barMarkup('v');

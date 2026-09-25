@@ -56,6 +56,7 @@ import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
     ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
 } from '../elements/element-model.js';
+import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
@@ -279,12 +280,14 @@ export function getBoundVariableNames() {
     return [...names];
 }
 
-// The image variables panels use as backgrounds.
+// The image variables panels use as backgrounds, and analog clocks for
+// their face and hands.
 export function getBoundImageNames() {
     const names = new Set();
     for (const record of listPanels()) {
         const name = record.style?.backgroundImageVariable;
         if (typeof name === 'string' && name) names.add(name);
+        for (const widget of record.widgets) for (const clockImage of clockImageVariables(widget)) names.add(clockImage);
     }
     return [...names];
 }
@@ -682,8 +685,16 @@ export function updateElement(panel, elementId, patch) {
     const widgets = panel.record.widgets.map((w) => (w.id === elementId ? next : w));
     if (!saveWidgets(panel, widgets)) return false;
     const before = current.binding?.name ?? null;
-    const after = panel.getElement(elementId)?.binding?.name ?? null;
-    if (before !== after) emitBindingsChange(after ? [after] : []);
+    const saved = panel.getElement(elementId);
+    const after = saved?.binding?.name ?? null;
+    // A clock's image variables are watched like a panel background's.
+    const imagesBefore = clockImageVariables(current);
+    const imagesAfter = clockImageVariables(saved);
+    if (before !== after || imagesBefore.join('|') !== imagesAfter.join('|')) {
+        const added = imagesAfter.filter((name) => !imagesBefore.includes(name));
+        if (after && before !== after) added.push(after);
+        emitBindingsChange(added);
+    }
     return true;
 }
 
@@ -749,8 +760,9 @@ export function addVariableElement(panel, name, at = null) {
     return element;
 }
 
-// Adds an unbound element from the palette: free text ('free-text') or a
-// shape ('rectangle' | 'ellipse'). `at` ({ x, y } in body coordinates,
+// Adds an element from the palette: free text ('free-text'), a shape
+// ('rectangle' | 'ellipse') or an analog clock ('analogClock', left
+// unbound - drop a datetime variable on it). `at` ({ x, y } in body coordinates,
 // its top-left) defaults to the panel's top-left corner. The new element
 // is selected.
 export function addPaletteElement(panel, kind, at = null) {
@@ -761,7 +773,7 @@ export function addPaletteElement(panel, kind, at = null) {
     const grid = panel.gridSize() || 1;
     const bodyWidth = panel.body.clientWidth || panel.record.width;
     const bodyHeight = panel.body.clientHeight || panel.record.height;
-    const type = kind === ELEMENT_TYPE_FREE_TEXT ? ELEMENT_TYPE_FREE_TEXT : ELEMENT_TYPE_SHAPE;
+    const type = paletteType(kind);
     const [defaultW, defaultH] = DEFAULT_TYPE_SIZES[type];
     const width = Math.max(24, Math.min(defaultW, bodyWidth));
     const height = Math.max(16, Math.min(defaultH, bodyHeight));
@@ -769,10 +781,18 @@ export function addPaletteElement(panel, kind, at = null) {
     const y = Math.max(0, Math.min(Math.round(at ? softSnap(at.y, grid) : 0), bodyHeight - height));
     const element = type === ELEMENT_TYPE_FREE_TEXT
         ? createVariableElement({ type, x, y, width, height, content: 'Text', showLabel: false })
-        : createVariableElement({ type, x, y, width, height, shape: { kind } });
+        : type === ELEMENT_TYPE_ANALOG_CLOCK
+            ? createVariableElement({ type, x, y, width, height, showLabel: false })
+            : createVariableElement({ type, x, y, width, height, shape: { kind } });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);
     return element;
+}
+
+// The element type a palette item adds.
+function paletteType(kind) {
+    if (kind === ELEMENT_TYPE_FREE_TEXT || kind === ELEMENT_TYPE_ANALOG_CLOCK) return kind;
+    return ELEMENT_TYPE_SHAPE;
 }
 
 // Drops a palette item onto a panel, centred on the pointer.
@@ -785,7 +805,7 @@ export function dropPaletteElementAt(kind, clientX, clientY) {
         return false;
     }
     const rect = panel.body.getBoundingClientRect();
-    const [w, h] = DEFAULT_TYPE_SIZES[kind === ELEMENT_TYPE_FREE_TEXT ? ELEMENT_TYPE_FREE_TEXT : ELEMENT_TYPE_SHAPE];
+    const [w, h] = DEFAULT_TYPE_SIZES[paletteType(kind)];
     addPaletteElement(panel, kind, {
         x: clientX - rect.left + panel.body.scrollLeft - w / 2,
         y: clientY - rect.top + panel.body.scrollTop - h / 2,

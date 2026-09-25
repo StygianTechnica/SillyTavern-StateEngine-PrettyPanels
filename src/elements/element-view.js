@@ -13,9 +13,11 @@ import {
 } from './element-model.js';
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
+import { renderClock, ELEMENT_TYPE_ANALOG_CLOCK } from './clock.js';
 import { formatValue } from './formats.js';
 import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
+import { isColor } from '../panels/panel-style.js';
 
 // Pointer travel (px) before a press becomes a drag instead of a click.
 const DRAG_THRESHOLD = 3;
@@ -27,8 +29,8 @@ function clamp(value, min, max) {
 // Fills `container` (built by buildElementContent()) with an element: a
 // text element's label, icon and formatted value (styled by Element
 // Styling), free text (the element's own `content`, same styling), a
-// bar/gauge widget (src/elements/widgets.js), or a shape
-// (src/elements/shapes.js). `entry` is
+// bar/gauge widget (src/elements/widgets.js), an analog clock
+// (src/elements/clock.js), or a shape (src/elements/shapes.js). `entry` is
 // the variable service's { value, def } or undefined. Shared by the
 // on-panel view and the properties-pane preview.
 export function renderElementContent(container, element, entry) {
@@ -38,6 +40,7 @@ export function renderElementContent(container, element, entry) {
 
     container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
+    container.classList.toggle('pp-kind-clock', element.type === ELEMENT_TYPE_ANALOG_CLOCK);
     if (element.type === ELEMENT_TYPE_SHAPE) {
         container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
         applyElementStyle(container, {});
@@ -63,7 +66,8 @@ export function renderElementContent(container, element, entry) {
         container.title = !element.binding
             ? 'Unbound - drag a variable onto this element to bind it'
             : `${element.binding.name}${entry === undefined ? ': no value in this chat (is its preset active?)' : ''}`;
-        renderWidget(container, element, entry);
+        if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry);
+        else renderWidget(container, element, entry);
         return;
     }
     container.classList.remove('pp-kind-widget');
@@ -104,7 +108,9 @@ export function renderElementContent(container, element, entry) {
 // variables/classes on the element (style.css "Image variable elements").
 // A rectangle or ellipse clip always covers the element; no clip uses the
 // element's fit - or, for elements saved before fit existed, the image's
-// natural size scaled down to fit (the original look).
+// natural size scaled down to fit (the original look). A clipped image
+// can have a border along its clip edge (drawn over the image, so the
+// ellipse clip doesn't cut it and image opacity doesn't fade it).
 function applyImageStyle(container, element) {
     const clip = element.clipShape ?? 'none';
     const fit = clip === 'none' ? element.fit : 'cover';
@@ -115,6 +121,11 @@ function applyImageStyle(container, element) {
     set('--pp-img-fit', fit ?? null);
     set('--pp-img-radius', clip === 'rectangle' ? `${element.borderRadius ?? 0}px` : null);
     set('--pp-img-clip', clip === 'ellipse' ? 'ellipse(50% 50% at 50% 50%)' : null);
+    const border = clip !== 'none' && element.borderWidth > 0;
+    container.classList.toggle('pp-image-bordered', border);
+    set('--pp-img-border-width', border ? `${element.borderWidth}px` : null);
+    set('--pp-img-border-color', border && isColor(element.borderColor) ? element.borderColor : null);
+    set('--pp-img-border-radius', border ? (clip === 'ellipse' ? '50%' : `${element.borderRadius ?? 0}px`) : null);
 }
 
 export function buildElementContent() {

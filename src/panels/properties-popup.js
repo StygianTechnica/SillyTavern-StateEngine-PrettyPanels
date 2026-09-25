@@ -8,8 +8,9 @@
 //   - Element Properties: the selected element's Type, Role, Binding, X/Y,
 //     Width/Height, Z Index, then per type: Show Label, Label Override,
 //     Format (+ Custom pattern) and Element Styling (text), Text + Preset
-//     and Element Styling (free text), Widget Properties (bars/gauges) or
-//     Shape Properties (shapes); Image (opacity, fit, clipping) for a text
+//     and Element Styling (free text), Widget Properties (bars/gauges),
+//     Clock Properties (analog clocks: theme, face, images, geometry, hands,
+//     opacity) or Shape Properties (shapes); Image (opacity, fit, clipping) for a text
 //     element showing an image variable; fonts are chosen in the Font Picker
 //     (src/ui/font-picker.js); a live
 //     Preview, and delete. Rows carry data-for-types / data-widget-field
@@ -27,11 +28,16 @@ import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
 import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
 import {
     ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
-    isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_DEFAULTS,
+    isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import { formatsFor, DATETIME_PATTERN_HINT } from '../elements/formats.js';
 import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS } from '../elements/shapes.js';
+import {
+    ELEMENT_TYPE_ANALOG_CLOCK, CLOCK_HANDS, CLOCK_IMAGE_KEYS, CLOCK_LIMITS, CLOCK_STYLES, CLOCK_NUMERALS, CLOCK_TICKS,
+    clockImageSource, clockGeometry, effectiveClock,
+} from '../elements/clock.js';
+import { listThemes, getTheme, DEFAULT_THEME_ID } from '../elements/themes.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
@@ -100,7 +106,9 @@ function checkRow(label, scope, key) {
         </label>`;
 }
 
-const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && !isUnboundType(id)).join(' ');
+const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== ELEMENT_TYPE_ANALOG_CLOCK && !isUnboundType(id)).join(' ');
+// A clock image selector's "Image URL" choice (the URL field shows).
+const CLOCK_URL_CHOICE = '__url';
 // Every type that shows a variable (all but shapes and free text).
 const BOUND_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => !isUnboundType(id)).join(' ');
 // Element Styling keys holding fractional numbers (not rounded).
@@ -142,6 +150,22 @@ function selectRow(label, scope, key, options) {
         <div class="pp-style-row"><span>${label}</span>
             <div class="pp-style-controls">
                 <select class="text_pole" data-style="${scope}:${key}">${opts}</select>
+            </div>
+        </div>`;
+}
+
+// One clock image selector: a dropdown (theme default / URL / an image
+// variable) and, for URL, the URL field.
+function clockImageRow(label, key) {
+    return `
+        <div class="pp-style-row"><span>${label}</span>
+            <div class="pp-style-controls">
+                <select class="text_pole" data-clock-image="${key}" title="The theme's image, an image URL, or a State Engine image variable (the image it is showing)"></select>
+            </div>
+        </div>
+        <div class="pp-style-row" data-clock-url-row="${key}"><span></span>
+            <div class="pp-style-controls">
+                <input type="text" class="text_pole" data-clock-url="${key}" placeholder="image URL" autocomplete="off" />
             </div>
         </div>`;
 }
@@ -374,6 +398,7 @@ export class PanelPropertiesPopup {
         this.#fillElementStyle(element);
         this.#fillWidget(element);
         this.#fillShape(element);
+        this.#fillClock(element);
     }
 
     // The Image rows: only for a text element whose value is drawn as an
@@ -395,6 +420,13 @@ export class PanelPropertiesPopup {
         set('imageClip', (f) => { f.value = clip; });
         set('imageRadius', (f) => { f.value = String(element.borderRadius ?? 0); });
         row.querySelector('[data-el="imageRadiusRow"]').hidden = clip !== 'rectangle';
+        // The border follows the clip, so it needs one.
+        row.querySelector('[data-el="imageBorderRows"]').hidden = clip === 'none';
+        set('imageBorderWidth', (f) => { f.value = String(element.borderWidth ?? 0); });
+        set('imageBorderColor', (f) => {
+            const theme = getComputedStyle(document.body).getPropertyValue('--SmartThemeBodyColor').trim() || '#ffffff';
+            f.value = toHex(typeof element.borderColor === 'string' && element.borderColor ? element.borderColor : theme);
+        });
         // A clip always covers the element, so Fit only matters without one.
         row.querySelector('[data-el="imageFitRow"]').hidden = clip !== 'none';
     }
@@ -408,6 +440,81 @@ export class PanelPropertiesPopup {
         this.#fillColor('shape', 'borderColor', shape.borderColor, body ? getComputedStyle(body).borderTopColor : '#888888');
         for (const key of Object.keys(SHAPE_LIMITS)) this.#fillValue('shape', key, shape[key]);
         this.#styleField('shape', 'cornerRadius').closest('.pp-style-row').hidden = kind === 'ellipse';
+    }
+
+    #fillClock(element) {
+        if (element.type !== ELEMENT_TYPE_ANALOG_CLOCK) return;
+        const clock = element.clock ?? {};
+        const theme = this.#styleField('clock', 'themeStyle');
+        if (theme !== document.activeElement) {
+            const defaultLabel = getTheme(DEFAULT_THEME_ID)?.label ?? DEFAULT_THEME_ID;
+            theme.replaceChildren(new Option(`Default (${defaultLabel})`, ''), ...listThemes().map(([id, label]) => new Option(label, id)));
+            if (clock.themeStyle && !listThemes().some(([id]) => id === clock.themeStyle)) theme.appendChild(new Option(`${clock.themeStyle} (not found)`, clock.themeStyle));
+        }
+        this.#fillValue('clock', 'themeStyle', clock.themeStyle ?? '');
+        // The "Theme" choices name what the theme gives.
+        const themed = effectiveClock({ themeStyle: clock.themeStyle });
+        for (const [key, options] of [['style', CLOCK_STYLES], ['numerals', CLOCK_NUMERALS], ['tickMarks', CLOCK_TICKS]]) {
+            const select = this.#styleField('clock', key);
+            select.options[0].textContent = `Theme (${options.find(([id]) => id === themed[key])?.[1] ?? themed[key]})`;
+            this.#fillValue('clock', key, clock[key] ?? '');
+        }
+        const themeClock = getTheme(clock.themeStyle).clock ?? {};
+        for (const key of CLOCK_IMAGE_KEYS) this.#fillClockImage(key, clock[key], clockImageSource(themeClock[key]));
+        for (const key of Object.keys(CLOCK_LIMITS)) this.#fillValue('clock', key, clock[key]);
+        // Blank geometry and hands: show what is in use.
+        const geo = clockGeometry({}, Math.max(1, element.width - 2), Math.max(1, element.height - 2));
+        this.#styleField('clock', 'radius').placeholder = `auto (${Math.round(geo.r)})`;
+        this.#styleField('clock', 'centerX').placeholder = `auto (${Math.round(geo.cx)})`;
+        this.#styleField('clock', 'centerY').placeholder = `auto (${Math.round(geo.cy)})`;
+        for (const hand of CLOCK_HANDS) {
+            this.#styleField('clock', `${hand}HandLength`).placeholder = String(themed[`${hand}HandLength`]);
+            this.#styleField('clock', `${hand}HandOffset`).placeholder = String(themed[`${hand}HandOffset`]);
+        }
+        const opacity = Number.isFinite(element.opacity) ? element.opacity : 1;
+        const slider = this.el.querySelector('[data-el="clockOpacity"]');
+        if (slider !== document.activeElement) slider.value = String(opacity);
+        this.el.querySelector('[data-el="clockOpacityValue"]').textContent = `${Math.round(opacity * 100)}%`;
+    }
+
+    // A clock image selector: theme default, a URL, or an image variable
+    // (grouped by preset; a stored name missing from the catalog is kept).
+    #fillClockImage(key, stored, themeSource) {
+        const select = this.el.querySelector(`[data-clock-image="${key}"]`);
+        const url = this.el.querySelector(`[data-clock-url="${key}"]`);
+        const variable = typeof stored === 'string' ? null : clockImageSource(stored)?.variable ?? null;
+        const current = typeof stored === 'string' ? CLOCK_URL_CHOICE : (variable ?? '');
+        if (select !== document.activeElement) {
+            const none = themeSource ? 'Theme image' : (key === 'backdropImage' ? 'None (drawn face)' : 'None (drawn hand)');
+            const options = [new Option(none, ''), new Option('Image URL…', CLOCK_URL_CHOICE)];
+            const groups = getCatalog()
+                .map((preset) => ({ preset, vars: preset.variables.filter((v) => ['image', 'imageList', 'imageMap'].includes(v.type)) }))
+                .filter((g) => g.vars.length > 0);
+            for (const { preset, vars } of groups) {
+                const group = document.createElement('optgroup');
+                group.label = `${preset.name} (${preset.namespace})`;
+                for (const v of vars) group.appendChild(new Option(`${v.label || localName(v.name)} · ${v.type}`, v.name));
+                options.push(group);
+            }
+            if (variable && !groups.some((g) => g.vars.some((v) => v.name === variable))) {
+                options.push(new Option(`${variable} (not found)`, variable));
+            }
+            select.replaceChildren(...options);
+            select.value = current;
+        }
+        this.el.querySelector(`[data-clock-url-row="${key}"]`).hidden = current !== CLOCK_URL_CHOICE;
+        if (url !== document.activeElement) url.value = typeof stored === 'string' ? stored : '';
+    }
+
+    // Stores one clock image: a URL string ('' while one is being typed),
+    // { variable }, or null (back to the theme's).
+    #commitClockImage(key, value) {
+        const element = this.#selected();
+        if (!element) return;
+        const clock = { ...element.clock };
+        if (value === null) delete clock[key];
+        else clock[key] = value;
+        this.hooks.onElementChange(element.id, { clock });
     }
 
     // Shows only the rows that apply to the element's type.
@@ -596,7 +703,7 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
-        if (scope === 'widget' || scope === 'shape') {
+        if (scope === 'widget' || scope === 'shape' || scope === 'clock') {
             const settings = { ...element[scope] };
             if (value === null || value === '' || value === undefined) delete settings[key];
             else settings[key] = value;
@@ -621,6 +728,7 @@ export class PanelPropertiesPopup {
         if (scope === 'panel') return PANEL_STYLE_LIMITS[key];
         if (scope === 'widget') return WIDGET_LIMITS[key] ?? null;
         if (scope === 'shape') return SHAPE_LIMITS[key] ?? null;
+        if (scope === 'clock') return CLOCK_LIMITS[key] ?? null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
@@ -856,6 +964,14 @@ export class PanelPropertiesPopup {
                     <label class="pp-field" data-el="imageRadiusRow"><span>Radius</span>
                         <input type="number" class="text_pole" data-el="imageRadius" min="${IMAGE_RADIUS_LIMITS[0]}" max="${IMAGE_RADIUS_LIMITS[1]}" step="1" title="Corner rounding of the rectangle clip, px" />
                     </label>
+                    <div data-el="imageBorderRows">
+                        <label class="pp-field"><span>Border</span>
+                            <input type="number" class="text_pole" data-el="imageBorderWidth" min="${IMAGE_BORDER_WIDTH_LIMITS[0]}" max="${IMAGE_BORDER_WIDTH_LIMITS[1]}" step="1" title="Width of the border along the clip shape's edge, px (0 = none)" />
+                        </label>
+                        <label class="pp-field"><span>Border color</span>
+                            <input type="color" data-el="imageBorderColor" title="Colour of the border along the clip shape's edge" />
+                        </label>
+                    </div>
                     <label class="pp-field" data-el="imageFitRow"><span>Fit</span>
                         <select class="text_pole" data-el="imageFit" title="Without a clip shape: fill the element (cropping) or show the whole image">
                             ${IMAGE_FITS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
@@ -900,6 +1016,35 @@ export class PanelPropertiesPopup {
                     ${widgetField('barWidth', numberRow('Bar width', 'widget', 'barWidth', WIDGET_LIMITS.barWidth))}
                     ${widgetField('showValue', checkRow('Show value', 'widget', 'showValue'))}
                     ${widgetField('animate', checkRow('Animate changes', 'widget', 'animate'))}
+                `, 'pp-subsection')}
+                </div>
+                <div data-for-types="${ELEMENT_TYPE_ANALOG_CLOCK}">
+                ${sectionMarkup('clock', 'Clock Properties', '', `
+                    <small class="pp-field-info">Shows the time of the bound datetime variable, in its own calendar. Anything left blank comes from the theme.</small>
+                    ${selectRow('Theme', 'clock', 'themeStyle', [])}
+                    ${selectRow('Face', 'clock', 'style', [['', 'Theme'], ...CLOCK_STYLES])}
+                    ${selectRow('Numerals', 'clock', 'numerals', [['', 'Theme'], ...CLOCK_NUMERALS])}
+                    ${selectRow('Tick marks', 'clock', 'tickMarks', [['', 'Theme'], ...CLOCK_TICKS])}
+                    ${clockImageRow('Backdrop', 'backdropImage')}
+                    ${clockImageRow('Hour hand', 'hourHandImage')}
+                    ${clockImageRow('Minute hand', 'minuteHandImage')}
+                    ${clockImageRow('Second hand', 'secondHandImage')}
+                    ${numberRow('Radius', 'clock', 'radius', CLOCK_LIMITS.radius)}
+                    ${numberRow('Center X', 'clock', 'centerX', CLOCK_LIMITS.centerX)}
+                    ${numberRow('Center Y', 'clock', 'centerY', CLOCK_LIMITS.centerY)}
+                    <small class="pp-field-info">Hand length runs from the centre to the tip; offset is how far the hand reaches back past the centre (for an image, where its pivot sits). Both are % of the radius; a length of 0 hides the hand.</small>
+                    ${numberRow('Hour length', 'clock', 'hourHandLength', CLOCK_LIMITS.hourHandLength, '%')}
+                    ${numberRow('Hour offset', 'clock', 'hourHandOffset', CLOCK_LIMITS.hourHandOffset, '%')}
+                    ${numberRow('Minute length', 'clock', 'minuteHandLength', CLOCK_LIMITS.minuteHandLength, '%')}
+                    ${numberRow('Minute offset', 'clock', 'minuteHandOffset', CLOCK_LIMITS.minuteHandOffset, '%')}
+                    ${numberRow('Second length', 'clock', 'secondHandLength', CLOCK_LIMITS.secondHandLength, '%')}
+                    ${numberRow('Second offset', 'clock', 'secondHandOffset', CLOCK_LIMITS.secondHandOffset, '%')}
+                    <div class="pp-style-row"><span>Opacity</span>
+                        <div class="pp-style-controls pp-image-opacity">
+                            <input type="range" data-el="clockOpacity" min="0" max="1" step="0.05" />
+                            <span data-el="clockOpacityValue"></span>
+                        </div>
+                    </div>
                 `, 'pp-subsection')}
                 </div>
                 <div data-for-types="free-text">
@@ -1089,6 +1234,25 @@ export class PanelPropertiesPopup {
         field('imageRadius').addEventListener('input', (e) => {
             if (Number.isFinite(e.target.valueAsNumber)) this.#change({ borderRadius: Math.round(e.target.valueAsNumber) });
         });
+        field('imageBorderWidth').addEventListener('input', (e) => {
+            if (!Number.isFinite(e.target.valueAsNumber)) return;
+            const [min, max] = IMAGE_BORDER_WIDTH_LIMITS;
+            this.#change({ borderWidth: Math.min(max, Math.max(min, Math.round(e.target.valueAsNumber))) });
+        });
+        field('imageBorderColor').addEventListener('input', (e) => this.#change({ borderColor: e.target.value }));
+        field('clockOpacity').addEventListener('input', (e) => this.#change({ opacity: Math.round(Number(e.target.value) * 100) / 100 }));
+        for (const select of el.querySelectorAll('[data-clock-image]')) {
+            const key = select.dataset.clockImage;
+            select.addEventListener('focus', () => void loadCatalog());
+            select.addEventListener('change', () => {
+                if (select.value === '') this.#commitClockImage(key, null);
+                else if (select.value === CLOCK_URL_CHOICE) this.#commitClockImage(key, el.querySelector(`[data-clock-url="${key}"]`).value.trim());
+                else this.#commitClockImage(key, { variable: select.value });
+            });
+        }
+        for (const input of el.querySelectorAll('[data-clock-url]')) {
+            input.addEventListener('input', () => this.#commitClockImage(input.dataset.clockUrl, input.value.trim()));
+        }
         for (const button of el.querySelectorAll('[data-arrange]')) {
             button.addEventListener('click', () => {
                 const element = this.#selected();

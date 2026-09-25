@@ -12,6 +12,7 @@
 import { clone } from './store.js';
 import { normalizeWidgets } from '../elements/element-model.js';
 import { normalizeAnchorId } from '../panels/anchors.js';
+import { CLOCK_IMAGE_KEYS, clockImageSource } from '../elements/clock.js';
 
 export const DEFAULT_PANEL_WIDTH = 280;
 export const DEFAULT_PANEL_HEIGHT = 180;
@@ -52,14 +53,21 @@ function anchorFields(source) {
     return { anchorMode: anchored ? 'anchored' : 'free', anchorTarget: target };
 }
 
-// A design with every variable binding removed - elements' bindings and
-// the panel's background image variable - which is what a panel template
-// may hold.
+// A design with every variable binding removed - elements' bindings, an
+// analog clock's image variables and the panel's background image
+// variable - which is what a panel template may hold.
 export function stripBindings(design) {
     const { backgroundImageVariable: _binding, ...style } = design.style ?? {};
     return {
         ...design,
         style,
-        widgets: design.widgets.map((w) => ('binding' in w ? { ...w, binding: null } : w)),
+        widgets: design.widgets.map((w) => ('binding' in w ? { ...w, binding: null, ...stripClockImages(w) } : w)),
     };
+}
+
+function stripClockImages(element) {
+    if (!element.clock || typeof element.clock !== 'object') return {};
+    const clock = { ...element.clock };
+    for (const key of CLOCK_IMAGE_KEYS) if (clockImageSource(clock[key])?.variable) delete clock[key];
+    return { clock };
 }

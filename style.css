@@ -500,6 +500,21 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
     align-self: stretch;
 }
 
+/* Border along a clipped image's edge: an overlay the same shape as the clip. */
+.pp-element.pp-kind-image.pp-image-bordered .pp-element-value {
+    position: relative;
+}
+
+.pp-element.pp-kind-image.pp-image-bordered .pp-element-value::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border: var(--pp-img-border-width, 2px) solid var(--pp-img-border-color, var(--SmartThemeBodyColor));
+    border-radius: var(--pp-img-border-radius, 0);
+    pointer-events: none;
+}
+
 .pp-element.pp-kind-image.pp-image-fill .pp-element-value img {
     width: 100%;
     height: 100%;
@@ -967,6 +982,10 @@ body.pp-editing .pp-element.pp-kind-free-text.pp-element-empty .pp-element-value
     gap: 6px;
 }
 
+.pp-style-row[hidden] {
+    display: none;
+}
+
 .pp-style-row > span {
     opacity: 0.7;
 }
@@ -1059,6 +1078,102 @@ body.pp-editing .pp-element.pp-kind-free-text.pp-element-empty .pp-element-value
 .pp-element-missing > .pp-widget,
 .pp-widget.pp-widget-nodata {
     opacity: 0.45;
+}
+
+/* ---------- Analog clocks (src/elements/clock.js) ---------- */
+
+.pp-element.pp-kind-widget.pp-kind-clock {
+    padding: 0;
+}
+
+.pp-element.pp-kind-clock > .pp-widget {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    --pp-clock-face: color-mix(in srgb, var(--SmartThemeBlurTintColor) 85%, transparent);
+    --pp-clock-rim: var(--SmartThemeBodyColor);
+    --pp-clock-mark: var(--SmartThemeBodyColor);
+    --pp-clock-hand: var(--SmartThemeBodyColor);
+    --pp-clock-second: var(--SmartThemeQuoteColor);
+}
+
+.pp-clock-face,
+.pp-clock-backdrop,
+.pp-clock-hand,
+.pp-clock-cap {
+    position: absolute;
+    pointer-events: none;
+}
+
+.pp-clock-face {
+    left: 0;
+    top: 0;
+    overflow: visible;
+}
+
+.pp-clock-backdrop {
+    object-fit: contain;
+}
+
+.pp-clock-backdrop[hidden],
+.pp-clock-hand[hidden],
+.pp-clock-cap[hidden] {
+    display: none;
+}
+
+.pp-clock-dial {
+    fill: var(--pp-clock-face);
+    stroke: var(--pp-clock-rim);
+}
+
+.pp-clock-dial-minimal {
+    fill: none;
+    stroke-opacity: 0.35;
+}
+
+.pp-clock-tick {
+    stroke: var(--pp-clock-mark);
+    stroke-linecap: round;
+}
+
+.pp-clock-tick-minor {
+    stroke-opacity: 0.45;
+}
+
+.pp-clock-numeral {
+    fill: var(--pp-clock-mark);
+    font-weight: 600;
+}
+
+.pp-clock-hand {
+    background-color: var(--pp-clock-hand);
+    border-radius: 999px;
+}
+
+.pp-clock-hand-second {
+    background-color: var(--pp-clock-second);
+}
+
+.pp-clock-hand > img {
+    display: none;
+}
+
+.pp-clock-hand.pp-clock-hand-image {
+    background: none;
+    border-radius: 0;
+}
+
+.pp-clock-hand.pp-clock-hand-image > img {
+    display: block;
+    width: auto;
+    height: 100%;
+}
+
+.pp-clock-cap {
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background-color: var(--pp-clock-second);
 }
 
 .pp-bar {
@@ -1851,6 +1966,7 @@ body.pp-anchor-margins .fillRight {
 
 [data-el="image-row"][hidden],
 [data-el="imageRadiusRow"][hidden],
-[data-el="imageFitRow"][hidden] {
+[data-el="imageFitRow"][hidden],
+[data-el="imageBorderRows"][hidden] {
     display: none;
 }
