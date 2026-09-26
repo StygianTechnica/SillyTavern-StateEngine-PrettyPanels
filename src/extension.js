@@ -18,6 +18,7 @@ import { EXTENSION_ID, NAMESPACE } from './constants.js';
 import { initPanels } from './panels/panel-manager.js';
 import { setDateTimeFormatter } from './elements/formats.js';
 import { setDateTimePartsReader } from './elements/clock.js';
+import { migrateInlineImages } from './storage/pp-variables.js';
 import { startChatSession } from './chat/chat-session.js';
 import { LAYOUT_VARIABLE } from './chat/pp-config.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
@@ -82,6 +83,9 @@ export async function initExtension() {
     } catch (err) {
         console.warn(`[${EXTENSION_ID}] datetime parts unavailable - analog clocks show no time (update State Engine).`, err);
     }
+    // Theme assets saved as inline images by the first asset version move
+    // to files in the background; panels redraw when they have.
+    void migrateInlineImages().catch((err) => console.warn(`[${EXTENSION_ID}] theme asset migration failed`, err));
 
     initPanels();
     addWandMenuItems();

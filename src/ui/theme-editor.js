@@ -22,7 +22,7 @@ import {
     addVariant, renameVariant, deleteVariant, exportThemePayload, importThemeText, setThemeAsset, removeThemeAsset,
 } from '../themes/theme-store.js';
 import { getPPVariable, resolveImageRef } from '../storage/pp-variables.js';
-import { pickImageFile, prepareImage } from './image-upload.js';
+import { pickImageFile } from './image-upload.js';
 import {
     THEME_COLORS, THEME_FONTS, THEME_FORMATTING, NUMBER_FORMATS, VARIANT_FIELDS, ELEMENT_DEFAULT_FIELDS,
     ELEMENT_DEFAULT_GROUPS, COMPONENTS, COMPONENT_FIELDS, FALLBACK_VARIANT, ASSET_SUGGESTIONS, ASSET_NAME_PATTERN, variantNameFor,
@@ -343,7 +343,8 @@ class ThemeEditor {
         const file = await pickImageFile();
         if (!file) return;
         try {
-            setThemeAsset(this.themeId, assetName, await prepareImage(file));
+            notify('info', `Uploading "${assetName}"…`);
+            await setThemeAsset(this.themeId, assetName, file);
             this.#renderProperties();
         } catch (err) {
             notify('error', err.message);
@@ -352,7 +353,7 @@ class ThemeEditor {
 
     #renderAssets(add) {
         const assets = Object.entries(this.theme.assets);
-        add(make('small', 'pp-field-info', 'Images stored with this theme (in Pretty Panels\' settings, as variables named pp_theme_&lt;theme&gt;_&lt;asset&gt;). Pick them in any image field: variant images, clock images, component icons. Uploads are scaled to fit 1024px.'));
+        add(make('small', 'pp-field-info', 'Images for this theme. Each is saved in your SillyTavern images folder (user/images/pretty-panels-theme-assets/) and becomes a Pretty Panels image variable, pp_theme_&lt;theme&gt;_&lt;asset&gt;. Pick them in any image field here, or drag them from the variable list in Panel Properties onto a panel. PNG, JPEG, GIF, WebP or BMP.'));
 
         const row = make('div', 'pp-te-asset-add');
         const nameInput = make('input', 'text_pole');
@@ -386,7 +387,7 @@ class ThemeEditor {
             const info = make('div', 'pp-te-asset-info', `
                 <b>${escapeHtml(assetName)}</b>
                 <code>${escapeHtml(ref)}</code>
-                <small>${record ? `${record.width} × ${record.height} · ${Math.max(1, Math.round(record.bytes / 1024))} KB · ${escapeHtml(record.mime)}` : 'Missing image'}</small>`);
+                <small>${record ? `${escapeHtml(record.value)} · v${escapeHtml(record.version)}` : 'Missing image'}</small>`);
             const replace = make('button', 'menu_button', '<i class="fa-solid fa-arrow-up-from-bracket"></i>');
             replace.type = 'button';
             replace.title = 'Replace the image (everything using it updates)';

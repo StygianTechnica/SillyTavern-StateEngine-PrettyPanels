@@ -15,7 +15,10 @@
 //   padding            px, 0-64 - space between the panel edge and elements
 //   margin             px, 0-64 - the visible panel is inset by this much
 //                      inside its stored bounds (geometry is unchanged)
-//   backgroundImage    image URL (remote, or a SillyTavern-served path)
+//   backgroundImage    image URL (remote, or a SillyTavern-served path), or
+//                      a Pretty Panels image variable's name (a theme asset,
+//                      e.g. dropped from the variable list; resolved by
+//                      src/themes/theme-apply.js)
 //   backgroundImageVariable  a State Engine image / imageList / imageMap
 //                      variable; when set, the image it is showing replaces
 //                      backgroundImage (which stays stored). A binding, so

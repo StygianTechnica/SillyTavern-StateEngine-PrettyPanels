@@ -12,18 +12,23 @@
 // Every mutation saves (SillyTavern's debounced save) and notifies
 // onThemesChange listeners, which re-render panels live.
 //
-// Theme ASSETS are images uploaded in the Theme Editor. Each is a Pretty
+// Theme ASSETS are images uploaded in the Theme Editor. Each image is a
+// FILE on the SillyTavern server (src/storage/image-files.js) and a Pretty
 // Panels image variable (src/storage/pp-variables.js) named
-// pp_theme_<themeId>_<assetName>, and theme.assets maps the asset name to
-// that variable name. Duplicating a theme copies its assets under the new
-// theme's id, deleting a theme deletes them, and exports carry them.
+// pp_theme_<themeId>_<assetName> whose value is that file's relative path;
+// theme.assets maps the asset name to the variable NAME only. Duplicating a
+// theme gives it its own variables (pointing at the same files), deleting a
+// theme deletes its variables, and exports embed the files.
 
 import { generateId, uniqueName, save, clone } from '../storage/store.js';
 import { builtInThemes, normalizeTheme, variantNameFor, DEFAULT_VARIANT, FALLBACK_VARIANT, THEME_FONTS, ELEMENT_DEFAULT_FIELDS } from './theme-schema.js';
 import { makePayload, readPayload, KIND } from '../library/format.js';
 import { assembleFonts, importEmbeddedFonts } from '../fonts/font-export.js';
 import { fontRegistry } from '../fonts/font-registry.js';
-import { getPPVariable, setImageVariable, deletePPVariable, themeAssetVariableName } from '../storage/pp-variables.js';
+import {
+    getPPVariable, setImageVariable, deletePPVariable, themeAssetVariableName, setPPVariableLabeler, THEME_ASSET_PREFIX,
+} from '../storage/pp-variables.js';
+import { uploadImageFile, fetchImageFile, uploadEmbeddedImage, uploadDataUrl } from '../storage/image-files.js';
 import { ASSET_NAME_PATTERN } from './theme-schema.js';
 
 const SETTINGS_KEY = 'prettyPanelsThemes';
@@ -130,27 +135,32 @@ function rewriteRefs(value, renames) {
     return value;
 }
 
-// Stores `images` ({ assetName: image record }) as theme `themeId`'s asset
-// variables; returns Map(old variable name -> new) for rewriteRefs.
-function adoptAssets(themeId, oldRefs, images) {
+// Creates theme `themeId`'s asset variables from `paths` ({ assetName:
+// relative file path }); returns Map(old variable name -> new) for
+// rewriteRefs, and the new theme.assets.
+function adoptAssets(themeId, oldRefs, paths) {
     const renames = new Map();
-    for (const [assetName, image] of Object.entries(images)) {
-        if (!ASSET_NAME_PATTERN.test(assetName) || typeof image?.value !== 'string' || !image.value.startsWith('data:image/')) continue;
+    const assets = {};
+    for (const [assetName, path] of Object.entries(paths)) {
+        if (!ASSET_NAME_PATTERN.test(assetName) || typeof path !== 'string' || !path) continue;
         const name = themeAssetVariableName(themeId, assetName);
-        setImageVariable(name, image, { themeId, assetName });
+        setImageVariable(name, path);
+        assets[assetName] = name;
         if (oldRefs[assetName]) renames.set(oldRefs[assetName], name);
     }
-    return renames;
+    return { renames, assets };
 }
 
 export function duplicateTheme(id) {
     const source = getTheme(id);
     if (!source) return null;
     const newId = generateId('ppt');
-    const images = Object.fromEntries(Object.entries(source.assets).map(([n, ref]) => [n, getPPVariable(ref)]).filter(([, rec]) => rec));
-    const renames = adoptAssets(newId, source.assets, images);
+    // The copy's variables point at the same files; replacing an image in
+    // either theme uploads a new file, so they never affect each other.
+    const paths = Object.fromEntries(Object.entries(source.assets).map(([n, ref]) => [n, getPPVariable(ref)?.value]).filter(([, path]) => path));
+    const { renames, assets } = adoptAssets(newId, source.assets, paths);
     const copy = rewriteRefs(clone(source), renames);
-    copy.assets = Object.fromEntries(Object.keys(images).map((n) => [n, themeAssetVariableName(newId, n)]));
+    copy.assets = assets;
     return store({ ...copy, id: newId, name: uniqueName(`${source.name} (copy)`, names()), createdAt: Date.now(), version: 1 });
 }
 
@@ -201,13 +211,18 @@ export function deleteVariant(id, name) {
 
 // ---- Assets ---------------------------------------------------------------
 
-// Adds (or replaces) asset `assetName` from a prepared image
-// (src/ui/image-upload.js prepareImage). Returns its variable name.
-export function setThemeAsset(id, assetName, image) {
-    if (!getTheme(id)) return null;
+// Adds (or replaces) asset `assetName` from a picked image File: uploads
+// it to the asset folder, points the variable pp_theme_<id>_<assetName> at
+// the file (version 1, or one up when replacing) and records the variable
+// name in theme.assets. Returns the variable name. Throws with a
+// user-facing message.
+export async function setThemeAsset(id, assetName, file) {
+    const theme = getTheme(id);
+    if (!theme) return null;
     if (!ASSET_NAME_PATTERN.test(assetName)) throw new Error('Asset names are letters, digits, "_" and "-" (up to 40), starting with a letter or digit.');
+    const path = await uploadImageFile(file, `${theme.name}-${assetName}`);
     const name = themeAssetVariableName(id, assetName);
-    setImageVariable(name, image, { themeId: id, assetName });
+    setImageVariable(name, path);
     updateTheme(id, (draft) => {
         draft.assets[assetName] = name;
     });
@@ -246,11 +261,11 @@ export async function exportThemePayload(id) {
     await fontRegistry.load();
     const userFontIds = themeFontIds(theme).filter((fid) => fontRegistry.get(fid)?.source === 'local');
     const fonts = await assembleFonts(userFontIds);
-    // Asset images travel inside the file (they live in settings, not at a URL).
+    // Asset files travel inside the export (another install has no copy).
     const assets = {};
     for (const [assetName, ref] of Object.entries(theme.assets)) {
-        const record = getPPVariable(ref);
-        if (record) assets[assetName] = { value: record.value, mime: record.mime, width: record.width, height: record.height, bytes: record.bytes };
+        const file = await fetchImageFile(getPPVariable(ref)?.value);
+        if (file) assets[assetName] = file;
     }
     return makePayload(KIND.THEME, { theme: clone(theme), ...(fonts ? { fonts } : {}), ...(Object.keys(assets).length ? { assets } : {}) });
 }
@@ -267,11 +282,33 @@ export async function importThemeText(textContent) {
     }
     const newId = generateId('ppt');
     const oldRefs = isObject(theme.assets) ? theme.assets : {};
-    const images = isObject(data.assets) ? data.assets : {};
-    theme = rewriteRefs(theme, adoptAssets(newId, oldRefs, images));
-    theme.assets = Object.fromEntries(Object.keys(images).filter((n) => ASSET_NAME_PATTERN.test(n)).map((n) => [n, themeAssetVariableName(newId, n)]));
+    // Each embedded file is uploaded into this install's asset folder
+    // ({ base64 }; files from the first asset version held { value: data URL }).
+    const paths = {};
+    for (const [assetName, image] of Object.entries(isObject(data.assets) ? data.assets : {})) {
+        if (!ASSET_NAME_PATTERN.test(assetName) || !isObject(image)) continue;
+        try {
+            if (typeof image.base64 === 'string') paths[assetName] = await uploadEmbeddedImage(image.base64, `${theme.name ?? 'theme'}-${assetName}`);
+            else if (typeof image.value === 'string') paths[assetName] = await uploadDataUrl(image.value, `${theme.name ?? 'theme'}-${assetName}`);
+        } catch (err) {
+            console.warn(`[PrettyPanels] theme import: the asset "${assetName}" was skipped`, err);
+        }
+    }
+    const { renames, assets } = adoptAssets(newId, oldRefs, paths);
+    theme = rewriteRefs(theme, renames);
+    theme.assets = assets;
     return store({ ...theme, id: newId, name: uniqueName(typeof theme.name === 'string' && theme.name ? theme.name : 'Imported theme', names()), createdAt: Date.now() });
 }
+
+// Picker labels for asset variables: "<theme name> · <asset name>".
+setPPVariableLabeler((name) => {
+    if (!name.startsWith(THEME_ASSET_PREFIX)) return name;
+    for (const theme of listThemes()) {
+        const asset = Object.entries(theme.assets).find(([, ref]) => ref === name);
+        if (asset) return `${theme.name} · ${asset[0]}`;
+    }
+    return name;
+});
 
 // The element-defaults field list for a group (re-exported for the editor).
 export { ELEMENT_DEFAULT_FIELDS };
