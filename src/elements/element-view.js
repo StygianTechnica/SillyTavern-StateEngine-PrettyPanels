@@ -23,6 +23,18 @@ import { themedElement, clockDefaultsFor } from '../themes/theme-apply.js';
 // Pointer travel (px) before a press becomes a drag instead of a click.
 const DRAG_THRESHOLD = 3;
 
+// A press on an element calls preventDefault() (no text selection, no
+// focus change), so a properties-pane control used last - the Show label
+// checkbox, a dropdown, a half-typed field - would keep focus. The pane
+// never refreshes a focused field (so typing isn't overwritten), which
+// left it showing the PREVIOUS element's value after a switch. Blurring it
+// first commits any pending edit to the element it belongs to (still the
+// selected one at this point) and lets the switch refresh every field.
+export function releasePaneFocus() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('.pp-properties')) active.blur();
+}
+
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
 }
@@ -205,6 +217,7 @@ export class ElementView {
     #track(handle, onDrag, onClick) {
         handle.addEventListener('pointerdown', (e) => {
             if (e.button !== 0 || !document.body.classList.contains('pp-editing')) return;
+            releasePaneFocus();
             e.preventDefault();
             e.stopPropagation();
             const editable = this.panel.canEdit();
