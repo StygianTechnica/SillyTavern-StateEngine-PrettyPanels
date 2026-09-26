@@ -53,7 +53,6 @@ import {
 } from './panel-registry.js';
 import { defaultThemeChoice, onThemesChange } from '../themes/theme-store.js';
 import { resolvePanelTheme } from '../themes/theme-apply.js';
-import { isPPImageVariable } from '../storage/pp-variables.js';
 import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
@@ -248,8 +247,7 @@ const hooks = {
         deleteElement(panel, elementId);
     },
     onAddVariable(panel, name) {
-        if (isPPImageVariable(name)) setPanelBackgroundVariable(panel, name);
-        else addVariableElement(panel, name);
+        addVariableElement(panel, name);
     },
     onDropVariable(name, clientX, clientY) {
         return dropVariableAt(name, clientX, clientY);
@@ -895,24 +893,10 @@ export function dropTargetAt(clientX, clientY) {
     return { panel, elementId: elementEl.dataset.elementId };
 }
 
-// Makes a Pretty Panels image variable (a theme asset) the panel's
-// background: stored by NAME in style.backgroundImage, so replacing the
-// asset's image updates the panel. A State Engine background image
-// variable would override it, so that is cleared.
-export function setPanelBackgroundVariable(panel, name) {
-    if (!panel.canEdit()) {
-        notify('warning', 'Unlock this panel (and turn on Editing Mode) to change it.');
-        return false;
-    }
-    updatePanelStyle(panel, { backgroundImage: name, backgroundImageVariable: null });
-    panel.openProperties('panel');
-    return true;
-}
-
 // Drops a variable from the picker: onto an element it replaces that
-// element's binding; onto a panel it adds a new element at the pointer -
-// except a Pretty Panels image variable, which becomes the panel's
-// background there.
+// element's binding; onto a panel it adds a new element at the pointer.
+// Pretty Panels image variables (theme assets) behave exactly like State
+// Engine image variables: they become image elements.
 export function dropVariableAt(name, clientX, clientY) {
     const target = dropTargetAt(clientX, clientY);
     if (!target) return false;
@@ -924,8 +908,6 @@ export function dropVariableAt(name, clientX, clientY) {
     if (elementId) {
         rebindElement(panel, elementId, name);
         panel.selectElement(elementId);
-    } else if (isPPImageVariable(name)) {
-        return setPanelBackgroundVariable(panel, name);
     } else {
         const rect = panel.body.getBoundingClientRect();
         addVariableElement(panel, name, {

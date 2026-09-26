@@ -5,8 +5,9 @@
 //   { [name]: { name, type: 'image', value, version } }
 //
 // `value` is a RELATIVE path to a file on the SillyTavern server
-// ("user/images/pretty-panels-theme-assets/<file>", src/storage/image-files.js)
-// - never base64, a blob: URL or an absolute path. `version` starts at 1
+// ("user/images/pretty-panels-theme-assets/<file>"), stored there by State
+// Engine's Image API (src/themes/asset-files.js) - never base64, a blob: URL
+// or an absolute path. `version` starts at 1
 // and goes up each time the image is replaced.
 //
 // So far every one is a theme asset (src/themes/theme-store.js), named
@@ -17,7 +18,7 @@
 // a URL or such a variable's name; resolveImageRef() shows either.
 
 import { save } from './store.js';
-import { uploadDataUrl } from './image-files.js';
+import { storeDataUrl } from '../themes/asset-files.js';
 
 const SETTINGS_KEY = 'prettyPanelsVariables';
 export const THEME_ASSET_PREFIX = 'pp_theme_';
@@ -111,15 +112,15 @@ export function resolveImageRef(ref) {
 }
 
 // Assets saved by the first version of theme assets held their image as
-// a data: URL inside the variable. Each is uploaded as a file and the
-// variable pointed at it (keeping its version). Best effort: one that
-// can't be uploaded now is tried again next load.
+// a data: URL inside the variable. Each is stored as a file through State
+// Engine's Image API and the variable pointed at it (keeping its version).
+// Best effort: one that can't be stored now is tried again next load.
 export async function migrateInlineImages() {
     let changed = false;
     for (const record of Object.values(variables())) {
         if (!isObject(record) || typeof record.value !== 'string' || !record.value.startsWith('data:')) continue;
         try {
-            const path = await uploadDataUrl(record.value, record.name);
+            const path = await storeDataUrl(record.value, record.name);
             variables()[record.name] = { name: record.name, type: 'image', value: path, version: Number(record.version) || 1 };
             changed = true;
         } catch (err) {

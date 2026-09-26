@@ -186,19 +186,22 @@ on screen update live.
   Time only, and how "As stored" numbers show.
 - **Assets** - images uploaded with the theme (backdrop, panelTexture, accentStripe,
   cornerGlyph, clockFace, hourHand, minuteHand, secondHand, or any name you like). The file
-  is saved the way State Engine saves image-variable files - through SillyTavern's image
-  upload, into `data/<user>/user/images/pretty-panels-theme-assets/` - and becomes a Pretty
+  is stored by **State Engine's Image API** (`stateEngine.importImageFile`, through
+  `src/api/import-image-file.js`) - its checks and its upload, into
+  `data/<user>/user/images/pretty-panels-theme-assets/` - and becomes a Pretty
   Panels image variable in `extensionSettings.prettyPanelsVariables`:
   `{ name: "pp_theme_<themeId>_<assetName>", type: "image", value:
   "user/images/pretty-panels-theme-assets/<file>", version }`. `theme.assets` holds only the
-  variable name. PNG, JPEG, GIF, WebP or BMP up to 20 MB (no SVG - it can carry scripts).
+  variable name. What State Engine accepts: PNG, JPEG, GIF, WebP or BMP up to 20 MB (no SVG).
+  Needs a State Engine with the Image API.
   Replacing an asset uploads a new file and bumps the variable's version; everything using
   it updates. Assets saved by the first asset version (inline images) are moved to files
   automatically.
 - **Pretty Panels variables in panels** - asset variables appear in the variable list of
-  Panel Properties as a **Pretty Panels** group, like any image variable. Drag one onto a
-  panel (or click it) to make it the panel's background - stored by name as the panel's
-  `style.backgroundImage` - or onto an element to bind the element to it.
+  Panel Properties as a **Pretty Panels** group and behave exactly like any image variable:
+  drag one onto a panel (or click it) to add an image element, or onto an element to bind the
+  element to it. To use one as a panel background, pick it as the panel's Image variable in
+  Panel Styling, or as a variant's image in the Theme Editor.
 - **Variants** - panel looks: background colour, opacity and image (with blend mode), border
   colour/width, shape (rounded, square, pill, ellipse), corners, shadow (none, soft,
   standard, strong, glow), padding, margin and an accent override, plus decorations: a
@@ -282,7 +285,8 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 | `src/themes/theme-apply.js` | Theme + variant + Panel Styling -> CSS variables; element defaults |
 | `src/ui/theme-editor.js` | The Theme Editor modal |
 | `src/storage/pp-variables.js` | Pretty Panels variables (`prettyPanelsVariables`): theme asset images, `resolveImageRef()` |
-| `src/storage/image-files.js` | Asset image files: upload to / fetch from `user/images/pretty-panels-theme-assets/` |
+| `src/themes/asset-files.js` | Asset image files: stored through State Engine's Image API; read back for exports |
+| `src/api/import-image-file.js` | Wrapper for State Engine's `importImageFile()` |
 | `src/ui/image-upload.js` | The image file picker |
 | `src/fonts/` | Font system: registry, sanitizing converter, subsetter, preview, export ([docs/FONTS.md](docs/FONTS.md)) |
 | `src/ui/font-picker.js` | The Font Picker popover |

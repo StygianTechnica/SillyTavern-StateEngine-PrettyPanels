@@ -13,7 +13,8 @@
 // onThemesChange listeners, which re-render panels live.
 //
 // Theme ASSETS are images uploaded in the Theme Editor. Each image is a
-// FILE on the SillyTavern server (src/storage/image-files.js) and a Pretty
+// FILE on the SillyTavern server - stored by State Engine's Image API
+// (src/themes/asset-files.js), never by Pretty Panels itself - and a Pretty
 // Panels image variable (src/storage/pp-variables.js) named
 // pp_theme_<themeId>_<assetName> whose value is that file's relative path;
 // theme.assets maps the asset name to the variable NAME only. Duplicating a
@@ -28,7 +29,7 @@ import { fontRegistry } from '../fonts/font-registry.js';
 import {
     getPPVariable, setImageVariable, deletePPVariable, themeAssetVariableName, setPPVariableLabeler, THEME_ASSET_PREFIX,
 } from '../storage/pp-variables.js';
-import { uploadImageFile, fetchImageFile, uploadEmbeddedImage, uploadDataUrl } from '../storage/image-files.js';
+import { storeAssetFile, storeDataUrl, readAssetFile } from './asset-files.js';
 import { ASSET_NAME_PATTERN } from './theme-schema.js';
 
 const SETTINGS_KEY = 'prettyPanelsThemes';
@@ -211,16 +212,17 @@ export function deleteVariant(id, name) {
 
 // ---- Assets ---------------------------------------------------------------
 
-// Adds (or replaces) asset `assetName` from a picked image File: uploads
-// it to the asset folder, points the variable pp_theme_<id>_<assetName> at
-// the file (version 1, or one up when replacing) and records the variable
-// name in theme.assets. Returns the variable name. Throws with a
-// user-facing message.
+// Adds (or replaces) asset `assetName` from a picked image File: State
+// Engine stores the file (stateEngine.importImageFile) and returns its
+// relative path; the variable pp_theme_<id>_<assetName> points at it
+// (version 1, or one up when replacing) and theme.assets records the
+// variable NAME. Returns the variable name. Throws with State Engine's
+// reason when the file is refused.
 export async function setThemeAsset(id, assetName, file) {
     const theme = getTheme(id);
     if (!theme) return null;
     if (!ASSET_NAME_PATTERN.test(assetName)) throw new Error('Asset names are letters, digits, "_" and "-" (up to 40), starting with a letter or digit.');
-    const path = await uploadImageFile(file, `${theme.name}-${assetName}`);
+    const path = await storeAssetFile(file, `${theme.name}-${assetName}`);
     const name = themeAssetVariableName(id, assetName);
     setImageVariable(name, path);
     updateTheme(id, (draft) => {
@@ -261,11 +263,12 @@ export async function exportThemePayload(id) {
     await fontRegistry.load();
     const userFontIds = themeFontIds(theme).filter((fid) => fontRegistry.get(fid)?.source === 'local');
     const fonts = await assembleFonts(userFontIds);
-    // Asset files travel inside the export (another install has no copy).
+    // Asset files travel inside the export (another install has no copy),
+    // as data: URLs; importing stores them again through State Engine.
     const assets = {};
     for (const [assetName, ref] of Object.entries(theme.assets)) {
-        const file = await fetchImageFile(getPPVariable(ref)?.value);
-        if (file) assets[assetName] = file;
+        const dataUrl = await readAssetFile(getPPVariable(ref)?.value);
+        if (dataUrl) assets[assetName] = { dataUrl };
     }
     return makePayload(KIND.THEME, { theme: clone(theme), ...(fonts ? { fonts } : {}), ...(Object.keys(assets).length ? { assets } : {}) });
 }
@@ -282,14 +285,16 @@ export async function importThemeText(textContent) {
     }
     const newId = generateId('ppt');
     const oldRefs = isObject(theme.assets) ? theme.assets : {};
-    // Each embedded file is uploaded into this install's asset folder
-    // ({ base64 }; files from the first asset version held { value: data URL }).
+    // Each embedded file is stored in this install through State Engine's
+    // Image API, which checks it like any upload ({ dataUrl }; files from the
+    // first asset version held { value: data URL }).
     const paths = {};
     for (const [assetName, image] of Object.entries(isObject(data.assets) ? data.assets : {})) {
         if (!ASSET_NAME_PATTERN.test(assetName) || !isObject(image)) continue;
+        const dataUrl = typeof image.dataUrl === 'string' ? image.dataUrl : image.value;
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) continue;
         try {
-            if (typeof image.base64 === 'string') paths[assetName] = await uploadEmbeddedImage(image.base64, `${theme.name ?? 'theme'}-${assetName}`);
-            else if (typeof image.value === 'string') paths[assetName] = await uploadDataUrl(image.value, `${theme.name ?? 'theme'}-${assetName}`);
+            paths[assetName] = await storeDataUrl(dataUrl, `${theme.name ?? 'theme'}-${assetName}`);
         } catch (err) {
             console.warn(`[PrettyPanels] theme import: the asset "${assetName}" was skipped`, err);
         }

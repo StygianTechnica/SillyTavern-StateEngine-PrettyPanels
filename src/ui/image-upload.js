@@ -1,5 +1,5 @@
 // Image file picker for theme assets. The picked file is checked and
-// stored on the server by src/storage/image-files.js.
+// stored by State Engine's Image API (src/themes/asset-files.js).
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/bmp';
 
