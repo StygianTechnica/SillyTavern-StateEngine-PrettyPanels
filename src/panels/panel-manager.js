@@ -71,9 +71,13 @@ import {
     anchorHost, isMarginAnchor, updateMarginLayout, measureDropZones, zoneAt, showAnchorOverlay, hideAnchorOverlay, topBarBottom,
 } from './anchors.js';
 
-// Panels sit above the chat but below SillyTavern's own popups/drawers:
-// CSS z-index = BASE_Z_INDEX + the panel's stored zIndex (0..99).
-export const BASE_Z_INDEX = 2900;
+// Panels sit above the chat (#sheld is 30) but below EVERY SillyTavern
+// drawer, popup and floating window, which must stay usable:
+// CSS z-index = BASE_Z_INDEX + the panel's stored zIndex (0..99), so
+// 100..199. Kept far below 1000 because some themes (e.g. Moonlit Echoes)
+// force .drawer-content - the Author's Note window, the side drawers - down
+// to z-index 1000. State Engine's tracker sits just above, at 200.
+export const BASE_Z_INDEX = 100;
 const CASCADE_STEP = 24;
 const CASCADE_SLOTS = 8;
 
@@ -188,6 +192,11 @@ const hooks = {
     },
     onThemeChange(panel, patch) {
         setPanelTheme(panel, patch);
+    },
+    // The panel's clock overrides ({ showSecondsHand } or {} to inherit).
+    onPanelClockChange(panel, clock) {
+        const updated = updatePanelRecord(panel.id, { clock });
+        if (updated) panel.update(updated);
     },
     // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
     // toggles it in the selection; a plain press selects it (keeping a

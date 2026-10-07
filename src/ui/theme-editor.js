@@ -333,7 +333,9 @@ class ThemeEditor {
             add(make('small', 'pp-field-info', 'Card looks for scene, quest, time and clock cards. Shown in the preview.'));
             for (const [key, label] of COMPONENTS) {
                 add(make('div', 'pp-te-group', escapeHtml(label)));
-                for (const field of COMPONENT_FIELDS) add(this.#defaultField(`components.${key}`, field));
+                for (const field of COMPONENT_FIELDS) {
+                    if (!field.only || field.only.includes(key)) add(this.#defaultField(`components.${key}`, field));
+                }
             }
         }
     }
@@ -450,6 +452,10 @@ class ThemeEditor {
         add(row);
         add(make('small', 'pp-field-info', 'A variant is one panel look. Panels choose theirs in Panel Properties; "default" is used when a panel hasn\'t chosen.'));
         for (const field of VARIANT_FIELDS) {
+            if (field.boolean) {
+                add(this.#defaultField(`variants.${name}`, field));
+                continue;
+            }
             const role = VARIANT_COLOR_FALLBACK[field.key];
             add(this.#field({
                 ...field,
@@ -668,12 +674,14 @@ class ThemeEditor {
     }
 
     // Renders one element into a preview canvas with the real renderer.
-    #element(canvas, element, entry) {
+    // `context`: what an analog clock inherits (theme-apply.js clockDefaultsFor);
+    // by default the previewed variant.
+    #element(canvas, element, entry, context = { variant: this.theme.variants[this.variantName] }) {
         const el = buildElementContent();
         const full = { id: 'preview', role: '', showLabel: true, labelOverride: '', format: 'auto', formatPattern: '', zIndex: 2, style: {}, widget: {}, shape: {}, clock: {}, content: '', binding: { name: 'preview' }, ...element };
         Object.assign(el.style, { left: `${full.x}px`, top: `${full.y}px`, width: `${full.width}px`, height: `${full.height}px` });
         canvas.appendChild(el);
-        renderElementContent(el, full, entry, this.theme);
+        renderElementContent(el, full, entry, this.theme, context);
         return el;
     }
 
@@ -701,6 +709,14 @@ class ThemeEditor {
                 <div class="pp-te-component-title" style="font-size:${size}px">${escapeHtml(title)}</div>
                 <div class="pp-te-component-sub">${escapeHtml(subtitle)}</div>
             </div>`));
+        // The clock card shows an analog clock, which follows the card's own
+        // seconds-hand setting before its variant's.
+        if (key === 'clockCard') {
+            const variant = this.theme.variants[variantNameFor(this.theme, settings.variant || this.variantName)];
+            this.#element(canvas, { type: 'analogClock', x: 160, y: 6, width: 64, height: 64, showLabel: false },
+                { value: Math.floor(Date.now() / 1000), def: { type: 'datetime', calendar: 'gregorian' } },
+                { variant, componentClock: settings });
+        }
         return panel;
     }
 

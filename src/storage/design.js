@@ -42,7 +42,15 @@ export function pickDesign(source = {}) {
         backgrounds: list(source.backgrounds),
         ...anchorFields(source),
         ...themeFields(source),
+        clock: panelClockFields(source.clock),
     };
+}
+
+// Panel-wide clock overrides: showSecondsHand (true / false; absent =
+// inherit from the variant) for every analog clock on the panel that
+// doesn't set its own.
+function panelClockFields(clock) {
+    return clock && typeof clock === 'object' && typeof clock.showSecondsHand === 'boolean' ? { showSecondsHand: clock.showSecondsHand } : {};
 }
 
 // The panel's theme (src/themes/): a theme id and one of its variants.

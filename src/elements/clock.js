@@ -17,6 +17,11 @@
 //
 //   themeStyle                    a theme id whose clock defaults to use
 //                                 (blank: the panel's theme)
+//   showSecondsHand               true / false; unset inherits (panel, then
+//                                 component, then variant - see theme-apply.js
+//                                 clockDefaultsFor), default false. Off means
+//                                 no second hand is drawn and no second angle
+//                                 is ever worked out.
 //   style, numerals, tickMarks    override the theme's drawn face
 //   backdropImage                 face image: a URL string, or
 //   hourHandImage                 { variable: '<image variable name>' }
@@ -79,13 +84,14 @@ export function setDateTimePartsReader(reader) {
 
 // ---- Pure helpers (no DOM) ------------------------------------------------
 
-// Hand angles in degrees clockwise from 12 o'clock (see header).
-export function clockAngles(time, calendar) {
+// Hand angles in degrees clockwise from 12 o'clock (see header). Without
+// `withSeconds` the second hand's angle is not calculated (null).
+export function clockAngles(time, calendar, withSeconds = true) {
     const { hoursPerDay, minutesPerHour, secondsPerMinute } = calendar;
     return {
         hour: 360 * (time.hour / hoursPerDay) + 360 * (time.minute / (hoursPerDay * minutesPerHour)),
         minute: 360 * (time.minute / minutesPerHour),
-        second: 360 * (time.second / secondsPerMinute),
+        second: withSeconds ? 360 * (time.second / secondsPerMinute) : null,
     };
 }
 
@@ -120,6 +126,7 @@ export function effectiveClock(clock = {}, theme = {}) {
         style: pick('style', CLOCK_STYLES),
         numerals: pick('numerals', CLOCK_NUMERALS),
         tickMarks: pick('tickMarks', CLOCK_TICKS),
+        showSecondsHand: typeof clock.showSecondsHand === 'boolean' ? clock.showSecondsHand : theme.showSecondsHand === true,
     };
     for (const key of CLOCK_IMAGE_KEYS) out[key] = clockImageSource(clock[key]) ?? clockImageSource(theme[key]);
     for (const key of Object.keys(CLOCK_DEFAULTS)) out[key] = limited(clock[key], key) ?? limited(theme[key], key) ?? CLOCK_DEFAULTS[key];
@@ -313,8 +320,13 @@ export function renderClock(holder, element, entry, themeClock = {}) {
 
     drawFace(holder.querySelector('.pp-clock-face'), width, height, geo, eff, calendar);
 
-    const angles = moment ? clockAngles(moment.time, calendar) : { hour: 0, minute: 0, second: 0 };
-    for (const hand of CLOCK_HANDS) placeHand(holder.querySelector(`.pp-clock-hand-${hand}`), hand, angles[hand], geo, eff);
+    const angles = moment ? clockAngles(moment.time, calendar, eff.showSecondsHand) : { hour: 0, minute: 0, second: eff.showSecondsHand ? 0 : null };
+    for (const hand of CLOCK_HANDS) {
+        const el = holder.querySelector(`.pp-clock-hand-${hand}`);
+        // Seconds off: the hand is simply not drawn - nothing placed, nothing updated.
+        if (hand === 'second' && !eff.showSecondsHand) el.hidden = true;
+        else placeHand(el, hand, angles[hand], geo, eff);
+    }
 
     const cap = holder.querySelector('.pp-clock-cap');
     const capSize = Math.max(3, geo.r * 0.09);
@@ -324,7 +336,7 @@ export function renderClock(holder, element, entry, themeClock = {}) {
     if (moment) {
         const { hour, minute, second } = moment.time;
         const pad = (n) => String(n).padStart(2, '0');
-        holder.title = `${pad(hour)}:${pad(minute)}:${pad(second)}${moment.weekdayName ? ` · ${moment.weekdayName}` : ''}`;
+        holder.title = `${pad(hour)}:${pad(minute)}${eff.showSecondsHand ? `:${pad(second)}` : ''}${moment.weekdayName ? ` · ${moment.weekdayName}` : ''}`;
     } else {
         holder.removeAttribute('title');
     }

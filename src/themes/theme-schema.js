@@ -165,6 +165,7 @@ export const VARIANT_FIELDS = [
     { key: 'accentSize', type: 'number', label: 'Stripe size', limits: VARIANT_LIMITS.accentSize, unit: 'px' },
     { key: 'cornerImage', type: 'image', label: 'Corner glyph', hint: 'Drawn in all four corners (mirrored), e.g. a cornerGlyph asset' },
     { key: 'cornerSize', type: 'number', label: 'Glyph size', limits: VARIANT_LIMITS.cornerSize, unit: 'px' },
+    { key: 'clock.showSecondsHand', type: 'select', label: 'Clock seconds hand', boolean: true, options: [['', 'Default (hidden)'], ['true', 'Shown'], ['false', 'Hidden']], hint: 'For analog clocks on panels using this variant' },
 ];
 
 // Element defaults: the element properties a theme can set, per group.
@@ -247,6 +248,7 @@ export const COMPONENT_FIELDS = [
     { key: 'accent', type: 'color', label: 'Accent', hint: 'Blank: the variant\'s accent' },
     { key: 'icon', type: 'icon', label: 'Icon', hint: 'A theme asset (e.g. cornerGlyph) or a Font Awesome icon name' },
     { key: 'titleSize', type: 'number', label: 'Title size', limits: [8, 48], unit: 'px' },
+    { key: 'showSecondsHand', type: 'select', label: 'Seconds hand', boolean: true, only: ['clockCard'], options: [['', 'Variant default'], ['true', 'Shown'], ['false', 'Hidden']] },
 ];
 
 // ---- Built-in themes (seeded into settings the first time) -------------
@@ -340,6 +342,8 @@ export function normalizeVariant(raw) {
         accentSize: clampNumber(v.accentSize, VARIANT_LIMITS.accentSize, FALLBACK_VARIANT.accentSize),
         cornerImage: text(v.cornerImage),
         cornerSize: clampNumber(v.cornerSize, VARIANT_LIMITS.cornerSize, FALLBACK_VARIANT.cornerSize),
+        // Defaults for analog clocks on panels using this variant.
+        clock: isObject(v.clock) && typeof v.clock.showSecondsHand === 'boolean' ? { showSecondsHand: v.clock.showSecondsHand } : {},
     };
 }
 

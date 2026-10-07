@@ -52,7 +52,9 @@ Three collapsible sections; which are open is remembered per panel while it's on
 selecting a panel or element expands its section.
 
 - **Panel Properties** - name, position, size, lock/unlock, delete; **Layering** (Z-Index
-  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front); **Layout Anchor** (Anchor
+  0-99, Send to Back, Send Backward, Bring Forward, Bring to Front - this only orders panels
+  among themselves: every panel always stays behind SillyTavern's own windows, drawers and
+  popups, and behind the State Engine tracker); **Layout Anchor** (Anchor
   mode Free / Anchored, and where it is anchored); **Theme** (the panel's theme and which of
   its variants - see [Themes](#themes)); **Panel Library** (Save
   as a new template or over an existing one, Export as a template file); **Panel Styling**
@@ -118,7 +120,12 @@ selecting a panel or element expands its section.
   Numerals and Tick marks (blank = the theme's); Backdrop, Hour, Minute and Second hand images
   (the theme's, an image URL, or an image variable); Radius and Center X/Y (blank = fit the
   element); each hand's Length and Offset (% of the radius - offset is how far it reaches back
-  past the centre, i.e. where a hand image pivots; length 0 hides a hand); and Opacity. Hand
+  past the centre, i.e. where a hand image pivots; length 0 hides a hand); **Show seconds
+  hand**; and Opacity. The seconds hand is **off by default**; when off it is not drawn and
+  its angle is never calculated. Whether it shows is decided by, first match wins: the
+  clock's own Show seconds hand, the panel's **Clock seconds hands** override (Panel
+  Properties, Theme), the clock card component's setting (Theme Editor preview), the panel
+  variant's default (`variants[name].clock.showSecondsHand`), then off. Hand
   images are drawn pointing up (12 o'clock). The panel's theme supplies the defaults
   (`elementDefaults.clock`: images, face, numerals, tick marks, hand lengths and offsets); a
   clock's Theme property can borrow another theme's clock instead, and anything set on the

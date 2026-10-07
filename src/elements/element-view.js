@@ -47,8 +47,10 @@ function clamp(value, min, max) {
 // the variable service's { value, def } or undefined. `theme` is the
 // panel's theme: its element defaults fill whatever the element leaves
 // unset, and its formatting shapes values. Shared by the on-panel view,
-// the properties-pane preview and the Theme Editor preview.
-export function renderElementContent(container, stored, entry, theme = null) {
+// the properties-pane preview and the Theme Editor preview. `context` is
+// where it is drawn - { variant, panelClock, componentClock } - which an
+// analog clock inherits its seconds hand from (theme-apply.js).
+export function renderElementContent(container, stored, entry, theme = null, context = {}) {
     const element = themedElement(stored, theme);
     const labelEl = container.querySelector('.pp-element-label');
     const valueEl = container.querySelector('.pp-element-value');
@@ -82,7 +84,7 @@ export function renderElementContent(container, stored, entry, theme = null) {
         container.title = !element.binding
             ? 'Unbound - drag a variable onto this element to bind it'
             : `${element.binding.name}${entry === undefined ? ': no value in this chat (is its preset active?)' : ''}`;
-        if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry, clockDefaultsFor(element, theme));
+        if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry, clockDefaultsFor(element, theme, context));
         else renderWidget(container, element, entry, theme?.formatting);
         return;
     }
@@ -184,7 +186,7 @@ export class ElementView {
 
     render() {
         const entry = this.element.binding ? this.panel.hooks.getValue(this.element.binding.name) : undefined;
-        renderElementContent(this.el, this.element, entry, this.panel.theme);
+        renderElementContent(this.el, this.element, entry, this.panel.theme, this.panel.clockContext());
     }
 
     setSelected(selected) {

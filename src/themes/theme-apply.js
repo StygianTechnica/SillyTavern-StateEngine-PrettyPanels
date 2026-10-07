@@ -165,7 +165,20 @@ export function themedElement(element, theme) {
 
 // The clock defaults for an analog clock: those of the theme its Clock
 // Properties name (element.clock.themeStyle), else its panel's theme's.
-export function clockDefaultsFor(element, theme) {
+// `context` adds where the clock is drawn - { variant, panelClock,
+// componentClock } - for the one setting those levels can decide:
+// showSecondsHand. The first of these that is set wins (the element's own
+// clock.showSecondsHand, applied in clock.js, beats them all):
+//   panelClock.showSecondsHand       the panel's override (Panel Properties)
+//   componentClock.showSecondsHand   a component's (e.g. the clock card)
+//   variant.clock.showSecondsHand    the panel variant's default
+//   the theme's clock defaults       (elementDefaults.clock)
+// and with none set it is false.
+export function clockDefaultsFor(element, theme, context = {}) {
     const chosen = element?.clock?.themeStyle ? getTheme(element.clock.themeStyle) : null;
-    return unsetRemoved((chosen ?? theme)?.elementDefaults?.clock);
+    const defaults = unsetRemoved((chosen ?? theme)?.elementDefaults?.clock);
+    const { variant, panelClock, componentClock } = context ?? {};
+    const inherited = [panelClock?.showSecondsHand, componentClock?.showSecondsHand, variant?.clock?.showSecondsHand, defaults.showSecondsHand]
+        .find((v) => typeof v === 'boolean');
+    return { ...defaults, showSecondsHand: inherited ?? false };
 }

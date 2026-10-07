@@ -195,7 +195,7 @@ function toHex(color) {
 export class PanelPropertiesPopup {
     // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(),
     //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
-    //          onThemeChange({ themeId?, themeVariant? }),
+    //          onThemeChange({ themeId?, themeVariant? }), onPanelClockChange(clock),
     //          onElementChange(elementId, patch), onElementDelete(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
@@ -322,6 +322,11 @@ export class PanelPropertiesPopup {
         this.el.querySelector('[data-field="themeStatus"]').textContent = missing
             ? 'This panel\'s theme no longer exists - showing the first theme until you choose one.'
             : 'Unset Panel Styling below comes from the theme and variant. Edit themes in the Theme Editor (Extensions drawer).';
+        const clockSeconds = this.el.querySelector('[data-field="clockSeconds"]');
+        const panelSeconds = this.panel.record.clock?.showSecondsHand;
+        if (clockSeconds !== document.activeElement) clockSeconds.value = typeof panelSeconds === 'boolean' ? String(panelSeconds) : '';
+        const variantSeconds = this.panel.variantDef?.clock?.showSecondsHand;
+        clockSeconds.options[0].textContent = `Variant default (${variantSeconds === true ? 'show' : 'hide'})`;
     }
 
     refreshElementPreview() {
@@ -332,7 +337,7 @@ export class PanelPropertiesPopup {
         // and fonts itself.
         const { theme, variant } = resolvePanelTheme(this.panel.record);
         applyVars(this.el.querySelector('.pp-element-preview-frame'), themeVars(theme, variant));
-        renderElementContent(this.preview, element, this.#entry(element), theme);
+        renderElementContent(this.preview, element, this.#entry(element), theme, this.panel.clockContext());
         this.#refreshBindingInfo(element);
     }
 
@@ -485,7 +490,7 @@ export class PanelPropertiesPopup {
         }
         this.#fillValue('clock', 'themeStyle', clock.themeStyle ?? '');
         // The "Theme" choices name what the theme gives.
-        const themeClock = clockDefaultsFor(element, this.panel.theme);
+        const themeClock = clockDefaultsFor(element, this.panel.theme, this.panel.clockContext());
         const themed = effectiveClock({}, themeClock);
         for (const [key, options] of [['style', CLOCK_STYLES], ['numerals', CLOCK_NUMERALS], ['tickMarks', CLOCK_TICKS]]) {
             const select = this.#styleField('clock', key);
@@ -503,6 +508,13 @@ export class PanelPropertiesPopup {
             this.#styleField('clock', `${hand}HandLength`).placeholder = String(themed[`${hand}HandLength`]);
             this.#styleField('clock', `${hand}HandOffset`).placeholder = String(themed[`${hand}HandOffset`]);
         }
+        // Show seconds hand: the element's own choice, else what it inherits
+        // (panel override, variant default - off when nothing says).
+        const own = typeof clock.showSecondsHand === 'boolean';
+        const seconds = this.el.querySelector('[data-el="clockSeconds"]');
+        if (seconds !== document.activeElement) seconds.checked = own ? clock.showSecondsHand : themeClock.showSecondsHand;
+        this.el.querySelector('[data-el="clockSecondsState"]').hidden = own;
+        this.el.querySelector('[data-el="clockSecondsReset"]').hidden = !own;
         const opacity = Number.isFinite(element.opacity) ? element.opacity : 1;
         const slider = this.el.querySelector('[data-el="clockOpacity"]');
         if (slider !== document.activeElement) slider.value = String(opacity);
@@ -887,7 +899,7 @@ export class PanelPropertiesPopup {
             </div>
             <div class="pp-properties-section-label">Layering</div>
             <div class="pp-layering">
-                <label class="pp-layering-z"><span>Z-Index</span>
+                <label class="pp-layering-z" title="Stacking order among your panels: higher draws on top. Any value (0-99) keeps the panel behind SillyTavern's own windows and drawers (Author's Note, settings, popups) and behind the State Engine tracker."><span>Z-Index</span>
                     <input type="number" class="text_pole" data-field="zIndex" min="0" max="99" step="1" />
                 </label>
                 <div class="pp-layering-buttons">
@@ -922,6 +934,13 @@ export class PanelPropertiesPopup {
                 </label>
             </div>
             <small class="pp-field-info" data-field="themeStatus"></small>
+            <label class="pp-layering-z pp-panel-clock-row"><span>Clock seconds hands</span>
+                <select class="text_pole" data-field="clockSeconds" title="For every analog clock on this panel that doesn't choose for itself">
+                    <option value="">Variant default</option>
+                    <option value="true">Show</option>
+                    <option value="false">Hide</option>
+                </select>
+            </label>
             <div class="pp-properties-section-label">Panel Library</div>
             <div class="pp-properties-actions">
                 <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library">
@@ -1091,6 +1110,15 @@ export class PanelPropertiesPopup {
                     ${numberRow('Minute offset', 'clock', 'minuteHandOffset', CLOCK_LIMITS.minuteHandOffset, '%')}
                     ${numberRow('Second length', 'clock', 'secondHandLength', CLOCK_LIMITS.secondHandLength, '%')}
                     ${numberRow('Second offset', 'clock', 'secondHandOffset', CLOCK_LIMITS.secondHandOffset, '%')}
+                    <div class="pp-style-row"><span></span>
+                        <div class="pp-style-controls">
+                            <label class="checkbox_label pp-field-check">
+                                <input type="checkbox" data-el="clockSeconds" /><span>Show seconds hand</span>
+                            </label>
+                            <span class="pp-style-state" data-el="clockSecondsState" title="Inherited from the panel or its theme variant">default</span>
+                            <button type="button" class="pp-properties-close pp-style-reset" data-el="clockSecondsReset" title="Back to the default (panel / variant)"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                    </div>
                     <div class="pp-style-row"><span>Opacity</span>
                         <div class="pp-style-controls pp-image-opacity">
                             <input type="range" data-el="clockOpacity" min="0" max="1" step="0.05" />
@@ -1224,6 +1252,19 @@ export class PanelPropertiesPopup {
         });
         el.querySelector('[data-field="themeId"]').addEventListener('change', (e) => this.hooks.onThemeChange({ themeId: e.target.value }));
         el.querySelector('[data-field="themeVariant"]').addEventListener('change', (e) => this.hooks.onThemeChange({ themeVariant: e.target.value }));
+        el.querySelector('[data-field="clockSeconds"]').addEventListener('change', (e) => {
+            this.hooks.onPanelClockChange(e.target.value === '' ? {} : { showSecondsHand: e.target.value === 'true' });
+        });
+        const setClockSeconds = (value) => {
+            const element = this.#selected();
+            if (!element) return;
+            const clock = { ...element.clock };
+            if (value === null) delete clock.showSecondsHand;
+            else clock.showSecondsHand = value;
+            this.hooks.onElementChange(element.id, { clock });
+        };
+        el.querySelector('[data-el="clockSeconds"]').addEventListener('change', (e) => setClockSeconds(e.target.checked));
+        el.querySelector('[data-el="clockSecondsReset"]').addEventListener('click', () => setClockSeconds(null));
         el.querySelector('[data-field="anchorTarget"]').addEventListener('change', (e) => {
             this.hooks.onAnchorChange({ anchorMode: 'anchored', anchorTarget: e.target.value || null });
         });

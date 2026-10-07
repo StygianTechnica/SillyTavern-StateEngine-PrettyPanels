@@ -19,7 +19,9 @@
     position: fixed;
     box-sizing: border-box;
     pointer-events: none;
-    z-index: 2900;
+    /* 100 + the panel's own Z-Index (panel.js) - below all of SillyTavern's
+       drawers and popups (panel-manager.js BASE_Z_INDEX) */
+    z-index: 100;
 }
 
 .pp-panel-box {
