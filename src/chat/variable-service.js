@@ -22,6 +22,7 @@ import { listAllVariables } from '../api/list-all-variables.js';
 import { getVariableValues } from '../api/get-variable-values.js';
 import { getVariableImage } from '../api/get-variable-image.js';
 import { listRoles } from '../api/list-roles.js';
+import { listCharacters } from '../api/list-characters.js';
 import { notify } from '../ui/dialogs.js';
 import { listPPVariables, getPPVariable, ppVariableLabel, onPPVariablesChange } from '../storage/pp-variables.js';
 import { isRoleRef, roleOfRef, roleRef } from '../elements/element-model.js';
@@ -74,6 +75,28 @@ async function loadRoles(chatId) {
         return new Map(((await listRoles(EXTENSION_ID, chatId || null)) ?? []).map((role) => [role.id, role]));
     } catch (err) {
         console.warn('[PrettyPanels] could not read State Engine roles (update State Engine for role support)', err);
+        return new Map();
+    }
+}
+
+// The open chat's characters (State Engine listCharacters - its own and its
+// setting's), by id: what a character variable's ids show as.
+let characters = new Map();
+
+export function getCharacter(id) {
+    return characters.get(id) ?? null;
+}
+
+export function getCharacterList() {
+    return [...characters.values()];
+}
+
+async function loadCharacters(chatId) {
+    if (!chatId) return new Map();
+    try {
+        return new Map(((await listCharacters(EXTENSION_ID, chatId)) ?? []).map((c) => [c.id, c]));
+    } catch (err) {
+        console.warn('[PrettyPanels] could not read State Engine characters (update State Engine for character support)', err);
         return new Map();
     }
 }
@@ -169,6 +192,7 @@ export async function refreshValues() {
     // Roles first: an assignment may have changed (State Engine reports role
     // changes with the same variables-changed event as value writes).
     const nextRoles = await loadRoles(chatId);
+    const nextCharacters = await loadCharacters(chatId);
     if (token !== refreshToken) return;
     const resolve = (refs) => [...new Set(refs
         .map((ref) => (isRoleRef(ref) ? nextRoles.get(roleOfRef(ref))?.variable : ref))
@@ -198,6 +222,7 @@ export async function refreshValues() {
     if (token !== refreshToken) return;
     const rolesChanged = JSON.stringify([...nextRoles]) !== JSON.stringify([...roles]);
     roles = nextRoles;
+    characters = nextCharacters;
     values = next;
     images = nextImages;
     if (rolesChanged) for (const listener of roleListeners) listener(getRoleList());

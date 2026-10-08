@@ -16,7 +16,6 @@
 //   fontSize     px, 8-96
 //   letterSpacing em, -0.1 to 0.5
 //   lineHeight   0.8 to 3 (multiples of the font size)
-//   textTransform 'none' | 'uppercase' | 'lowercase' | 'capitalize'
 //   textDecoration 'none' | 'underline' | 'overline' | 'line-through'
 //   textShadow   'none' | 'soft' | 'hard' | 'glow' | 'outline'
 //   shadowColor  CSS color for textShadow
@@ -33,6 +32,13 @@
 //   backgroundRadius   px, 0-100 corner rounding of that background
 //   condition    { threshold, color }: when the value is a number below
 //                threshold, the value text takes `color`
+//
+// Text case and the Theme Style preset are not styling - they are the
+// element's text formatting (element.format, src/elements/text-format.js).
+// A Theme Style reaches this module as a style layer
+// (theme-apply.js themedElement): its size, weight, spacing and line height
+// as ordinary fields, and its theme font and colour as fontFamilyCss /
+// textColorCss, used when the element sets no font / colour of its own.
 //
 // Icons use Font Awesome (solid style), which SillyTavern already loads.
 
@@ -61,13 +67,6 @@ export const ALIGNMENTS = [
     ['right', 'Right'],
 ];
 
-export const TEXT_TRANSFORMS = [
-    ['', 'As typed'],
-    ['uppercase', 'UPPERCASE'],
-    ['lowercase', 'lowercase'],
-    ['capitalize', 'Capitalize Words'],
-];
-
 export const TEXT_DECORATIONS = [
     ['', 'None'],
     ['underline', 'Underline'],
@@ -81,17 +80,6 @@ export const TEXT_SHADOWS = [
     ['hard', 'Hard shadow'],
     ['glow', 'Glow'],
     ['outline', 'Outline'],
-];
-
-// One-click formatting for free-text elements: each sets these style
-// fields (null clears one). Nothing about the preset itself is stored.
-export const TEXT_PRESETS = [
-    ['title', 'Title', { fontSize: 26, fontWeight: 700, letterSpacing: 0.01, textTransform: null, lineHeight: 1.1 }],
-    ['subtitle', 'Subtitle', { fontSize: 18, fontWeight: 600, letterSpacing: null, textTransform: null, lineHeight: 1.2 }],
-    ['heading', 'Section heading', { fontSize: 13, fontWeight: 700, letterSpacing: 0.12, textTransform: 'uppercase', lineHeight: null }],
-    ['hud', 'HUD label', { fontSize: 12, fontWeight: 600, letterSpacing: 0.16, textTransform: 'uppercase', lineHeight: null }],
-    ['body', 'Body text', { fontSize: 14, fontWeight: 400, letterSpacing: null, textTransform: null, lineHeight: 1.35 }],
-    ['caption', 'Caption', { fontSize: 11, fontWeight: 400, letterSpacing: 0.02, textTransform: null, lineHeight: 1.3 }],
 ];
 
 // Offered in the icon field's suggestion list - any Font Awesome solid
@@ -148,7 +136,9 @@ export function applyElementStyle(container, style = {}, value = undefined) {
     set('--pp-el-font-style', font.fontStyle);
     set('--pp-el-font-variation', font.fontVariationSettings);
     const family = typeof style.fontFamily === 'string' && style.fontFamily !== 'inherit' ? fontRegistry.cssFamily(style.fontFamily) : null;
-    set('--pp-el-font-family', family === 'inherit' ? null : family);
+    // A Theme Style's theme font when the element chose none.
+    const themeStyleFamily = typeof style.fontFamilyCss === 'string' ? style.fontFamilyCss : null;
+    set('--pp-el-font-family', family && family !== 'inherit' ? family : themeStyleFamily);
     const labelFamily = typeof style.labelFontFamily === 'string' && style.labelFontFamily ? fontRegistry.cssFamily(style.labelFontFamily) : null;
     set('--pp-el-label-font-family', labelFamily);
     set('--pp-el-label-color', isColor(style.labelColor) ? style.labelColor : null);
@@ -157,7 +147,6 @@ export function applyElementStyle(container, style = {}, value = undefined) {
     set('--pp-el-letter-spacing', spacing === null ? null : `${spacing}em`);
     const lineHeight = clampFloat(style.lineHeight, LINE_HEIGHT_LIMITS);
     set('--pp-el-line-height', lineHeight === null ? null : String(lineHeight));
-    set('--pp-el-transform', TEXT_TRANSFORMS.some(([id]) => id && id === style.textTransform) ? style.textTransform : null);
     set('--pp-el-decoration', TEXT_DECORATIONS.some(([id]) => id && id === style.textDecoration) ? style.textDecoration : null);
     set('--pp-el-shadow', shadowCss(style.textShadow, style.shadowColor));
 
@@ -170,7 +159,8 @@ export function applyElementStyle(container, style = {}, value = undefined) {
     const condition = style.condition;
     const conditionMet = condition && Number.isFinite(condition.threshold) && isColor(condition.color)
         && Number.isFinite(n) && n < condition.threshold;
-    const textColor = conditionMet ? condition.color : (isColor(style.textColor) ? style.textColor : null);
+    const themeStyleColor = typeof style.textColorCss === 'string' ? style.textColorCss : null;
+    const textColor = conditionMet ? condition.color : (isColor(style.textColor) ? style.textColor : themeStyleColor);
     set('--pp-el-text-color', textColor);
     container.classList.toggle('pp-element-condition-met', !!conditionMet);
 

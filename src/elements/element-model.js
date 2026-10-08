@@ -22,8 +22,9 @@
 //     clipShape, borderRadius, value is an image): see IMAGE_* below;
 //     borderWidth, borderColor the border only shows with a clip shape
 //     showLabel, labelOverride,
-//     format,                  a key from formats.js ('auto' = by type)
-//     formatPattern,           the 'custom' datetime format's pattern
+//     format,                  text formatting - { textCase, themeStyle, value }
+//                              (src/elements/text-format.js, one pipeline for
+//                              free text, variable and role values, gauges)
 //     style,                   Element Styling - text and free text
 //                              (src/elements/element-style.js)
 //     widget,                  Widget Properties - bars/gauges only
@@ -48,6 +49,17 @@
 // (src/storage/design.js stripBindings()).
 
 import { NAMESPACE } from '../constants.js';
+import { normalizeFormat } from './text-format.js';
+
+// Element Styling keys that are not stored: textTransform (case is
+// element.format.textCase now) and the Theme Style layer's computed CSS.
+const UNSTORED_STYLE_KEYS = ['textTransform', 'fontFamilyCss', 'textColorCss'];
+
+function elementStyle(style) {
+    const out = { ...style };
+    for (const key of UNSTORED_STYLE_KEYS) delete out[key];
+    return out;
+}
 
 export const ELEMENT_TYPE_TEXT = 'text';
 export const ELEMENT_TYPE_SHAPE = 'shape';
@@ -252,7 +264,7 @@ function normalizeImageFields(element) {
 export function normalizeVariableElement(element) {
     const type = TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT;
     const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
-    const { role: legacyRole, ...rest } = element;
+    const { role: legacyRole, formatPattern: _pattern, ...rest } = element;
     return {
         ...rest,
         id: typeof element.id === 'string' && element.id ? element.id : newElementId(),
@@ -265,11 +277,10 @@ export function normalizeVariableElement(element) {
         content: text(element.content).slice(0, MAX_FREE_TEXT_LENGTH),
         showLabel: element.showLabel !== false,
         labelOverride: text(element.labelOverride),
-        format: typeof element.format === 'string' && element.format ? element.format : 'auto',
-        formatPattern: text(element.formatPattern),
+        format: normalizeFormat(element.format),
         zIndex: Number.isFinite(element.zIndex) ? Math.round(element.zIndex) : defaultZIndex(type),
         ...normalizeImageFields(element),
-        style: object(element.style),
+        style: elementStyle(object(element.style)),
         widget: object(element.widget),
         shape: object(element.shape),
         clock: object(element.clock),

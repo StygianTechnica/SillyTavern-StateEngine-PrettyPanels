@@ -75,22 +75,51 @@ selecting a panel or element expands its section.
   Forward / Bring to Front); for a Text element showing an **image variable**: **Image**
   (opacity, clip shape none / rectangle / ellipse, corner radius, border width and colour along
   the clip edge, fit cover / contain);
-  for **Text** elements: Show Label, Label override, Format and
+  for **Text** elements: Show Label, Label override, **Text Formatting** (below) and
   **Element Styling** (a **Font** button opening the Font Picker - font, weight, italic and
   variable-font axes - plus a separate label font, font size, letter spacing, line height,
-  case, decoration, text shadow, text/label colour, alignment, a
+  decoration, text shadow, text/label colour, alignment, a
   **background colour** with its own opacity and corner rounding - for keeping text readable
   over a background image - a Font
   Awesome icon left of the value with its colour and size, and one conditional colour rule:
   "if value < threshold, colour the value"); for **widgets**: **Widget Properties** (below);
-  for **Free Text**: its text, one-click presets (Title, Subtitle, Section heading, HUD label,
-  Body text, Caption) and the same Element Styling;
+  for **Free Text**: its text, the same Text Formatting and Element Styling; for **gauges**:
+  Text Formatting for the value they print (Text Case, Value Formatting);
   for **shapes**: **Shape Properties** (below); for **analog clocks**: **Clock Properties** (below);
   then a live Preview, and delete. Only the fields that apply to the element's type are shown.
-- **Add & Variables** - **Text** (free text), a **Clock**, a **Rectangle** and an **Ellipse** to drag onto
+- **Add, Variables & Roles** - **Text** (free text), a **Clock**, a **Rectangle** and an **Ellipse** to drag onto
   a panel (or click to add here), then every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag a variable onto a panel to add an element, onto an element to rebind it, or
   click it to add it to this panel.
+
+### Text Formatting
+
+Every piece of text a panel shows - free text, a variable's value, a role's value, a gauge's
+value - goes through one formatting pipeline, with the same three sections in every case:
+
+- **Text Case** - As typed, UPPERCASE, lowercase, Capitalize Words. Applies to all of the
+  element's text (label included).
+- **Value Formatting** - options for the kind of value shown, only when it has some:
+  - numbers: As stored, Comma separators, Fixed decimals (with Decimals), Rounded, Percent
+    of max, Value / max, Duration (HH:mm:ss) and Duration (human-readable) - the value read
+    as seconds - and Custom (text with `{value}`, e.g. `{value} gp`);
+  - dates and times: a **Date** (Automatic, YYYY-MM-DD, Month DD, YYYY, DD Month YYYY,
+    Hidden, Custom) and a **Time** (Automatic, HH:mm:ss, HH:mm, 12-hour clock, Hidden).
+    Automatic follows the variable's date/time mode and the theme's formatting (or the
+    calendar's own); Custom takes one pattern for both. Fantasy calendars use their own
+    month names; the 12-hour clock splits whatever length of day the calendar has in half;
+  - true/false, lists and images: how they show (Yes / No, one per line, item count, the
+    image or its URL, ...).
+  Text values have no value formatting - Text Case covers them.
+- **Theme Style** (text and free text) - None, Title, Subtitle, Section heading, HUD label,
+  Body text, Caption: size, weight, letter spacing and line height, with the panel theme's
+  font and colour for that kind of text (titles: title font; headings and HUD labels: label
+  font and accent colour; body and captions: value font). It sits between the theme's text
+  defaults and the element's own Element Styling, which still overrides any of it.
+
+Formatting is stored per element as one `format` object. Elements from before this (a Format
+choice, a custom pattern, a Case style) start from the defaults: the old settings are not
+carried over.
 
 ### Element types
 
@@ -190,8 +219,9 @@ on screen update live.
   hand), background, text, border and glow. Any CSS colour; blank uses SillyTavern's own.
 - **Fonts** - title (free text, card titles), label, value and accent (gauge values, clock
   numerals), from the same fonts as the Font Picker.
-- **Formatting** - patterns replacing the calendar's own for Date and time, Date only and
-  Time only, and how "As stored" numbers show.
+- **Formatting** - patterns replacing the calendar's own for an element's Automatic date and
+  time (full, date, time), and how "As stored" numbers show (Rounded, 1 or 2 decimal places,
+  Comma separators).
 - **Assets** - images uploaded with the theme (backdrop, panelTexture, accentStripe,
   cornerGlyph, clockFace, hourHand, minuteHand, secondHand, or any name you like). The file
   is stored by **State Engine's Image API** (`stateEngine.importImageFile`, through
@@ -297,6 +327,31 @@ its id. A namespace never has two roles with the same name.
   typed by the element). A tag on an element that shows a variable is dropped.
 - Panel templates don't keep role bindings, the same as variable bindings.
 
+## Characters
+
+Pretty Panels provides State Engine's **Character Manager** window and draws character
+variables. The characters themselves - and every rule about them - are State Engine's.
+
+- **Cards** - an element bound to a character variable draws a **CharacterCard**: the image
+  (or a generated icon: initials on a colour of its own), the name (Text Case applies), a
+  confirmed ✓ / unconfirmed ? badge, and - in Value Formatting - an optional presence dot and
+  alias list. A list of characters (an Array of item type Character) draws a **CharacterList**
+  of cards. Clicking a card (outside Editing Mode) opens the Character Manager on it.
+- **The Character Manager** - opens from a card, the drawer's **Character Manager** button,
+  State Engine's **Manage characters** button and its "New characters detected for review"
+  notification. Two views:
+  - **This chat**: the chat's characters - its own (unconfirmed ones from extraction, or ones
+    not promoted) and its setting's - with presence, the introduction snippet (read-only), id,
+    confirmed status; the chat's **setting** is chosen here. Filter to the unconfirmed ones to
+    review them.
+  - **Settings**: any setting's canonical characters (the chat's by default); create, rename
+    and delete settings, and switch a setting to always auto-promote.
+  Actions: edit (name, aliases, image - a URL or an upload - faction, role, biography,
+  personality; saving confirms the character), confirm, promote into the setting, merge into
+  another character, delete, create a canonical character, and **variants** - alternate
+  versions overriding any of those fields, with the one the character uses for its whole
+  setting. It is the only place characters are edited.
+
 ## Layouts, templates and storage
 
 - A **layout** is a complete HUD: its panel instances (geometry, z-index, lock, styling,
@@ -331,7 +386,7 @@ its id. A namespace never has two roles with the same name.
 | `src/panels/anchors.js` | Layout anchors: hosts inside SillyTavern's DOM, margin reflow, drop zones, drag overlay |
 | `src/elements/element-model.js` | VariableElement records, labels, geometry clamping |
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
-| `src/elements/formats.js` | Value formats per variable type |
+| `src/elements/text-format.js` | Text Formatting: the one pipeline (Text Case, Value Formatting, Theme Style presets) |
 | `src/elements/element-style.js` | Element Styling: typography, icon, conditional colour |
 | `src/elements/widgets.js` | Bars, gauges and composite bars; Widget Properties |
 | `src/elements/shapes.js` | Shape elements; Shape Properties |
@@ -352,6 +407,8 @@ its id. A namespace never has two roles with the same name.
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
 | `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
+| `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |
+| `src/elements/character-card.js` | CharacterCard / CharacterList and the generated fallback icons |
 | `src/library/role-library.js` | Layout roles: the role registry and each layout's roles |
 | `src/chat/role-sync.js` | Sends the layout roles to State Engine |
 | `src/ui/layout-roles-drawer.js` | The drawer's Layout Roles section (roles, types, this chat's variables) |

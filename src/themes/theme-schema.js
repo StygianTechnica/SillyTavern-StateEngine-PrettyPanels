@@ -38,7 +38,8 @@
 //   border      panel border
 //   glow        glow text shadows, the Glow panel shadow
 
-import { ALIGNMENTS, TEXT_TRANSFORMS, TEXT_SHADOWS, FONT_SIZE_LIMITS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS } from '../elements/element-style.js';
+import { ALIGNMENTS, TEXT_SHADOWS, FONT_SIZE_LIMITS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS } from '../elements/element-style.js';
+import { THEME_NUMBER_FORMATS } from '../elements/text-format.js';
 import { SHAPE_KINDS, SHAPE_LIMITS } from '../elements/shapes.js';
 import { WIDGET_LIMITS } from '../elements/widgets.js';
 import { IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS } from '../elements/element-model.js';
@@ -63,19 +64,15 @@ export const THEME_FONTS = [
     ['accentFont', 'Accent font', 'Gauge values and clock numerals'],
 ];
 
-export const NUMBER_FORMATS = [
-    ['', 'As stored'],
-    ['integer', 'Whole number'],
-    ['fixed1', '1 decimal place'],
-    ['fixed2', '2 decimal places'],
-    ['grouped', 'Thousands separators'],
-];
+// How a number shows when an element's Value Formatting leaves it at "As
+// stored" (text-format.js).
+export const NUMBER_FORMATS = THEME_NUMBER_FORMATS;
 
 export const THEME_FORMATTING = [
-    ['dateFull', 'Full date', 'Used for "Date and time". Blank: the calendar\'s own.'],
-    ['dateShort', 'Short date', 'Used for "Date only". Blank: the calendar\'s own.'],
-    ['time', 'Time', 'Used for "Time only". Blank: the calendar\'s own.'],
-    ['number', 'Number', 'How numbers show when an element\'s format is "As stored".'],
+    ['dateFull', 'Full date', 'Used when an element\'s date and time are both Automatic. Blank: the calendar\'s own.'],
+    ['dateShort', 'Short date', 'Used for an Automatic date. Blank: the calendar\'s own.'],
+    ['time', 'Time', 'Used for an Automatic time. Blank: the calendar\'s own.'],
+    ['number', 'Number', 'How numbers show when an element\'s Value Formatting is "As stored".'],
 ];
 
 export const VARIANT_SHAPES = [
@@ -178,7 +175,6 @@ export const ELEMENT_DEFAULT_FIELDS = {
         { key: 'textColor', type: 'color', label: 'Value colour' },
         { key: 'labelColor', type: 'color', label: 'Label colour' },
         { key: 'align', type: 'select', label: 'Align', options: opt(ALIGNMENTS) },
-        { key: 'textTransform', type: 'select', label: 'Case', options: opt(TEXT_TRANSFORMS) },
         { key: 'textShadow', type: 'select', label: 'Shadow', options: opt(TEXT_SHADOWS) },
         { key: 'shadowColor', type: 'color', label: 'Shadow colour' },
         { key: 'backgroundColor', type: 'color', label: 'Background' },
@@ -251,6 +247,18 @@ export const COMPONENT_FIELDS = [
     { key: 'showSecondsHand', type: 'select', label: 'Seconds hand', boolean: true, only: ['clockCard'], options: [['', 'Variant default'], ['true', 'Shown'], ['false', 'Hidden']] },
 ];
 
+// Text case is an element's formatting, never a theme default: a stored
+// "Case" text default is dropped.
+function withoutTextCase(defaults) {
+    const { textTransform: _case, ...text } = defaults.text;
+    return { ...defaults, text };
+}
+
+// A theme's number format must be one of NUMBER_FORMATS ('' otherwise).
+function themeFormatting(formatting) {
+    return { ...formatting, number: NUMBER_FORMATS.some(([id]) => id === formatting.number) ? formatting.number : '' };
+}
+
 // ---- Built-in themes (seeded into settings the first time) -------------
 
 function baseTheme(id, name, description, createdAt) {
@@ -278,7 +286,7 @@ export function builtInThemes() {
         text: '#3b2a1a', border: '#8a6d3b', glow: '#c9a24a',
     });
     Object.assign(parchment.fonts, { titleFont: 'unifrakturmaguntia', labelFont: 'crimson-pro', valueFont: 'eb-garamond', accentFont: 'eb-garamond' });
-    parchment.formatting.number = 'grouped';
+    parchment.formatting.number = 'commas';
     parchment.variants[DEFAULT_VARIANT] = { ...FALLBACK_VARIANT, borderWidth: 2, borderRadius: 6, shadow: 'strong', padding: 4 };
     parchment.variants.scroll = { ...FALLBACK_VARIANT, borderWidth: 3, borderRadius: 18, shadow: 'strong', padding: 8, background: '#f5ecd7' };
     parchment.variants.seal = { ...FALLBACK_VARIANT, shape: 'ellipse', borderWidth: 3, borderColor: '#8b3a2b', shadow: 'soft' };
@@ -295,7 +303,7 @@ export function builtInThemes() {
     neon.variants.alert = { ...FALLBACK_VARIANT, opacity: 85, borderRadius: 4, borderWidth: 2, borderColor: '#ff3cac', accent: '#ff3cac', shadow: 'glow' };
     neon.variants.pill = { ...FALLBACK_VARIANT, shape: 'pill', opacity: 70, shadow: 'glow' };
     neon.elementDefaults.clock = { style: 'minimal', numerals: 'none', tickMarks: 'all' };
-    neon.elementDefaults.text = { textShadow: 'glow', textTransform: 'uppercase' };
+    neon.elementDefaults.text = { textShadow: 'glow' };
     neon.elementDefaults.gauges = { strokeWidth: 4 };
     neon.components.sceneCard = { variant: DEFAULT_VARIANT, icon: 'location-crosshairs' };
     neon.components.questCard = { variant: 'alert' };
@@ -371,9 +379,9 @@ export function normalizeTheme(raw) {
         createdAt: Number.isFinite(t.createdAt) ? t.createdAt : Date.now(),
         colors: pickStrings(t.colors, THEME_COLORS.map(([key]) => key)),
         fonts: pickStrings(t.fonts, THEME_FONTS.map(([key]) => key)),
-        formatting: pickStrings(t.formatting, THEME_FORMATTING.map(([key]) => key)),
+        formatting: themeFormatting(pickStrings(t.formatting, THEME_FORMATTING.map(([key]) => key))),
         variants,
-        elementDefaults: Object.fromEntries(ELEMENT_DEFAULT_GROUPS.map(([key]) => [key, isObject(defaults[key]) ? { ...defaults[key] } : {}])),
+        elementDefaults: withoutTextCase(Object.fromEntries(ELEMENT_DEFAULT_GROUPS.map(([key]) => [key, isObject(defaults[key]) ? { ...defaults[key] } : {}]))),
         components: Object.fromEntries(COMPONENTS.map(([key]) => [key, isObject(components[key]) ? { ...components[key] } : {}])),
         assets,
     };

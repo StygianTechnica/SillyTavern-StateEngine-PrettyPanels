@@ -14,7 +14,7 @@
 import { isColor } from '../panels/panel-style.js';
 import { iconClass } from './element-style.js';
 import { elementLabel } from './element-model.js';
-import { formatValue } from './formats.js';
+import { formatText } from './text-format.js';
 
 // Which Widget Properties each type offers, in display order.
 export const WIDGET_FIELDS = {
@@ -167,7 +167,7 @@ function updateGauge(holder, element, entry, pct, semi, formatting) {
 
     const valueEl = holder.querySelector('.pp-gauge-value');
     valueEl.hidden = !flag(widget, 'showValue');
-    valueEl.textContent = entry === undefined ? '—' : formatValue(entry.value, entry.def, element.format, element.formatPattern, formatting).text;
+    valueEl.textContent = entry === undefined ? '—' : formatText(entry.value, entry.def, element.format, formatting).text;
     valueEl.style.fontSize = `${Math.max(9, Math.round(r * (semi ? 0.42 : 0.5)))}px`;
     holder.classList.toggle('pp-gauge-semi', semi);
 }

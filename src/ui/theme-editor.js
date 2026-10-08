@@ -30,7 +30,7 @@ import {
 import { themedPanelVars, themeVars, applyVars, applyDecorations } from '../themes/theme-apply.js';
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { iconClass } from '../elements/element-style.js';
-import { DATETIME_PATTERN_HINT } from '../elements/formats.js';
+import { DATETIME_PATTERN_HINT } from '../elements/text-format.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { openFontPicker, closeFontPicker } from './font-picker.js';
 import { confirmYesNo, promptText, notify } from './dialogs.js';
@@ -678,7 +678,7 @@ class ThemeEditor {
     // by default the previewed variant.
     #element(canvas, element, entry, context = { variant: this.theme.variants[this.variantName] }) {
         const el = buildElementContent();
-        const full = { id: 'preview', role: '', showLabel: true, labelOverride: '', format: 'auto', formatPattern: '', zIndex: 2, style: {}, widget: {}, shape: {}, clock: {}, content: '', binding: { name: 'preview' }, ...element };
+        const full = { id: 'preview', showLabel: true, labelOverride: '', format: {}, zIndex: 2, style: {}, widget: {}, shape: {}, clock: {}, content: '', binding: { name: 'preview' }, ...element };
         Object.assign(el.style, { left: `${full.x}px`, top: `${full.y}px`, width: `${full.width}px`, height: `${full.height}px` });
         canvas.appendChild(el);
         renderElementContent(el, full, entry, this.theme, context);
@@ -747,9 +747,9 @@ class ThemeEditor {
         {
             const { panel, canvas } = this.#panel(260, 120, variant);
             this.#element(canvas, { type: 'text', x: 8, y: 6, width: 240, height: 24, labelOverride: 'Gold' }, number(1250300.5, 10000000));
-            this.#element(canvas, { type: 'text', x: 8, y: 32, width: 240, height: 24, labelOverride: 'Date', format: 'full' }, datetime);
-            this.#element(canvas, { type: 'text', x: 8, y: 58, width: 240, height: 24, labelOverride: 'Day', format: 'date' }, datetime);
-            this.#element(canvas, { type: 'text', x: 8, y: 84, width: 240, height: 24, labelOverride: 'Time', format: 'time' }, datetime);
+            this.#element(canvas, { type: 'text', x: 8, y: 32, width: 240, height: 24, labelOverride: 'Date', format: {} }, datetime);
+            this.#element(canvas, { type: 'text', x: 8, y: 58, width: 240, height: 24, labelOverride: 'Day', format: { value: { time: 'none' } } }, datetime);
+            this.#element(canvas, { type: 'text', x: 8, y: 84, width: 240, height: 24, labelOverride: 'Time', format: { value: { date: 'none' } } }, datetime);
             root.appendChild(this.#card('Variable block', panel));
         }
         // Gauges

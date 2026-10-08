@@ -16,7 +16,7 @@ import { loadDateTimeFormatter } from './api/format-datetime.js';
 import { loadDateTimePartsReader } from './api/get-datetime-parts.js';
 import { EXTENSION_ID, NAMESPACE } from './constants.js';
 import { initPanels } from './panels/panel-manager.js';
-import { setDateTimeFormatter } from './elements/formats.js';
+import { setDateTimeFormatter } from './elements/text-format.js';
 import { setDateTimePartsReader } from './elements/clock.js';
 import { migrateInlineImages } from './storage/pp-variables.js';
 import { startChatSession } from './chat/chat-session.js';
@@ -25,6 +25,7 @@ import { addWandMenuItems } from './ui/wand-menu.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 import { addLayoutToolbar } from './ui/layout-toolbar.js';
 import { initLayoutGate } from './ui/layout-gate.js';
+import { initCharacterManager, openCharacterManager } from './ui/character-manager.js';
 
 // EXTENSION_ID / NAMESPACE live in src/constants.js - every module that
 // calls the State Engine API needs them.
@@ -93,5 +94,7 @@ export async function initExtension() {
     addLayoutToolbar();
     await addSettingsDrawer();
     initLayoutGate();
+    await initCharacterManager();
+    document.getElementById('pp_open_character_manager')?.addEventListener('click', () => void openCharacterManager());
     await startChatSession();
 }

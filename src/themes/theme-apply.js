@@ -1,7 +1,7 @@
 // Puts a theme on screen. A panel is drawn from, in order (later wins):
 //   1. theme.colors      --ppt-* colour variables, inherited by everything
 //   2. theme.fonts       --ppt-*-font variables       in the panel
-//   3. theme.formatting  value formats (formats.js), via themedElement()
+//   3. theme.formatting  value formats (text-format.js), via the element views
 //   4. theme.variants[panel.themeVariant]  the panel's Panel Styling base
 //   5. theme.elementDefaults  element property defaults, via themedElement()
 //   6. the panel's own Panel Styling and each element's own properties
@@ -19,6 +19,7 @@ import { resolveImageRef } from '../storage/pp-variables.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { resolveTheme, getTheme } from './theme-store.js';
 import { variantNameFor } from './theme-schema.js';
+import { normalizeFormat, themeStyleLayer } from '../elements/text-format.js';
 
 const SHADOW_CSS = {
     none: 'none',
@@ -148,11 +149,28 @@ const IMAGE_KEYS = ['opacity', 'fit', 'clipShape', 'borderRadius', 'borderWidth'
 
 // An element with the theme's element defaults filled in wherever the
 // element leaves a property unset. The stored element is never changed.
+// A text or free-text element's style is three layers: the theme's text
+// defaults, then its Theme Style preset (element.format.themeStyle - size,
+// weight, spacing, line height, and the theme's font and colour for that
+// kind of text), then its own Element Styling. A preset's colour beats the
+// theme's default text colour; the element's own colour beats both.
+function themedTextStyle(element, defaults) {
+    const style = unsetRemoved(defaults?.text);
+    const layer = themeStyleLayer(normalizeFormat(element.format).themeStyle);
+    if (layer) {
+        Object.assign(style, layer);
+        delete style.textColor;
+    }
+    return { ...style, ...unsetRemoved(element.style) };
+}
+
 export function themedElement(element, theme) {
     const defaults = theme?.elementDefaults;
-    if (!defaults) return element;
+    const text = element.type === 'text' || element.type === 'free-text';
+    if (!defaults && !text) return element;
     const out = { ...element };
-    if (element.type === 'text' || element.type === 'free-text') out.style = { ...unsetRemoved(defaults.text), ...unsetRemoved(element.style) };
+    if (text) out.style = themedTextStyle(element, defaults);
+    if (!defaults) return out;
     if (element.type === 'shape') out.shape = { ...unsetRemoved(defaults.shapes), ...unsetRemoved(element.shape) };
     if (['bar-horizontal', 'bar-vertical', 'gauge-circle', 'gauge-semicircle', 'composite-bar'].includes(element.type)) {
         out.widget = { ...unsetRemoved(defaults.gauges), ...unsetRemoved(element.widget) };

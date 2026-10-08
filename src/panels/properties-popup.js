@@ -37,7 +37,10 @@ import {
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
-import { formatsFor, DATETIME_PATTERN_HINT } from '../elements/formats.js';
+import {
+    TEXT_CASES, THEME_STYLES, VALUE_FORMATS, DECIMAL_LIMITS, DECIMAL_FORMATS, DATETIME_PATTERN_HINT, NUMBER_PATTERN_HINT,
+    normalizeFormat, valueKind,
+} from '../elements/text-format.js';
 import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS } from '../elements/shapes.js';
 import {
     ELEMENT_TYPE_ANALOG_CLOCK, CLOCK_HANDS, CLOCK_IMAGE_KEYS, CLOCK_LIMITS, CLOCK_STYLES, CLOCK_NUMERALS, CLOCK_TICKS,
@@ -49,7 +52,7 @@ import { buildElementContent, renderElementContent } from '../elements/element-v
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
     FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, ALIGNMENTS, ICON_SUGGESTIONS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
-    LETTER_SPACING_LIMITS, LINE_HEIGHT_LIMITS, TEXT_TRANSFORMS, TEXT_DECORATIONS, TEXT_SHADOWS, TEXT_PRESETS, numericWeight,
+    LETTER_SPACING_LIMITS, LINE_HEIGHT_LIMITS, TEXT_DECORATIONS, TEXT_SHADOWS, numericWeight,
 } from '../elements/element-style.js';
 
 const POPUP_GAP = 8;
@@ -147,7 +150,11 @@ function fontRow(label, key, title) {
         </div>`;
 }
 // Types with a Format field.
-const FORMAT_TYPES = ['text', 'gauge-circle', 'gauge-semicircle'];
+// Elements that show text, and so have Text Formatting: text (free, or a
+// variable's or role's value) and the gauges that print their value. Theme
+// Style is for text elements only (gauges have no text styling).
+const FORMAT_TYPES = ['text', 'free-text', 'gauge-circle', 'gauge-semicircle'];
+const THEME_STYLE_TYPES = ['text', 'free-text'];
 
 function widgetField(key, markup) {
     return `<div data-widget-field="${key}">${markup}</div>`;
@@ -452,17 +459,10 @@ export class PanelPropertiesPopup {
             f.placeholder = elementLabel({ ...element, labelOverride: '' }, def);
             f.disabled = !element.showLabel;
         });
-        set('format', (f) => {
-            const formats = formatsFor(def, this.#entry(element)?.value);
-            f.replaceChildren(...formats.map((fmt) => new Option(fmt.label, fmt.id)));
-            f.value = formats.some((fmt) => fmt.id === element.format) ? element.format : 'auto';
-        });
-        const format = section.querySelector('[data-el="format"]').value;
-        section.querySelector('[data-el="pattern-row"]').hidden = !(FORMAT_TYPES.includes(element.type) && format === 'custom');
-        set('formatPattern', (f) => { f.value = element.formatPattern ?? ''; });
+        this.#fillFormat(element, def);
         set('content', (f) => { f.value = element.content ?? ''; });
         set('zIndex', (f) => { f.value = String(element.zIndex ?? 0); });
-        this.#fillImage(element, def, format);
+        this.#fillImage(element, def);
         this.#fillGeometry(element);
 
         Object.assign(this.preview.style, { width: `${element.width}px`, height: `${element.height}px` });
@@ -474,12 +474,54 @@ export class PanelPropertiesPopup {
         this.#fillClock(element);
     }
 
+    // What Value Formatting offers for an element: the kind of value it
+    // shows ('none' for free text, an unbound element or an image map).
+    #formatKind(element, def) {
+        if (element.type === 'free-text' || !element.binding) return 'none';
+        const kind = valueKind(def, this.#entry(element)?.value);
+        return kind === 'imageMap' ? 'none' : kind;
+    }
+
+    // Text Formatting: Text Case, Value Formatting (the controls for the
+    // value's kind) and Theme Style - the same three sections for free text,
+    // a variable's value and a role's value.
+    #fillFormat(element, def) {
+        const root = this.el.querySelector('[data-el="format-sections"]');
+        const format = normalizeFormat(element.format);
+        const kind = this.#formatKind(element, def);
+        const set = (key, apply) => {
+            const field = root.querySelector(`[data-fmt="${key}"]`);
+            if (field && field !== document.activeElement) apply(field);
+        };
+        set('textCase', (f) => { f.value = format.textCase; });
+        set('themeStyle', (f) => { f.value = format.themeStyle; });
+        for (const key of ['number', 'date', 'time', 'boolean', 'list', 'image', 'imageList']) set(`value.${key}`, (f) => { f.value = format.value[key]; });
+        set('value.decimals', (f) => { f.value = String(format.value.decimals); });
+        set('value.numberPattern', (f) => { f.value = format.value.numberPattern; });
+        set('value.datePattern', (f) => { f.value = format.value.datePattern; });
+        set('value.characterPresence', (f) => { f.checked = format.value.characterPresence; });
+        set('value.characterAliases', (f) => { f.checked = format.value.characterAliases; });
+        for (const node of root.querySelectorAll('[data-fmt-kind]')) node.hidden = node.dataset.fmtKind !== kind;
+        const note = root.querySelector('[data-el="format-none"]');
+        note.textContent = element.type === 'free-text' ? 'Free text has no value to format - type it as it should read.'
+            : !element.binding ? 'Bind a variable or role to format its value.'
+                : 'This value has no formatting options - Text Case and Theme Style still apply.';
+        note.hidden = kind !== 'none' && kind !== 'text';
+        if (kind === 'text') note.textContent = 'Text values have no value formatting - use Text Case.';
+        // Rows that depend on another choice.
+        root.querySelector('[data-fmt-when="decimals"]').hidden = kind !== 'number' || !DECIMAL_FORMATS.has(format.value.number);
+        root.querySelector('[data-fmt-when="numberPattern"]').hidden = kind !== 'number' || format.value.number !== 'custom';
+        root.querySelector('[data-fmt-when="time"]').hidden = kind !== 'datetime' || format.value.date === 'custom';
+        root.querySelector('[data-fmt-when="datePattern"]').hidden = kind !== 'datetime' || format.value.date !== 'custom';
+    }
+
     // The Image rows: only for a text element whose value is drawn as an
     // image (an image or image list variable, not formatted as text).
-    #fillImage(element, def, format) {
+    #fillImage(element, def) {
         const row = this.el.querySelector('[data-el="image-row"]');
-        const noImageFormat = { image: 'text', imageList: 'count' }[def?.type];
-        row.hidden = !(element.type === 'text' && isImageDefinition(def) && def.type !== 'imageMap' && format !== noImageFormat);
+        const { value } = normalizeFormat(element.format);
+        const asText = (def?.type === 'image' && value.image === 'url') || (def?.type === 'imageList' && value.imageList === 'count');
+        row.hidden = !(element.type === 'text' && isImageDefinition(def) && def.type !== 'imageMap' && !asText);
         if (row.hidden) return;
         const set = (key, apply) => {
             const field = row.querySelector(`[data-el="${key}"]`);
@@ -752,7 +794,6 @@ export class PanelPropertiesPopup {
         this.#fillFontButton('labelFontFamily', style, false);
         this.#fillValue('element', 'letterSpacing', style.letterSpacing);
         this.#fillValue('element', 'lineHeight', style.lineHeight);
-        this.#fillValue('element', 'textTransform', style.textTransform ?? '');
         this.#fillValue('element', 'textDecoration', style.textDecoration ?? '');
         this.#fillValue('element', 'textShadow', style.textShadow ?? '');
         this.#fillColor('element', 'shadowColor', style.shadowColor, 'rgba(0, 0, 0, 0.85)');
@@ -901,6 +942,18 @@ export class PanelPropertiesPopup {
     #change(patch) {
         const element = this.#selected();
         if (element) this.hooks.onElementChange(element.id, patch);
+    }
+
+    // One Text Formatting control changed: `path` is 'textCase',
+    // 'themeStyle' or 'value.<key>'.
+    #changeFormat(path, control) {
+        const element = this.#selected();
+        if (!element) return;
+        const format = normalizeFormat(element.format);
+        const raw = control.type === 'checkbox' ? control.checked : control.type === 'number' ? Number(control.value) : control.value;
+        const [group, key] = path.split('.');
+        const next = key ? { ...format, value: { ...format.value, [key]: raw } } : { ...format, [group]: raw };
+        this.#change({ format: normalizeFormat(next) });
     }
 
     // Applies a new value for one geometry field, clamped to the panel
@@ -1097,9 +1150,6 @@ export class PanelPropertiesPopup {
                 <label class="pp-field" data-for-types="text"><span>Label</span>
                     <input type="text" class="text_pole" data-el="labelOverride" />
                 </label>
-                <label class="pp-field" data-for-types="${FORMAT_TYPES.join(' ')}"><span>Format</span>
-                    <select class="text_pole" data-el="format"></select>
-                </label>
                 <div data-el="image-row" hidden>
                     <div class="pp-field-caption">Image</div>
                     <div class="pp-field"><span>Opacity</span>
@@ -1129,12 +1179,6 @@ export class PanelPropertiesPopup {
                             ${IMAGE_FITS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
                         </select>
                     </label>
-                </div>
-                <div data-el="pattern-row" hidden>
-                    <label class="pp-field"><span>Pattern</span>
-                        <input type="text" class="text_pole" data-el="formatPattern" placeholder="{monthName} {day}, {year}" autocomplete="off" />
-                    </label>
-                    <small class="pp-field-info">${DATETIME_PATTERN_HINT}</small>
                 </div>
                 <div data-for-types="shape">
                 ${sectionMarkup('shape', 'Shape Properties', '', `
@@ -1208,16 +1252,75 @@ export class PanelPropertiesPopup {
                     </div>
                 `, 'pp-subsection')}
                 </div>
+                <div data-for-types="${FORMAT_TYPES.join(' ')}" data-el="format-sections">
+                ${sectionMarkup('textFormat', 'Text Formatting', '', `
+                    <div class="pp-format-group">
+                        <div class="pp-field-caption">Text Case</div>
+                        <label class="pp-field"><span>Case</span>
+                            <select class="text_pole" data-fmt="textCase" title="Applies to all of the element's text">
+                                ${TEXT_CASES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                            </select>
+                        </label>
+                    </div>
+                    <div class="pp-format-group">
+                        <div class="pp-field-caption">Value Formatting</div>
+                        <small class="pp-field-info" data-el="format-none"></small>
+                        <label class="pp-field" data-fmt-kind="number"><span>Number</span>
+                            <select class="text_pole" data-fmt="value.number">${VALUE_FORMATS.number.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <label class="pp-field" data-fmt-kind="number" data-fmt-when="decimals"><span>Decimals</span>
+                            <input type="number" class="text_pole" data-fmt="value.decimals" min="${DECIMAL_LIMITS[0]}" max="${DECIMAL_LIMITS[1]}" step="1" />
+                        </label>
+                        <div data-fmt-kind="number" data-fmt-when="numberPattern">
+                            <label class="pp-field"><span>Pattern</span>
+                                <input type="text" class="text_pole" data-fmt="value.numberPattern" placeholder="{value} gp" autocomplete="off" />
+                            </label>
+                            <small class="pp-field-info">${NUMBER_PATTERN_HINT}</small>
+                        </div>
+                        <label class="pp-field" data-fmt-kind="datetime"><span>Date</span>
+                            <select class="text_pole" data-fmt="value.date">${VALUE_FORMATS.date.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <label class="pp-field" data-fmt-kind="datetime" data-fmt-when="time"><span>Time</span>
+                            <select class="text_pole" data-fmt="value.time">${VALUE_FORMATS.time.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <div data-fmt-kind="datetime" data-fmt-when="datePattern">
+                            <label class="pp-field"><span>Pattern</span>
+                                <input type="text" class="text_pole" data-fmt="value.datePattern" placeholder="{monthName} {day}, {year} {h}:{mm} {ampm}" autocomplete="off" />
+                            </label>
+                            <small class="pp-field-info">${DATETIME_PATTERN_HINT}</small>
+                        </div>
+                        <label class="pp-field" data-fmt-kind="boolean"><span>Show as</span>
+                            <select class="text_pole" data-fmt="value.boolean">${VALUE_FORMATS.boolean.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <label class="pp-field" data-fmt-kind="list"><span>Show as</span>
+                            <select class="text_pole" data-fmt="value.list">${VALUE_FORMATS.list.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <label class="pp-field" data-fmt-kind="image"><span>Show as</span>
+                            <select class="text_pole" data-fmt="value.image">${VALUE_FORMATS.image.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                        <div data-fmt-kind="character">
+                            <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterPresence" /><span>Show presence (in the scene or not)</span></label>
+                            <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterAliases" /><span>Show aliases</span></label>
+                            <small class="pp-field-info">Characters show as cards (image or a generated icon, name, confirmed badge). Click one - outside Editing Mode - to open the Character Manager.</small>
+                        </div>
+                        <label class="pp-field" data-fmt-kind="imageList"><span>Show as</span>
+                            <select class="text_pole" data-fmt="value.imageList">${VALUE_FORMATS.imageList.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                        </label>
+                    </div>
+                    <div class="pp-format-group" data-for-types="${THEME_STYLE_TYPES.join(' ')}">
+                        <div class="pp-field-caption">Theme Style</div>
+                        <label class="pp-field"><span>Style</span>
+                            <select class="text_pole" data-fmt="themeStyle" title="Size, weight, spacing and line height, with the panel theme's font and colour for this kind of text. Element Styling overrides it.">
+                                ${THEME_STYLES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                            </select>
+                        </label>
+                    </div>
+                `, 'pp-subsection')}
+                </div>
                 <div data-for-types="free-text">
                     <label class="pp-field pp-field-top"><span>Text</span>
                         <textarea class="text_pole" data-el="content" rows="3" maxlength="${MAX_FREE_TEXT_LENGTH}" placeholder="Type the text to show"></textarea>
                     </label>
-                    <div class="pp-field"><span>Preset</span>
-                        <select class="text_pole" data-el="preset" title="Apply ready-made formatting (size, weight, spacing, case). You can adjust everything afterwards.">
-                            <option value="">Apply formatting…</option>
-                            ${TEXT_PRESETS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
-                        </select>
-                    </div>
                 </div>
                 <div data-for-types="text free-text">
                 ${sectionMarkup('elementStyle', 'Element Styling', '', `
@@ -1226,7 +1329,6 @@ export class PanelPropertiesPopup {
                     ${numberRow('Font size', 'element', 'fontSize', FONT_SIZE_LIMITS)}
                     ${floatRow('Spacing', 'element', 'letterSpacing', LETTER_SPACING_LIMITS, 0.01, 'em')}
                     ${floatRow('Line height', 'element', 'lineHeight', LINE_HEIGHT_LIMITS, 0.05, '×')}
-                    ${selectRow('Case', 'element', 'textTransform', TEXT_TRANSFORMS)}
                     ${selectRow('Decoration', 'element', 'textDecoration', TEXT_DECORATIONS)}
                     ${selectRow('Shadow', 'element', 'textShadow', TEXT_SHADOWS)}
                     ${colorRow('Shadow color', 'element', 'shadowColor')}
@@ -1403,14 +1505,12 @@ export class PanelPropertiesPopup {
         });
         field('showLabel').addEventListener('change', (e) => this.#change({ showLabel: e.target.checked }));
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));
-        field('format').addEventListener('change', (e) => this.#change({ format: e.target.value }));
-        field('formatPattern').addEventListener('input', (e) => this.#change({ formatPattern: e.target.value }));
         field('content').addEventListener('input', (e) => this.#change({ content: e.target.value.slice(0, MAX_FREE_TEXT_LENGTH) }));
-        field('preset').addEventListener('change', (e) => {
-            const preset = TEXT_PRESETS.find(([id]) => id === e.target.value);
-            e.target.value = '';
-            if (preset) this.#commitStyles(preset[2]);
-        });
+        // Text Formatting: every control writes into element.format.
+        for (const control of el.querySelectorAll('[data-fmt]')) {
+            const typing = control.type === 'text';
+            control.addEventListener(typing ? 'input' : 'change', () => this.#changeFormat(control.dataset.fmt, control));
+        }
         for (const button of el.querySelectorAll('[data-font-field]')) {
             button.addEventListener('click', () => this.#openFontPicker(button.dataset.fontField, button));
         }

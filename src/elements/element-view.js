@@ -14,7 +14,10 @@ import {
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
 import { renderClock, ELEMENT_TYPE_ANALOG_CLOCK } from './clock.js';
-import { formatValue } from './formats.js';
+import { formatText, formatPlainText, normalizeFormat, valueKind, applyTextCase } from './text-format.js';
+import { renderCharacters } from './character-card.js';
+import { getCharacter } from '../chat/variable-service.js';
+import { openCharacterManager } from '../ui/character-manager.js';
 import { applyElementStyle } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 import { isColor } from '../panels/panel-style.js';
@@ -86,7 +89,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
         container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
         labelEl.hidden = true;
         applyElementStyle(container, element.style);
-        valueEl.textContent = element.content || '';
+        valueEl.textContent = formatPlainText(element.content || '', element.format);
         container.classList.toggle('pp-element-empty', !element.content);
         container.title = 'Free text';
         return;
@@ -105,7 +108,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
     }
     container.classList.remove('pp-kind-widget');
 
-    labelEl.textContent = elementLabel(element, def);
+    labelEl.textContent = formatPlainText(elementLabel(element, def), element.format);
     labelEl.hidden = !element.showLabel;
     applyElementStyle(container, element.style, entry?.value);
 
@@ -124,7 +127,19 @@ export function renderElementContent(container, stored, entry, theme = null, con
         return;
     }
     container.title = bindingTitle(element.binding);
-    const shown = formatValue(entry.value, def, element.format, element.formatPattern, theme?.formatting);
+    // A character (or a list of characters) draws cards (spec 1.42).
+    if (valueKind(def, entry.value) === 'character') {
+        const { textCase, value: options } = normalizeFormat(element.format);
+        renderCharacters(valueEl, entry.value, getCharacter, {
+            list: def?.type === 'array',
+            showPresence: options.characterPresence,
+            showAliases: options.characterAliases,
+            caseText: (text) => applyTextCase(text, textCase),
+            onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+        });
+        return;
+    }
+    const shown = formatText(entry.value, def, element.format, theme?.formatting);
     if (shown.image) {
         const img = document.createElement('img');
         img.src = shown.image;
