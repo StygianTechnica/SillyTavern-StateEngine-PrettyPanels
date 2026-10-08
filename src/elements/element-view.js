@@ -9,7 +9,7 @@
 // rather than writing anything itself.
 
 import {
-    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel, bindingRef,
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel, bindingRef, rolePublicName,
 } from './element-model.js';
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
@@ -35,9 +35,10 @@ export function releasePaneFocus() {
     if (active instanceof HTMLElement && active.closest('.pp-properties')) active.blur();
 }
 
-// What a bound element's tooltip names: the variable, or the role.
+// What a bound element's tooltip names: the variable, or the role (its
+// public name, and its id - namespace included).
 function bindingTitle(binding) {
-    return binding.role ? `Role "${binding.role}"` : binding.name;
+    return binding.role ? `Role "${rolePublicName(binding.role)}" (${binding.role})` : binding.name;
 }
 
 // Why a bound element shows no value. A role with no value is usually a
@@ -45,7 +46,7 @@ function bindingTitle(binding) {
 // missing once it is assigned).
 function missingTitle(binding) {
     return binding.role
-        ? `Role "${binding.role}": not assigned in this chat (State Engine → Roles), or its variable has no value`
+        ? `${bindingTitle(binding)}: not assigned in this chat (Pretty Panels drawer → Layout Roles), or its variable has no value`
         : `${binding.name}: no value in this chat (is its preset active?)`;
 }
 

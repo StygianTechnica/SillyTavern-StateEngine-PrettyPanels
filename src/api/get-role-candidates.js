@@ -1,4 +1,4 @@
-// Thin wrapper around the Role API's listRoles() call.
+// Thin wrapper around the Role API's getRoleCandidates() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,13 +8,10 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Every role (roles are global), as seen from one chat (or none) - its
-// assigned variable there and whether that assignment is usable:
-// [{ id, namespace, publicName, type, label, description, exists, requestedBy,
-//    variable, valid, problem }].
-// See the State Engine API Reference, "Role API".
-export async function listRoles(extensionId, chatId) {
+// The chat's existing variables that could fulfil role `id`:
+// [{ name, label, type }]. See the State Engine API Reference, "Role API".
+export async function getRoleCandidates(extensionId, chatId, id) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.listRoles(extensionId, ensureInstanceId(), chatId);
+    return stateEngine.getRoleCandidates(extensionId, ensureInstanceId(), chatId, id);
 }

@@ -17,6 +17,11 @@
 //                instance.zIndex: stacking order within the layout, 0..MAX_Z_INDEX
 //                layout.groups: { [id]: { id, panelIds: [...] } } - panels that move
 //                together; a panel is in at most one group, a group has 2+ panels
+//                layout.roles: [publicName] - the State Engine roles the layout
+//                carries (src/library/role-library.js)
+//     roles:     { [publicName]: { type, label, description } } - Pretty Panels'
+//                State Engine roles ("prettyPanels__<publicName>"), shared by
+//                every layout that carries them
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
 //     userFonts: { [font_id]: sanitized user font record } - see
 //                src/fonts/font-registry.js; never a raw font file
@@ -25,6 +30,9 @@
 // Layouts hold design data plus their elements' variable bindings - a
 // layout is what a chat chooses, so it carries what it displays.
 // Templates hold design data only: bindings are stripped (design.js).
+
+import { NAMESPACE } from '../constants.js';
+import { normalizeWidgets, parseRoleId, roleTypeForElement } from '../elements/element-model.js';
 
 const SETTINGS_KEY = 'prettyPanels';
 const SCHEMA_VERSION = 2;
@@ -69,6 +77,7 @@ export function newLayoutRecord(name) {
         nextPanelNumber: 1,
         backgrounds: [],
         panels: {},
+        roles: [],
     };
 }
 
@@ -84,6 +93,38 @@ function migrate(store) {
     delete store.panels;
     delete store.nextPanelNumber;
     store.version = SCHEMA_VERSION;
+}
+
+// Role bindings from before role namespaces (a bare name, or the older
+// free-text Role tag) normalize to this extension's layout roles
+// (element-model.js); here the layout gains them and the registry their
+// definitions, typed by the element (number for bars and gauges, date for a
+// clock, any for text). Returns true if anything changed.
+function migrateRoleBindings(store, layout) {
+    let changed = false;
+    for (const panel of Object.values(layout.panels)) {
+        if (!Array.isArray(panel?.widgets)) continue;
+        panel.widgets.forEach((widget, i) => {
+            if (!widget || typeof widget !== 'object') return;
+            const legacy = typeof widget.role === 'string' || (widget.binding?.role && !parseRoleId(widget.binding.role));
+            const role = parseRoleId(normalizeWidgets([widget])[0]?.binding?.role);
+            if (legacy) {
+                const { role: _tag, ...rest } = widget;
+                panel.widgets[i] = { ...rest, binding: normalizeWidgets([widget])[0]?.binding ?? null };
+                changed = true;
+            }
+            if (!role || role.namespace !== NAMESPACE) return;
+            if (!store.roles[role.publicName]) {
+                store.roles[role.publicName] = { type: roleTypeForElement(widget.type), label: '', description: '' };
+                changed = true;
+            }
+            if (!layout.roles.includes(role.publicName)) {
+                layout.roles.push(role.publicName);
+                changed = true;
+            }
+        });
+    }
+    return changed;
 }
 
 // Panel Styling's "Opacity" was stored as backgroundOpacity before it
@@ -195,6 +236,16 @@ export function getStore() {
         store.templates = {};
         changed = true;
     }
+    if (!isObject(store.roles)) {
+        store.roles = {};
+        changed = true;
+    }
+    for (const [name, def] of Object.entries(store.roles)) {
+        if (!isObject(def) || typeof def.type !== 'string') {
+            delete store.roles[name];
+            changed = true;
+        }
+    }
     if (!isObject(store.userFonts)) {
         store.userFonts = {};
         changed = true;
@@ -214,6 +265,8 @@ export function getStore() {
         if (assignMissingZIndexes(layout)) changed = true;
         if (repairGroups(layout)) changed = true;
         if (migratePanelStyles(layout)) changed = true;
+        if (!Array.isArray(layout.roles)) { layout.roles = []; changed = true; }
+        if (migrateRoleBindings(store, layout)) changed = true;
     }
 
     if (Object.keys(store.layouts).length === 0) {

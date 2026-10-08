@@ -16,6 +16,7 @@ import { listLayouts } from '../library/layout-library.js';
 import { onLibraryChange } from '../storage/store.js';
 import { getState, onStateChange } from '../panels/panel-manager.js';
 import { chooseLayout, getSessionState, onSessionChange } from '../chat/chat-session.js';
+import { rolePublicName } from '../elements/element-model.js';
 
 let promptEl = null;
 let warningEl = null;
@@ -85,12 +86,13 @@ function renderWarning(missing, failed) {
     }
     warningEl ??= buildWarning();
     warningEl.querySelector('.pp-role-warning-title').textContent = missing.length > 0
-        ? 'Required roles are not assigned. Open State Engine → Roles Panel to assign them.'
+        ? 'Required roles are not assigned. Open State Engine → Roles Panel (or the Pretty Panels drawer → Layout Roles) to assign them.'
         : 'Pretty Panels could not check this layout\'s roles - update State Engine for role support.';
     const roles = warningEl.querySelector('.pp-role-warning-roles');
-    roles.replaceChildren(...missing.map((name) => {
+    roles.replaceChildren(...missing.map((id) => {
         const code = document.createElement('code');
-        code.textContent = name;
+        code.textContent = rolePublicName(id);
+        code.title = id;
         return code;
     }));
     roles.hidden = missing.length === 0;

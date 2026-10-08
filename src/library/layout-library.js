@@ -20,6 +20,8 @@ import {
     clone,
 } from '../storage/store.js';
 import { pickDesign } from '../storage/design.js';
+import { exportLayoutRoles, importLayoutRoles, announceRolesChange, pruneUnusedRoles } from './role-library.js';
+import { notify } from '../ui/dialogs.js';
 import { KIND, makePayload } from './format.js';
 
 function layoutNames(store) {
@@ -54,10 +56,11 @@ function portableGroups(layout, instances) {
 // Adds a new layout built from portable instance data. Every instance
 // gets a fresh ID; `groups` (index arrays) are rebuilt onto those IDs.
 // Does not change which layout is active.
-function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPanelNumber = 1 } = {}) {
+function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPanelNumber = 1, roles = [] } = {}) {
     const store = getStore();
     const layout = newLayoutRecord(uniqueName(name, layoutNames(store)));
     layout.backgrounds = Array.isArray(backgrounds) ? clone(backgrounds) : [];
+    layout.roles = roles.filter((n) => store.roles[n]);
     const now = Date.now();
     const ids = instances.map((source, i) => {
         const id = generateId('pp');
@@ -121,6 +124,7 @@ export function duplicateLayout(id) {
         instances,
         groups: portableGroups(source, instances),
         nextPanelNumber: source.nextPanelNumber,
+        roles: source.roles,
     });
 }
 
@@ -137,7 +141,8 @@ export function renameLayout(id, name) {
 // Refuses to delete the last remaining layout. Deleting the active
 // layout makes the oldest remaining one active (store-only; see
 // panel-manager.js removeLayout()). A chat that had chosen the deleted
-// layout shows no layout the next time it loads, and asks for one.
+// layout shows no layout the next time it loads, and asks for one. Roles
+// no other layout carries are deleted with it.
 export function deleteLayout(id) {
     const store = getStore();
     if (!store.layouts[id] || Object.keys(store.layouts).length <= 1) return false;
@@ -145,6 +150,8 @@ export function deleteLayout(id) {
     if (store.activeLayoutId === id) store.activeLayoutId = sortedLayouts(store)[0].id;
     save();
     emitLibraryChange();
+    // Roles only this layout carried leave the registry (and State Engine).
+    pruneUnusedRoles();
     return true;
 }
 
@@ -157,16 +164,26 @@ export function exportLayout(id) {
         backgrounds: clone(layout.backgrounds),
         panels: instances.map(instanceData),
         groups: portableGroups(layout, instances),
+        // The layout's roles travel with it (an element bound to a role
+        // needs its definition in the importing install).
+        roles: exportLayoutRoles(layout),
     });
 }
 
 // `data` is the already-validated payload data (see format.js
-// readPayload). Adds it to the library without activating it.
+// readPayload). Adds it to the library without activating it. Its roles
+// join the role registry; a role name this install already has is shared
+// (it keeps its own type - noted if the import's differed).
 export function importLayout(data) {
     const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Imported Layout';
-    return addLayout(name, {
+    const { names, conflicts } = importLayoutRoles(data.roles);
+    if (conflicts.length) notify('info', `Roles already defined here keep their own type: ${conflicts.join(', ')}.`);
+    const id = addLayout(name, {
         backgrounds: data.backgrounds,
         instances: Array.isArray(data.panels) ? data.panels.filter((p) => p && typeof p === 'object') : [],
         groups: data.groups,
+        roles: names,
     });
+    if (names.length) announceRolesChange();
+    return id;
 }

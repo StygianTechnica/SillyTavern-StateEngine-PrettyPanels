@@ -9,7 +9,7 @@ const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
 // Declares the roles this extension needs: { key, label, chatId, roles:
-// [{ name, type, label? }] }. Replaces the earlier request under the same
+// [role ids] }. Replaces the earlier request under the same
 // key and chat; an empty `roles` removes it. Returns true if anything
 // changed, false if not, null if rejected. See the State Engine API
 // Reference, "Role API".

@@ -61,7 +61,7 @@ import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storag
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
     ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
-    bindingRef, bindingFromRef, roleTypeForElement,
+    bindingRef, bindingFromRef,
 } from '../elements/element-model.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
@@ -308,23 +308,23 @@ export function getBoundVariableNames() {
     return [...names];
 }
 
-// The State Engine roles the active layout's elements are bound to, each
-// with the type its elements need: [{ name, type }] sorted by name. Text
-// accepts any type, so a role shared by text and a bar needs the bar's
-// number; two elements needing different types (a bar and a clock) leave
-// it 'any'.
-export function getLayoutRoleRequirements() {
-    const types = new Map();
+// The State Engine role ids the active layout's elements are bound to (any
+// namespace), sorted.
+export function getBoundRoleIds() {
+    const ids = new Set();
     for (const record of listPanels()) {
         for (const widget of record.widgets) {
             const role = isVariableElement(widget) ? widget.binding?.role : null;
-            if (!role) continue;
-            const type = roleTypeForElement(widget.type);
-            const seen = types.get(role);
-            types.set(role, seen === undefined || seen === type ? type : (seen === 'any' ? type : (type === 'any' ? seen : 'any')));
+            if (role) ids.add(role);
         }
     }
-    return [...types].map(([name, type]) => ({ name, type })).sort((a, b) => a.name.localeCompare(b.name));
+    return [...ids].sort();
+}
+
+// Redraws the active layout's panels from the registry (after something
+// rewrote their records directly - a layout role renamed).
+export function refreshPanels() {
+    reloadPanels();
 }
 
 // The image variables panels use as backgrounds, and analog clocks for

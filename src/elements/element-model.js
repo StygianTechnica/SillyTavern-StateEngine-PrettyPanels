@@ -47,6 +47,8 @@
 // for what it shows) and are stripped from panel templates
 // (src/storage/design.js stripBindings()).
 
+import { NAMESPACE } from '../constants.js';
+
 export const ELEMENT_TYPE_TEXT = 'text';
 export const ELEMENT_TYPE_SHAPE = 'shape';
 export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
@@ -135,12 +137,32 @@ export const DEFAULT_ELEMENT_HEIGHT = 32;
 export const MIN_ELEMENT_WIDTH = 24;
 export const MIN_ELEMENT_HEIGHT = 16;
 
-// A binding as one string - a variable's name, or `role:<role name>` for a
-// role (a variable name can never contain ':'). The variable picker, the
-// Binding field and drag-and-drop all pass these.
+// A binding as one string - a variable's name, or `role:<role id>` for a
+// role (a variable name can never contain ':'). The pickers, the Binding
+// field and drag-and-drop all pass these.
 export const ROLE_REF_PREFIX = 'role:';
-// State Engine's role name rule: lowercase words separated by dots.
-const ROLE_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/;
+// State Engine's role rules: a public name is lowercase words separated by
+// dots; an id is "<namespace>__<public name>", the same delimiter as a
+// variable name ("prettyPanels__scene.title").
+export const ROLE_PUBLIC_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/;
+const ROLE_ID = /^([A-Za-z][A-Za-z0-9]*)__([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)$/;
+
+// "prettyPanels__scene.title" -> { namespace, publicName }, or null.
+export function parseRoleId(id) {
+    const match = typeof id === 'string' ? ROLE_ID.exec(id) : null;
+    return match ? { namespace: match[1], publicName: match[2] } : null;
+}
+
+// The id of this extension's role `publicName` (a layout role).
+export function layoutRoleId(publicName) {
+    return `${NAMESPACE}__${publicName}`;
+}
+
+// What lists show for a role: its public name. The namespace (the id) is
+// shown on hover and in advanced views only.
+export function rolePublicName(id) {
+    return parseRoleId(id)?.publicName ?? id;
+}
 
 export function isRoleRef(ref) {
     return typeof ref === 'string' && ref.startsWith(ROLE_REF_PREFIX);
@@ -186,19 +208,22 @@ function newElementId() {
     return `ppe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// { name } or { role }; a name written as a role ref becomes a role. A role
-// name that breaks State Engine's rule is no binding at all.
+// { name } or { role: id }; a name written as a role ref becomes a role. A
+// bare public name (a role binding from before role namespaces) becomes this
+// extension's layout role of that name - src/storage/store.js adds it to the
+// layout's roles. Anything else is no binding at all.
 function normalizeBinding(binding) {
     const name = typeof binding?.name === 'string' ? binding.name.trim() : '';
     if (isRoleRef(name)) return normalizeBinding({ role: roleOfRef(name) });
     if (name) return { name };
     const role = typeof binding?.role === 'string' ? binding.role.trim() : '';
-    return ROLE_NAME.test(role) ? { role } : null;
+    if (parseRoleId(role)) return { role };
+    return ROLE_PUBLIC_NAME.test(role) ? { role: layoutRoleId(role) } : null;
 }
 
 // The free-text Role tag elements had before roles were State Engine's
-// ("health", "Mood"): it becomes a role binding when the element shows no
-// variable, lowercased - otherwise it is dropped.
+// ("health", "Mood"): it becomes a layout-role binding when the element
+// shows no variable, lowercased - otherwise it is dropped.
 function legacyRoleBinding(tag) {
     const role = typeof tag === 'string' ? tag.trim().toLowerCase().replace(/\s+/g, '_') : '';
     return role ? normalizeBinding({ role }) : null;
@@ -280,7 +305,7 @@ export function elementLabel(element, def) {
     if (element.type === ELEMENT_TYPE_FREE_TEXT) return 'Text';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
-    if (element.binding?.role) return element.binding.role;
+    if (element.binding?.role) return rolePublicName(element.binding.role);
     return element.binding ? localName(element.binding.name) : 'Unbound';
 }
 

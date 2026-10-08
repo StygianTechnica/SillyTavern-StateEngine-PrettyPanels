@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// The status of `roles` (names or { name, type } specs) in one chat:
-// { roles: [{ name, type, exists, assigned, variable, valid, problem }],
-//   missing: [names], allAssigned }. See the State Engine API Reference,
+// The status of role ids in one chat:
+// { roles: [{ id, namespace, publicName, type, exists, assigned, variable, valid, problem }],
+//   missing: [ids], allAssigned }. See the State Engine API Reference,
 // "Role API".
 export async function resolveRoles(extensionId, chatId, roles) {
     const { stateEngine } = await import(API_PATH);

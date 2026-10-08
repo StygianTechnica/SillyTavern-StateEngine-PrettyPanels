@@ -13,13 +13,17 @@
 //     variables its elements display are activated there too. Presets are
 //     never deactivated when switching away.
 //
-// Role gating (State Engine roles, requirements spec 1.40): the roles the
-// shown layout's elements are bound to are requested from State Engine for
-// THIS chat (requestRoles, key "layout" - replaced on every layout change,
+// A layout is only ever chosen for an open chat: without one, nothing can
+// be chosen and nothing is shown.
+//
+// Role gating (State Engine roles, requirements spec 1.40/1.41): the shown
+// layout's roles - the layout roles it carries (role-library.js) plus any
+// role its elements are bound to - are requested from State Engine for THIS
+// chat (requestRoles, key "layout" - replaced on every layout change,
 // cleared when no layout is shown), then checked (resolveRoles). Missing
 // ones are reported through the session state, and the layout still
-// renders - their elements show blank - with a warning to assign them in
-// State Engine's Roles tab.
+// renders - their elements show blank - with a warning to assign them (in
+// the drawer's Layout Roles, or State Engine's Roles tab).
 //
 // Also keeps element values live: refreshes them on chat changes and on
 // State Engine's variables-changed event (which role changes emit too), and
@@ -31,11 +35,15 @@ import { activatePreset } from '../api/activate-preset.js';
 import { requestRoles } from '../api/request-roles.js';
 import { resolveRoles } from '../api/resolve-roles.js';
 import { getLayout, getActiveLayoutId } from '../library/layout-library.js';
+import { listLayoutRoles } from '../library/role-library.js';
 import {
-    switchLayout, setLayoutShown, getBoundVariableNames, getBoundImageNames, getLayoutRoleRequirements, onBindingsChange,
+    switchLayout, setLayoutShown, getBoundVariableNames, getBoundImageNames, getBoundRoleIds, onBindingsChange, refreshPanels,
 } from '../panels/panel-manager.js';
 import { ensureConfigPreset, readChatLayoutId, writeChatLayoutId } from './pp-config.js';
-import { VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, loadCatalog, isCatalogWatched } from './variable-service.js';
+import {
+    VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, refreshRoles, loadCatalog, isCatalogWatched,
+} from './variable-service.js';
+import { startRoleSync, onRolesSynced } from './role-sync.js';
 import { notify } from '../ui/dialogs.js';
 
 // The State Engine role request this extension keeps per chat.
@@ -52,7 +60,7 @@ let layoutShown = false;
 // Whether the current chat recorded a layout choice.
 let chosenForChat = false;
 // The shown layout's roles State Engine reports unusable in this chat
-// (names), and whether State Engine could answer at all.
+// (ids), and whether State Engine could answer at all.
 let missingRoles = [];
 let roleCheckFailed = false;
 const sessionListeners = new Set();
@@ -100,9 +108,17 @@ async function refreshVariables() {
     await watchNames(layoutShown ? getBoundVariableNames() : [], layoutShown ? getBoundImageNames() : []);
 }
 
+// The role ids the shown layout needs: its own layout roles and the roles
+// its elements are bound to.
+export function getLayoutRoleIds() {
+    if (!layoutShown) return [];
+    const ids = new Set([...listLayoutRoles(getActiveLayoutId()).map((r) => r.id), ...getBoundRoleIds()]);
+    return [...ids].sort();
+}
+
 // Re-checks the shown layout's roles in the current chat (resolveRoles).
 async function checkRoles(chatId = currentChatId()) {
-    const required = layoutShown && chatId ? getLayoutRoleRequirements() : [];
+    const required = chatId ? getLayoutRoleIds() : [];
     let missing = [];
     let failed = false;
     if (required.length > 0) {
@@ -132,7 +148,7 @@ async function syncRoles(chatId = currentChatId()) {
                 key: ROLE_REQUEST_KEY,
                 label: layout ? `Pretty Panels layout "${layout.name}"` : 'Pretty Panels layout',
                 chatId,
-                roles: layout ? getLayoutRoleRequirements() : [],
+                roles: layout ? getLayoutRoleIds() : [],
             });
         } catch (err) {
             console.warn('[PrettyPanels] could not request this layout\'s roles (update State Engine for role support)', err);
@@ -194,14 +210,14 @@ async function onVariablesChanged(chatId) {
     if (isCatalogWatched()) await loadCatalog();
 }
 
-// The user picked a layout: show it and, if a chat is open, record it as
-// that chat's layout. Without a chat it only changes what is on screen.
+// The user picked a layout for the open chat: show it and record it as the
+// chat's layout. Without a chat nothing can be chosen.
 export async function chooseLayout(layoutId) {
-    if (!getLayout(layoutId)) return false;
+    const chatId = currentChatId();
+    if (!chatId || !getLayout(layoutId)) return false;
     showLayout(layoutId);
     if (!layoutShown) return false;
-    const chatId = currentChatId();
-    if (chatId && configReady) {
+    if (configReady) {
         writingChoice++;
         try {
             chosenForChat = (await writeChatLayoutId(chatId, layoutId)) === true;
@@ -240,6 +256,17 @@ export async function startChatSession() {
             await refreshVariables();
         })();
     });
+
+    // Layout roles reached State Engine (startup, or one was added, renamed,
+    // retyped or removed): re-request and re-check the shown layout's roles,
+    // and redraw - a rename rewrote element bindings.
+    onRolesSynced(async (change) => {
+        if (change?.renamed) refreshPanels();
+        await syncRoles();
+        await refreshRoles();
+        await refreshVariables();
+    });
+    void startRoleSync();
 
     const { eventSource, eventTypes } = SillyTavern.getContext();
     eventSource.on(eventTypes.CHAT_CHANGED, () => void showChatLayout());

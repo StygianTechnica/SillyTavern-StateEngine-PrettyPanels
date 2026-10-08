@@ -2530,3 +2530,75 @@ body.pp-anchor-margins .fillRight {
 .pp-role-warning-close:hover {
     opacity: 1;
 }
+
+/* Variables | Roles toggle above the picker (properties pane). */
+.pp-palette-toggle {
+    display: flex;
+    gap: 4px;
+    margin: 6px 0;
+}
+.pp-palette-tab {
+    flex: 1 1 0;
+    margin: 0;
+    opacity: 0.65;
+}
+.pp-palette-tab-active {
+    opacity: 1;
+    border-color: var(--SmartThemeQuoteColor, var(--SmartThemeBorderColor));
+}
+.pp-properties-picker[hidden],
+.pp-properties-role-picker[hidden],
+[data-binding-mode][hidden] {
+    display: none;
+}
+.pp-role-duplicated::after {
+    content: " ⧉";
+    opacity: 0.6;
+}
+
+/* Layout Roles (drawer). */
+.pp-layout-roles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 6px 0;
+}
+.pp-layout-role-row {
+    display: grid;
+    grid-template-columns: 16px minmax(80px, 1fr) 80px minmax(110px, 1.4fr) auto auto;
+    gap: 6px;
+    align-items: center;
+}
+.pp-layout-role-row .text_pole {
+    margin: 0;
+    min-width: 0;
+}
+.pp-layout-role-name {
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pp-layout-role-shared::after {
+    content: " ⧉";
+    opacity: 0.6;
+}
+.pp-role-status-ok { color: #7ec699; }
+.pp-role-status-missing { color: #e06c75; }
+.pp-role-status-problem { color: #e5c07b; }
+.pp-layout-roles-create {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.pp-layout-roles-create[hidden] {
+    display: none;
+}
+.pp-layout-roles-create .text_pole {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.pp-layout-roles-create select.text_pole {
+    flex: 0 0 90px;
+}

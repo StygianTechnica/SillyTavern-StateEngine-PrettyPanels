@@ -46,6 +46,8 @@ function renderLayouts() {
     }
     select.replaceChildren(...options);
     select.value = selectedValue;
+    // A layout is chosen FOR a chat: without one open there is nothing to choose for.
+    select.disabled = !getSessionState().chatId;
     renderChatHint();
 }
 
@@ -53,7 +55,7 @@ function renderChatHint() {
     const hint = document.getElementById('pp_layout_chat_hint');
     if (!hint) return;
     const { chatId, chosen } = getSessionState();
-    if (!chatId) hint.textContent = 'No chat open - choosing a layout only changes what is on screen.';
+    if (!chatId) hint.textContent = 'Open a chat to choose its layout.';
     else if (chosen) hint.textContent = 'This chat\'s layout.';
     else hint.textContent = 'This chat hasn\'t chosen a layout, so none is shown. Pick one to use it in this chat.';
 }
@@ -106,7 +108,9 @@ const layoutActions = {
     async new() {
         const name = await promptText('Name for the new layout:', 'New Layout');
         if (!name) return;
-        await chooseLayout(createLayout(name));
+        const id = createLayout(name);
+        // Shown (and chosen) only for an open chat.
+        if (!await chooseLayout(id)) notify('success', `Created "${getLayout(id).name}". Open a chat to use it.`);
     },
     duplicate(id) {
         const newId = duplicateLayout(id);

@@ -242,7 +242,8 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 - Each chat chooses its layout. The choice is stored as the State Engine variable
   `prettyPanels__layoutId` in Pretty Panels' own **PP Configuration** preset (created
   through the State Engine API, hidden from the tracker).
-- There is **no default layout**. A chat without PP Configuration (or with no choice in it,
+- There is **no default layout**, and a layout can only be chosen with a chat open (the
+  dropdown is disabled otherwise). A chat without PP Configuration (or with no choice in it,
   or whose layout was deleted) shows **no layout**: the screen stays empty except for a
   small card, "Select a layout to use for this chat.", and the drawer's dropdown reads
   "— Select a layout —". Picking a layout there (or in the drawer) shows it and saves it
@@ -254,23 +255,46 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 
 ## Roles
 
-A State Engine **role** says what a variable means (`scene.title`, `character.health`);
-each chat assigns one variable to each role in State Engine's **Roles** tab. An element can
-be bound to a role instead of a variable - it then shows whichever variable the chat
-assigned, so one layout works in chats that keep the scene title in different variables.
+A State Engine **role** says what a variable means (`scene.title`, `character.health`). Roles
+are global - they exist in every chat - and each chat chooses which of its variables fulfils
+each one. An element can be bound to a role instead of a variable: it shows whichever
+variable the chat assigned, so one layout works in chats that keep the scene title in
+different variables.
 
-- Bind an element to a role from the **Roles** group in the Variables list (drag or click),
-  or type `role:<name>` in the Binding field. A role that doesn't exist yet in the chat is
-  fine - showing the layout asks State Engine for it.
-- When a layout is shown in a chat, Pretty Panels requests its roles from State Engine
-  for that chat (with the type each needs: number for bars and gauges, date for analog
-  clocks, any for text) and checks them. If any is unassigned or assigned to a variable of
-  the wrong type, a warning lists them - "Required roles are not assigned. Open State
-  Engine → Roles Panel to assign them." - and the layout still renders, with those
-  elements blank. Assigning them updates the screen live.
-- Elements with the old free-text **Role** tag (before roles were State Engine's) are
-  bound to that role when they had no variable (lowercased - "Health" becomes
-  `health`); otherwise the tag is dropped.
+Roles are namespaced like variables: a role's id is `<namespace>__<name>`. Roles a layout
+defines are Pretty Panels' (`prettyPanels__scene.title`); roles from State Engine's Roles tab
+are `se__…`; other extensions use their own namespace. Lists show a role's name; hover shows
+its id. A namespace never has two roles with the same name.
+
+- **Layout Roles** (drawer, under the Layout Library) - the roles of the layout on screen:
+  add a role (name and type: text, number, boolean, date, image, list or any), rename it,
+  change its type, remove it. Two layouts that add the same name **share** that one role (a
+  rename or type change asks first, and applies to both); a role leaves State Engine (with
+  every chat's variable for it) when the last layout carrying it removes it, or when that
+  layout is deleted. Each row also has **this chat's variable** for the role - a dropdown of
+  the chat's existing variables that fit its type (Pretty Panels never creates variables;
+  make one in State Engine's Variables tab). Roles of other namespaces the layout's elements
+  are bound to are listed too, with their variable.
+- Every change to the layout roles is sent to State Engine (`setNamespaceRoles`); a rename
+  is applied there first (`updateRole`), so every chat keeps its variable for the role.
+- **Variables | Roles** - the Add section of a panel's properties has a toggle between the
+  variable list and the role list (this layout's roles first, then every other role). Drag a
+  role onto a panel to add an element bound to it, or onto an element to bind it or swap its
+  role; click it to add it to the panel.
+- **Binding type** - an element's properties choose Variable or Role. In Role mode a dropdown
+  lists the roles the element can show (bars and gauges: number or any; clocks: date or any;
+  text: all); picking another one swaps the role.
+- When a layout is shown in a chat, Pretty Panels requests its roles - its layout roles plus
+  every role its elements are bound to - from State Engine for that chat, and checks them. If
+  any is unassigned (or assigned to a variable that no longer fits), a warning lists them -
+  "Required roles are not assigned. Open State Engine → Roles Panel (or the Pretty Panels
+  drawer → Layout Roles) to assign them." - and the layout still renders, with those elements
+  blank. Assigning them updates the screen live.
+- A layout export carries its role definitions; importing adds them (a name this install
+  already has is shared and keeps its own type).
+- Elements with the old free-text **Role** tag, and role bindings saved before roles had
+  namespaces, become this layout's roles (lowercased: "Health" is `prettyPanels__health`,
+  typed by the element). A tag on an element that shows a variable is dropped.
 - Panel templates don't keep role bindings, the same as variable bindings.
 
 ## Layouts, templates and storage
@@ -328,6 +352,9 @@ assigned, so one layout works in chats that keep the scene title in different va
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
 | `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
+| `src/library/role-library.js` | Layout roles: the role registry and each layout's roles |
+| `src/chat/role-sync.js` | Sends the layout roles to State Engine |
+| `src/ui/layout-roles-drawer.js` | The drawer's Layout Roles section (roles, types, this chat's variables) |
 | `src/ui/variable-picker.js` | Searchable, draggable variable list |
 | `src/ui/layout-toolbar.js` | Layout Tools toolbar |
 | `src/ui/guides.js` | Alignment guides while dragging |

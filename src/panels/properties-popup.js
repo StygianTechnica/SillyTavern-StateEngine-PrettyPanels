@@ -16,19 +16,24 @@
 //     (src/ui/font-picker.js); a live
 //     Preview, and delete. Rows carry data-for-types / data-widget-field
 //     and are hidden when they don't apply to the element's type.
-//   - Add & Variables: the palette (free text, shapes) and the variable picker
+//   - Add, Variables & Roles: the palette (free text, shapes) and, behind a
+//     Variables | Roles toggle, the variable picker or the role picker
 //     (src/ui/variable-picker.js)
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
 // through `hooks`; nothing is written here.
 
-import { VariablePicker, ElementPalette } from '../ui/variable-picker.js';
+import { VariablePicker, ElementPalette, RolePicker } from '../ui/variable-picker.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
-import { loadCatalog, getCatalog, findVariable, onCatalogChange, getRole } from '../chat/variable-service.js';
 import {
-    bindingRef, bindingFromRef, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
+    loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles,
+} from '../chat/variable-service.js';
+import { listLayoutRoles } from '../library/role-library.js';
+import { getActiveLayoutId } from '../library/layout-library.js';
+import {
+    bindingRef, bindingFromRef, rolePublicName, roleTypeForElement, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
@@ -208,6 +213,15 @@ export class PanelPropertiesPopup {
             onDrop: (name, x, y) => hooks.onDropVariable(name, x, y),
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
+        this.rolePicker = new RolePicker({
+            onPick: (ref) => hooks.onAddVariable(ref),
+            onDrop: (ref, x, y) => hooks.onDropVariable(ref, x, y),
+            dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
+        });
+        // Which list the Variables | Roles toggle shows, and the Binding type
+        // chosen for an element that has no binding yet.
+        this.paletteMode = 'variables';
+        this.bindingMode = null;
         this.shapes = new ElementPalette({
             onPick: (kind) => hooks.onAddPaletteItem(kind),
             onDrop: (kind, x, y) => hooks.onDropPaletteItem(kind, x, y),
@@ -224,6 +238,8 @@ export class PanelPropertiesPopup {
             document.body.appendChild(this.el);
             document.addEventListener('keydown', this.onKeyDown);
             this.stopCatalogWatch = onCatalogChange((catalog) => this.#applyCatalog(catalog));
+            this.stopRolesWatch = onRolesChange(() => this.#applyRoles());
+            void refreshRoles().then(() => this.#applyRoles());
             this.stopFontWatch = fontRegistry.onChange(() => this.#refreshElement());
             this.stopThemeWatch = onThemesChange(() => this.refresh());
             void fontRegistry.load().then(() => this.#refreshElement());
@@ -236,11 +252,19 @@ export class PanelPropertiesPopup {
         if (!this.el.isConnected) return;
         document.removeEventListener('keydown', this.onKeyDown);
         this.stopCatalogWatch?.();
+        this.stopRolesWatch?.();
         this.stopFontWatch?.();
         this.stopThemeWatch?.();
         closeFontPicker();
         this.el.remove();
         this.hooks.onClose();
+    }
+
+    // The role picker and the Binding field's role list follow the roles.
+    #applyRoles() {
+        if (!this.el.isConnected) return;
+        this.rolePicker.setRoles(getRoleList(), listLayoutRoles(getActiveLayoutId()).map((r) => r.id));
+        this.#refreshElement();
     }
 
     #applyCatalog(catalog) {
@@ -380,11 +404,13 @@ export class PanelPropertiesPopup {
         if (element.binding.role) {
             // Which variable the chat assigned to the role, from State Engine.
             const role = getRole(element.binding.role);
-            if (!role) info.textContent = `Role · not in this chat yet - choosing this layout requests it; assign it in State Engine → Roles`;
-            else if (!role.variable) info.textContent = `Role · ${role.type} · not assigned in this chat - assign it in State Engine → Roles`;
+            info.title = element.binding.role;
+            if (!role || !role.exists) info.textContent = 'Role · not defined in State Engine - add it to the layout (drawer → Layout Roles)';
+            else if (!role.variable) info.textContent = `Role · ${role.type} · not assigned in this chat - choose its variable in the drawer's Layout Roles`;
             else info.textContent = `Role · ${role.type} · ${role.variable}${role.problem ? ` · ${role.problem}` : ''}`;
             return;
         }
+        info.title = '';
         const found = findVariable(element.binding.name);
         const entry = this.#entry(element);
         const parts = [];
@@ -418,7 +444,8 @@ export class PanelPropertiesPopup {
         const def = this.#def(element);
         set('type', (f) => { f.value = element.type; });
         this.#applyTypeVisibility(element.type);
-        set('binding', (f) => { f.value = bindingRef(element.binding) ?? ''; });
+        set('binding', (f) => { f.value = element.binding?.name ?? ''; });
+        this.#refreshBindingMode(element);
         set('showLabel', (f) => { f.checked = element.showLabel; });
         set('labelOverride', (f) => {
             f.value = element.labelOverride;
@@ -581,6 +608,43 @@ export class PanelPropertiesPopup {
     }
 
     // Shows only the rows that apply to the element's type.
+    // Variables | Roles: which list the Add section shows.
+    #applyPaletteMode(root = this.el) {
+        for (const tab of root.querySelectorAll('[data-palette]')) {
+            const active = tab.dataset.palette === this.paletteMode;
+            tab.classList.toggle('pp-palette-tab-active', active);
+            tab.setAttribute('aria-selected', String(active));
+        }
+        root.querySelector('.pp-properties-picker').hidden = this.paletteMode !== 'variables';
+        root.querySelector('.pp-properties-role-picker').hidden = this.paletteMode !== 'roles';
+    }
+
+    // The Binding type (an element bound to a role shows Role) and the Role
+    // dropdown: the roles whose type this element can show, by public name
+    // (with the namespace only when two roles share a name), the id on hover.
+    #refreshBindingMode(element) {
+        const mode = element.binding?.role ? 'role' : (element.binding?.name ? 'variable' : (this.bindingMode ?? 'variable'));
+        const typeField = this.el.querySelector('[data-el="bindingType"]');
+        if (typeField !== document.activeElement) typeField.value = mode;
+        for (const node of this.el.querySelectorAll('[data-binding-mode]')) node.hidden = node.dataset.bindingMode !== mode;
+        const select = this.el.querySelector('[data-el="bindingRole"]');
+        if (select === document.activeElement) return;
+        const needs = roleTypeForElement(element.type);
+        const fits = (role) => needs === 'any' || role.type === needs || role.type === 'any';
+        const roles = getRoleList().filter((r) => r.exists !== false && (fits(r) || r.id === element.binding?.role));
+        const counts = new Map();
+        for (const role of roles) counts.set(role.publicName, (counts.get(role.publicName) ?? 0) + 1);
+        select.replaceChildren(new Option('— choose a role —', ''), ...roles.map((role) => {
+            const option = new Option(counts.get(role.publicName) > 1 ? `${role.publicName} · ${role.namespace}` : role.publicName, role.id);
+            option.title = `${role.id} (${role.type})`;
+            return option;
+        }));
+        const current = element.binding?.role ?? '';
+        if (current && !roles.some((r) => r.id === current)) select.add(new Option(`${rolePublicName(current)} (not defined)`, current));
+        select.value = current;
+        select.title = current || 'Roles this element can show';
+    }
+
     #applyTypeVisibility(type) {
         for (const node of this.el.querySelectorAll('[data-for-types]')) {
             node.hidden = !node.dataset.forTypes.split(' ').includes(type);
@@ -993,9 +1057,20 @@ export class PanelPropertiesPopup {
                         ${ELEMENT_TYPES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
                     </select>
                 </label>
-                <label class="pp-field" data-for-types="${BOUND_TYPES}"><span>Binding</span>
-                    <input type="text" class="text_pole" data-el="binding" placeholder="search or type, e.g. se__hp or role:scene.title" autocomplete="off" />
+                <label class="pp-field" data-for-types="${BOUND_TYPES}"><span>Binding type</span>
+                    <select class="text_pole" data-el="bindingType" title="Bind to a variable, or to a role (whichever variable each chat assigns to it)">
+                        <option value="variable">Variable</option>
+                        <option value="role">Role</option>
+                    </select>
                 </label>
+                <div data-for-types="${BOUND_TYPES}">
+                    <label class="pp-field" data-binding-mode="variable"><span>Binding</span>
+                        <input type="text" class="text_pole" data-el="binding" placeholder="search or type, e.g. se__hp" autocomplete="off" />
+                    </label>
+                    <label class="pp-field" data-binding-mode="role"><span>Role</span>
+                        <select class="text_pole" data-el="bindingRole"></select>
+                    </label>
+                </div>
                 <small class="pp-field-info" data-el="binding-info" data-for-types="${BOUND_TYPES}"></small>
                 <div class="pp-geometry">
                     <span class="pp-geometry-caption">Position</span>
@@ -1181,11 +1256,17 @@ export class PanelPropertiesPopup {
             </div>
         `);
 
-        const variablesSection = sectionMarkup('variables', 'Add & Variables', `
-            <button type="button" class="pp-properties-close" data-action="reload-variables" title="Reload the variable list">
+        const variablesSection = sectionMarkup('variables', 'Add, Variables & Roles', `
+            <button type="button" class="pp-properties-close" data-action="reload-variables" title="Reload the variable and role lists">
                 <i class="fa-solid fa-rotate"></i>
             </button>
-        `, '<div class="pp-properties-shapes"></div><div class="pp-properties-picker"></div>');
+        `, `<div class="pp-properties-shapes"></div>
+            <div class="pp-palette-toggle" role="tablist">
+                <button type="button" class="menu_button pp-palette-tab" data-palette="variables" role="tab">Variables</button>
+                <button type="button" class="menu_button pp-palette-tab" data-palette="roles" role="tab">Roles</button>
+            </div>
+            <div class="pp-properties-picker"></div>
+            <div class="pp-properties-role-picker"></div>`);
 
         el.innerHTML = `
             <div class="pp-properties-header">
@@ -1213,6 +1294,14 @@ export class PanelPropertiesPopup {
 
         el.querySelector('.pp-properties-shapes').appendChild(this.shapes.el);
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
+        el.querySelector('.pp-properties-role-picker').appendChild(this.rolePicker.el);
+        for (const tab of el.querySelectorAll('[data-palette]')) {
+            tab.addEventListener('click', () => {
+                this.paletteMode = tab.dataset.palette;
+                this.#applyPaletteMode();
+            });
+        }
+        this.#applyPaletteMode(el);
         this.preview = buildElementContent();
         this.preview.classList.add('pp-element-preview');
         el.querySelector('.pp-element-preview-frame').appendChild(this.preview);
@@ -1234,7 +1323,10 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-action="delete"]').addEventListener('click', () => this.hooks.onDelete());
         el.querySelector('[data-action="save-template"]').addEventListener('click', () => this.hooks.onSaveTemplate());
         el.querySelector('[data-action="export-template"]').addEventListener('click', () => this.hooks.onExportTemplate());
-        el.querySelector('[data-action="reload-variables"]').addEventListener('click', () => void loadCatalog());
+        el.querySelector('[data-action="reload-variables"]').addEventListener('click', () => {
+            void loadCatalog();
+            void refreshRoles().then(() => this.#applyRoles());
+        });
         el.querySelector('[data-action="delete-element"]').addEventListener('click', () => {
             const element = this.#selected();
             if (element) this.hooks.onElementDelete(element.id);
@@ -1296,6 +1388,18 @@ export class PanelPropertiesPopup {
         field('binding').addEventListener('change', (e) => {
             const ref = e.target.value.trim();
             this.#change({ binding: ref ? bindingFromRef(ref) : null });
+        });
+        // Switching the Binding type only changes which field shows; the
+        // binding changes when a variable or role is chosen.
+        field('bindingType').addEventListener('change', (e) => {
+            this.bindingMode = e.target.value;
+            const element = this.#selected();
+            if (element) this.#refreshBindingMode(element);
+        });
+        // Choosing another role swaps the element's role (only roles whose
+        // type the element can show are offered).
+        field('bindingRole').addEventListener('change', (e) => {
+            this.#change({ binding: e.target.value ? { role: e.target.value } : null });
         });
         field('showLabel').addEventListener('change', (e) => this.#change({ showLabel: e.target.checked }));
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));

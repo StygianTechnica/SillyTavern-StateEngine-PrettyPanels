@@ -11,11 +11,11 @@
 // "Pretty Panels" group and are answered here directly: they belong to no
 // chat, so State Engine is never asked about them.
 //
-// The current chat's State Engine ROLES join it as a "Roles" group, each as
-// a ref "role:<name>" (element-model.js ROLE_REF_PREFIX), so the picker, the
-// Binding field and drag-and-drop offer them like variables. A role ref
-// reads the variable the chat assigned to the role; with none assigned it
-// has no value (the element shows blank).
+// State Engine ROLES (global; each chat assigns them a variable) are kept
+// here too, for the role palette and the Binding field's Role mode. An
+// element bound to a role uses the ref "role:<role id>" (element-model.js
+// ROLE_REF_PREFIX); it reads the variable the current chat assigned to the
+// role, and with none assigned it has no value (the element shows blank).
 
 import { EXTENSION_ID } from '../constants.js';
 import { listAllVariables } from '../api/list-all-variables.js';
@@ -29,29 +29,35 @@ import { isRoleRef, roleOfRef, roleRef } from '../elements/element-model.js';
 // The catalog group holding Pretty Panels' own variables. Always "active"
 // (there is no preset to activate for it).
 export const PP_PRESET_ID = '__pretty_panels__';
-// The catalog group holding the chat's roles.
-export const ROLES_PRESET_ID = '__roles__';
 
-// The chat's roles (State Engine listRoles entries), by name.
+// Every State Engine role (they are global), as seen from the current chat -
+// its assignment and validity there: listRoles entries
+// { id, namespace, publicName, type, label, description, exists,
+//   requestedBy, variable, valid, problem }, by id.
 let roles = new Map();
+const roleListeners = new Set();
 
+// Every role, sorted by public name then namespace (so roles sharing a
+// public name sit together).
+export function getRoleList() {
+    return [...roles.values()];
+}
+
+// Called with the role list whenever it changes.
+export function onRolesChange(listener) {
+    roleListeners.add(listener);
+    return () => roleListeners.delete(listener);
+}
+
+// The role entry for a role id or "role:<id>" ref, or null.
+export function getRole(idOrRef) {
+    return roles.get(isRoleRef(idOrRef) ? roleOfRef(idOrRef) : idOrRef) ?? null;
+}
+
+// A role as a display definition (the shape a variable's has), for
+// labelling and formatting an element bound to it while it has no value.
 function roleDefinition(role) {
-    const target = role.variable ? `assigned to ${role.variable}` : 'not assigned in this chat';
-    return {
-        name: roleRef(role.name), type: role.type, label: role.label || role.name, role: role.name,
-        description: `Role "${role.name}" (${role.type}) - ${target}${role.problem ? ` (${role.problem})` : ''}`,
-    };
-}
-
-function rolesPreset() {
-    const variables = [...roles.values()].map(roleDefinition).sort((a, b) => a.label.localeCompare(b.label));
-    return variables.length ? [{ id: ROLES_PRESET_ID, name: 'Roles', namespace: 'roles', active: true, variables }] : [];
-}
-
-// The chat's role entry for a role name or ref, or null:
-// { name, type, variable, valid, problem, requestedBy, ... }.
-export function getRole(nameOrRef) {
-    return roles.get(isRoleRef(nameOrRef) ? roleOfRef(nameOrRef) : nameOrRef) ?? null;
+    return { name: roleRef(role.id), type: role.type, label: role.label || role.publicName, role: role.id, namespace: role.namespace };
 }
 
 // The variable a ref reads: the ref itself, or a role's assigned variable
@@ -61,16 +67,25 @@ export function targetOf(ref) {
     return getRole(ref)?.variable ?? null;
 }
 
-// Re-reads the chat's roles. Never throws (an older State Engine without
-// the Role API simply has no roles).
+// Re-reads every role as seen from `chatId` (no chat: no assignments).
+// Never throws (an older State Engine without the Role API has no roles).
 async function loadRoles(chatId) {
-    if (!chatId) return new Map();
     try {
-        return new Map(((await listRoles(EXTENSION_ID, chatId)) ?? []).map((role) => [role.name, role]));
+        return new Map(((await listRoles(EXTENSION_ID, chatId || null)) ?? []).map((role) => [role.id, role]));
     } catch (err) {
         console.warn('[PrettyPanels] could not read State Engine roles (update State Engine for role support)', err);
         return new Map();
     }
+}
+
+// Re-reads the roles now (the role palette, the drawer's Layout Roles).
+export async function refreshRoles() {
+    const next = await loadRoles(currentChatId());
+    if (JSON.stringify([...next]) === JSON.stringify([...roles])) return roles;
+    roles = next;
+    for (const listener of roleListeners) listener(getRoleList());
+    for (const listener of valueListeners) listener();
+    return roles;
 }
 
 function ppDefinition(record) {
@@ -185,8 +200,7 @@ export async function refreshValues() {
     roles = nextRoles;
     values = next;
     images = nextImages;
-    // The picker's Roles group follows the chat's roles.
-    if (rolesChanged) publishCatalog();
+    if (rolesChanged) for (const listener of roleListeners) listener(getRoleList());
     for (const listener of valueListeners) listener();
 }
 
@@ -206,9 +220,9 @@ export async function loadCatalog() {
     return publishCatalog();
 }
 
-// State Engine's presets plus the Roles and Pretty Panels groups.
+// State Engine's presets plus the Pretty Panels group.
 function publishCatalog() {
-    catalog = [...rolesPreset(), ...ppPreset(), ...engineCatalog];
+    catalog = [...ppPreset(), ...engineCatalog];
     for (const listener of catalogListeners) listener(catalog);
     return catalog;
 }
@@ -237,7 +251,12 @@ export function getCatalog() {
 }
 
 // The catalog entry (preset + display def) for a qualified name, or null.
+// A role ref answers with the role as a display definition.
 export function findVariable(name) {
+    if (isRoleRef(name)) {
+        const role = getRole(name);
+        return role ? { preset: { id: '__roles__', name: 'Roles', namespace: role.namespace, active: true }, def: roleDefinition(role) } : null;
+    }
     for (const preset of catalog) {
         const def = preset.variables.find((v) => v.name === name);
         if (def) return { preset, def };

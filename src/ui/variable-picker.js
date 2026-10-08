@@ -186,3 +186,86 @@ export class VariablePicker {
         return el;
     }
 }
+
+// The "Roles" list in a panel's properties (the Variables | Roles toggle):
+// State Engine roles - this layout's own first, then every other role -
+// filterable by name. Drag one onto a panel to add an element bound to it,
+// or onto an element to bind (or swap) it; click to add it to this panel.
+// Lists show a role's public name; its id ("prettyPanels__scene.title",
+// namespace included) is on hover, with its type and this chat's variable.
+export class RolePicker {
+    // hooks: { onPick(ref), onDrop(ref, clientX, clientY), dropTargetAt(clientX, clientY) }
+    // ref: "role:<role id>"
+    constructor(hooks) {
+        this.hooks = hooks;
+        this.roles = [];
+        this.layoutIds = new Set();
+        this.el = document.createElement('div');
+        this.el.className = 'pp-picker pp-role-picker';
+        this.el.innerHTML = `
+            <div class="pp-picker-controls">
+                <input type="search" class="text_pole pp-picker-search" placeholder="Search roles…" aria-label="Search roles" />
+            </div>
+            <div class="pp-picker-list"></div>
+            <small class="pp-picker-hint">Drag onto a panel to add it, or onto an element to bind or swap its role. Click to add it to this panel. Add roles to the layout in the Pretty Panels drawer (Layout Roles).</small>
+        `;
+        this.search = this.el.querySelector('.pp-picker-search');
+        this.list = this.el.querySelector('.pp-picker-list');
+        this.search.addEventListener('input', () => this.render());
+    }
+
+    // `roles`: State Engine role entries; `layoutIds`: this layout's role ids.
+    setRoles(roles, layoutIds = []) {
+        this.roles = roles.filter((r) => r.exists !== false);
+        this.layoutIds = new Set(layoutIds);
+        this.render();
+    }
+
+    render() {
+        const query = this.search.value.trim().toLowerCase();
+        const matches = (role) => !query || role.publicName.includes(query) || (role.label ?? '').toLowerCase().includes(query);
+        const shown = this.roles.filter(matches);
+        const groups = [
+            ['This layout', shown.filter((r) => this.layoutIds.has(r.id))],
+            ['All roles', shown.filter((r) => !this.layoutIds.has(r.id))],
+        ].filter(([, list]) => list.length > 0);
+        this.list.replaceChildren();
+        if (groups.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'pp-picker-empty';
+            empty.textContent = this.roles.length === 0 ? 'No roles yet - add some in the drawer\'s Layout Roles.' : 'No roles match.';
+            this.list.appendChild(empty);
+            return;
+        }
+        // A public name more than one namespace uses is shown once per role
+        // (duplicated); hover tells them apart.
+        const counts = new Map();
+        for (const role of this.roles) counts.set(role.publicName, (counts.get(role.publicName) ?? 0) + 1);
+        for (const [title, list] of groups) {
+            const heading = document.createElement('div');
+            heading.className = 'pp-picker-group';
+            heading.textContent = title;
+            this.list.appendChild(heading);
+            for (const role of list) this.list.appendChild(this.#item(role, counts.get(role.publicName) > 1));
+        }
+    }
+
+    #item(role, duplicated) {
+        const item = document.createElement('div');
+        item.className = 'pp-picker-item';
+        item.dataset.role = role.id;
+        const assigned = role.variable ? `This chat: ${role.variable}${role.problem ? ` (${role.problem})` : ''}` : 'Not assigned in this chat';
+        item.title = `${role.id}\n${role.type} role${role.description ? ` - ${role.description}` : ''}\n${assigned}${duplicated ? '\nAnother role shares this name (different namespace).' : ''}\nDrag onto a panel or element, or click to add here.`;
+        item.innerHTML = '<span class="pp-picker-label"></span><span class="pp-picker-type"></span>';
+        item.querySelector('.pp-picker-label').textContent = role.publicName;
+        if (duplicated) item.querySelector('.pp-picker-label').classList.add('pp-role-duplicated');
+        item.querySelector('.pp-picker-type').textContent = role.type;
+        const ref = `role:${role.id}`;
+        bindPaletteDrag(item, role.publicName, {
+            onClick: () => this.hooks.onPick(ref),
+            onDrop: (x, y) => this.hooks.onDrop(ref, x, y),
+            dropTargetAt: (x, y) => this.hooks.dropTargetAt(x, y),
+        });
+        return item;
+    }
+}
