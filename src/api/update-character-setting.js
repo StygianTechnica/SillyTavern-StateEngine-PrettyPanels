@@ -8,7 +8,7 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Renames a setting / switches its auto-promote ({ name?, autoPromote? }). Returns it, or null. See the State Engine API Reference, "Character API".
+// Renames a setting / switches its auto-confirm ({ name?, autoConfirm? }). Returns it, or null. See the State Engine API Reference, "Character API".
 export async function updateCharacterSetting(extensionId, settingId, patch) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);

@@ -2794,3 +2794,8 @@ body.pp-editing .pp-character-card {
         max-height: 90vh;
     }
 }
+/* Icon + label buttons in the Character Manager: a gap between the two
+   (icon-only buttons carry the icon class on the button itself). */
+.pp-cm-window .menu_button > i.fa-solid {
+    margin-right: 0.4em;
+}

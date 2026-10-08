@@ -337,18 +337,22 @@ variables. The characters themselves - and every rule about them - are State Eng
   confirmed ✓ / unconfirmed ? badge, and - in Value Formatting - an optional presence dot and
   alias list. A list of characters (an Array of item type Character) draws a **CharacterList**
   of cards. Clicking a card (outside Editing Mode) opens the Character Manager on it.
+- **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat
+  until it is reviewed: confirmed as it is, edited and saved, or resolved to an existing
+  character. Confirming adds it to the setting - there is no separate "add to setting".
 - **The Character Manager** - opens from a card, the drawer's **Character Manager** button,
   State Engine's **Manage characters** button and its "New characters detected for review"
   notification. Two views:
-  - **This chat**: the chat's characters - its own (unconfirmed ones from extraction, or ones
-    not promoted) and its setting's - with presence, the introduction snippet (read-only), id,
-    confirmed status; the chat's **setting** is chosen here. Filter to the unconfirmed ones to
-    review them.
+  - **This chat**: the chat's characters - its unconfirmed ones (detected, not yet reviewed,
+    only in this chat) and its setting's - with presence, the introduction snippet (read-only),
+    id, confirmed status; the chat's **setting** is chosen here. Filter to the unconfirmed ones
+    to review them.
   - **Settings**: any setting's canonical characters (the chat's by default); create, rename
-    and delete settings, and switch a setting to always auto-promote.
+    and delete settings, and switch a setting to always auto-confirm.
   Actions: edit (name, aliases, image - a URL or an upload - faction, role, biography,
-  personality; saving confirms the character), confirm, promote into the setting, merge into
-  another character, delete, create a canonical character, and **variants** - alternate
+  personality; saving confirms the character), confirm, **resolve** an unconfirmed character to
+  one you already have (its detected name becomes their alias, and they are confirmed), merge
+  two characters, delete, create a canonical character, and **variants** - alternate
   versions overriding any of those fields, with the one the character uses for its whole
   setting. It is the only place characters are edited.
 

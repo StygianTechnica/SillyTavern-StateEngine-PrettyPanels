@@ -6,14 +6,19 @@
 // State Engine's "New characters detected for review" notification (the
 // last two through registerCharacterManager()).
 //
+// Confirmed <=> in the setting (State Engine's rule): a character detected
+// in a chat is unconfirmed and only in that chat until it is reviewed -
+// confirmed as it is, edited and saved (which confirms it), or RESOLVED to
+// an existing character (its detected name becomes that character's alias).
+// There is no separate "add to setting".
+//
 // Two views:
-//   This chat - the open chat's characters: its own (unconfirmed ones from
-//     extraction, or confirmed but not promoted) and its setting's, with
-//     presence; the chat's setting is chosen here. Edit, confirm, promote,
-//     merge, delete; filter to unconfirmed.
+//   This chat - the open chat's characters: its unconfirmed ones and its
+//     setting's, with presence; the chat's setting is chosen here. Edit,
+//     confirm, resolve, merge, delete; filter to unconfirmed.
 //   Settings - any setting's canonical characters (default: the chat's
 //     setting): create, edit, merge, delete; settings themselves are created,
-//     renamed, deleted and set to auto-promote here.
+//     renamed, deleted and set to auto-confirm here.
 // Editing a character edits its baseline (for a canonical one, in every chat
 // on its setting) and confirms it. Each character has variants (alternate
 // versions overriding baseline fields) and one active variant.
@@ -32,7 +37,7 @@ import { updateCharacter } from '../api/update-character.js';
 import { mergeCharacters } from '../api/merge-characters.js';
 import { deleteCharacter } from '../api/delete-character.js';
 import { confirmCharacter } from '../api/confirm-character.js';
-import { promoteCharacter } from '../api/promote-character.js';
+import { resolveCharacter } from '../api/resolve-character.js';
 import { addCharacterVariant } from '../api/add-character-variant.js';
 import { updateCharacterVariant } from '../api/update-character-variant.js';
 import { deleteCharacterVariant } from '../api/delete-character-variant.js';
@@ -123,7 +128,7 @@ function toolbarHtml() {
     const chatId = currentChatId();
     if (state.view === 'chat') {
         return `
-            <label class="pp-cm-field" title="The setting this chat's characters come from and are promoted into">
+            <label class="pp-cm-field" title="The setting this chat's characters come from - and are added to when confirmed">
                 <span>Setting</span>
                 <select class="text_pole" data-cm="chatSetting">${state.chatSetting ? '' : '<option value="" selected>— not chosen yet —</option>'}${settingOptions(state.chatSetting)}</select>
             </label>
@@ -143,8 +148,8 @@ function toolbarHtml() {
         <div class="menu_button fa-solid fa-plus" data-cm-action="newSetting" title="New setting"></div>
         <div class="menu_button fa-solid fa-pen" data-cm-action="renameSetting" title="Rename this setting"></div>
         <div class="menu_button fa-solid fa-trash-can" data-cm-action="deleteSetting" title="${setting?.isDefault ? 'The Default setting cannot be deleted' : 'Delete this setting and its characters'}"${setting?.isDefault ? ' data-disabled="true"' : ''}></div>
-        <label class="checkbox_label pp-cm-check" title="Promote every character met in a chat on this setting into it at once">
-            <input type="checkbox" data-cm="autoPromote"${setting?.autoPromote ? ' checked' : ''} /><span>Always auto-promote</span>
+        <label class="checkbox_label pp-cm-check" title="Confirm every character detected in a chat on this setting at once - so it is added to the setting without review">
+            <input type="checkbox" data-cm="autoConfirm"${setting?.autoConfirm ? ' checked' : ''} /><span>Always auto-confirm</span>
         </label>
         <input type="search" class="text_pole pp-cm-search" data-cm="search" placeholder="Search names and aliases…" value="${escapeHtml(state.search)}" />
         <div class="menu_button" data-cm-action="newCharacter" title="Create a canonical character in this setting"><i class="fa-solid fa-user-plus"></i> New character</div>
@@ -166,8 +171,11 @@ function characterRow(c) {
             <div class="pp-cm-main">
                 <div class="pp-cm-title">
                     <span class="pp-cm-name">${escapeHtml(c.name)}</span>
-                    <span class="pp-cm-badge ${c.confirmed ? 'pp-cm-confirmed' : 'pp-cm-unconfirmed'}">${c.confirmed ? 'Confirmed' : 'Unconfirmed'}</span>
-                    ${chatView ? `<span class="pp-cm-badge pp-cm-scope" title="${c.scope === 'chat' ? 'Only in this chat - promote it to keep it in the setting' : 'In the setting - every chat on it has this character'}">${c.scope === 'chat' ? 'This chat only' : 'Setting'}</span>` : ''}
+                    <span class="pp-cm-badge ${c.confirmed ? 'pp-cm-confirmed' : 'pp-cm-unconfirmed'}" title="${c.confirmed
+                        ? 'Confirmed - in the setting: every chat on it has this character'
+                        : (c.scope === 'chat'
+                            ? 'Detected, not reviewed yet - only in this chat. Confirm it (or save an edit) to add it to the setting, or resolve it to a character you already have.'
+                            : 'Not reviewed yet')}">${c.confirmed ? 'Confirmed' : 'Unconfirmed'}</span>
                     ${chatView ? `<span class="pp-cm-presence ${c.present ? 'pp-present' : 'pp-absent'}" title="${c.present ? 'In the scene' : 'Not in the scene'}"></span>` : ''}
                     ${variant ? `<span class="pp-cm-badge pp-cm-variant" title="The variant this character uses">${escapeHtml(variant.name)}</span>` : ''}
                 </div>
@@ -177,9 +185,10 @@ function characterRow(c) {
             </div>
             <div class="pp-cm-actions">
                 <div class="menu_button fa-solid fa-pen" data-cm-action="edit" title="Edit (saving confirms it)"></div>
-                ${c.confirmed ? '' : '<div class="menu_button fa-solid fa-check" data-cm-action="confirm" title="Confirm as it is"></div>'}
-                ${chatView && c.scope === 'chat' ? '<div class="menu_button fa-solid fa-arrow-up-from-bracket" data-cm-action="promote" title="Promote into the setting"></div>' : ''}
-                <div class="menu_button fa-solid fa-code-merge" data-cm-action="merge" title="Merge into another character"></div>
+                ${c.confirmed ? '' : '<div class="menu_button fa-solid fa-check" data-cm-action="confirm" title="Confirm as it is - adds it to the setting"></div>'}
+                ${c.confirmed
+                    ? '<div class="menu_button fa-solid fa-code-merge" data-cm-action="merge" title="Merge into another character"></div>'
+                    : '<div class="menu_button fa-solid fa-user-check" data-cm-action="resolve" title="Resolve to an existing character - this detected name becomes one of their aliases"></div>'}
                 <div class="menu_button fa-solid fa-trash-can" data-cm-action="delete" title="Delete"></div>
             </div>
             ${state.editingId === c.id ? editorHtml(c) : ''}
@@ -236,7 +245,7 @@ function editorHtml(c) {
                 <div class="menu_button" data-cm-action="addVariant"><i class="fa-solid fa-plus"></i> Add variant</div>
             </div>` : ''}
             <div class="pp-cm-buttons">
-                <div class="menu_button" data-cm-action="save"><i class="fa-solid fa-floppy-disk"></i> ${c ? 'Save (confirms)' : 'Create'}</div>
+                <div class="menu_button" data-cm-action="save" title="${c ? 'Saving confirms the character - it is then in the setting' : ''}"><i class="fa-solid fa-floppy-disk"></i> ${c ? 'Save (confirms)' : 'Create'}</div>
                 <div class="menu_button" data-cm-action="cancel">Cancel</div>
             </div>
         </div>`;
@@ -253,7 +262,7 @@ function render() {
     const list = overlay.querySelector('[data-cm="list"]');
     const creating = state.editingId === 'new' ? `<div class="pp-cm-row pp-cm-new"><div class="pp-cm-main"><b>New character in ${escapeHtml(state.settings.find((s) => s.id === state.settingId)?.name ?? '')}</b></div>${editorHtml(null)}</div>` : '';
     list.innerHTML = creating + (shown.length ? shown.map(characterRow).join('')
-        : `<div class="pp-cm-empty">${state.view === 'chat' && state.filter === 'unconfirmed' ? 'Nothing to review - no unconfirmed characters.' : 'No characters yet. Characters a prompted character variable meets are added here; you can also create them in a setting.'}</div>`);
+        : `<div class="pp-cm-empty">${state.view === 'chat' && state.filter === 'unconfirmed' ? 'Nothing to review - no unconfirmed characters.' : 'No characters yet. Characters a prompted character variable meets are added here (unconfirmed, until you review them); you can also create them in a setting.'}</div>`);
     for (const row of list.querySelectorAll('.pp-cm-row[data-id]')) {
         const character = state.characters.find((c) => c.id === row.dataset.id);
         const slot = row.querySelector('[data-portrait]');
@@ -325,10 +334,22 @@ async function act(action, row, target) {
         case 'confirm':
             if (refused(await confirmCharacter(EXTENSION_ID, chatId, id, options), 'Confirming')) return;
             break;
-        case 'promote':
-            if (refused(await promoteCharacter(EXTENSION_ID, chatId, id), 'Promoting')) return;
-            notify('success', `"${character.name}" is now in the setting.`);
+        case 'resolve': {
+            // Confirmed characters first - the ones it most likely is.
+            const others = state.characters.filter((c) => c.id !== id).sort((a, b) => (b.confirmed - a.confirmed) || a.name.localeCompare(b.name));
+            const targetId = await chooseFromList({
+                title: `"${character.name}" is really…`,
+                items: others.map((c) => ({ value: c.id, label: c.name, detail: [c.aliases.join(', '), c.confirmed ? '' : 'unconfirmed'].filter(Boolean).join(' · ') })),
+                emptyText: 'There is no other character to resolve it to - confirm or edit this one instead.',
+            });
+            if (!targetId) return;
+            const into = others.find((c) => c.id === targetId);
+            if (!await confirmYesNo(`Resolve "${character.name}" to "${into.name}"? "${character.name}" becomes one of ${into.name}'s aliases, every variable showing it shows ${into.name}, and ${into.name} is confirmed.`)) return;
+            if (refused(await resolveCharacter(EXTENSION_ID, chatId, id, targetId, options), 'Resolving')) return;
+            notify('success', `"${character.name}" is now an alias of ${into.name}.`);
+            state.focusId = targetId;
             break;
+        }
         case 'merge': {
             const others = state.characters.filter((c) => c.id !== id);
             const targetId = await chooseFromList({
@@ -415,8 +436,8 @@ async function onChange(e) {
         if (refused(await setChatCharacterSetting(EXTENSION_ID, chatId, e.target.value), 'Choosing the setting')) return;
         await refreshValues();
         await reload();
-    } else if (key === 'autoPromote') {
-        if (refused(await updateCharacterSetting(EXTENSION_ID, state.settingId, { autoPromote: e.target.checked }), 'Changing auto-promote')) return;
+    } else if (key === 'autoConfirm') {
+        if (refused(await updateCharacterSetting(EXTENSION_ID, state.settingId, { autoConfirm: e.target.checked }), 'Changing auto-confirm')) return;
         await reload();
     } else if (key === 'activeVariant') {
         const row = e.target.closest('.pp-cm-row');

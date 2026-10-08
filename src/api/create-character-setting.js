@@ -8,7 +8,7 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Creates a setting ({ name, autoPromote? }). Returns it, or null. See the State Engine API Reference, "Character API".
+// Creates a setting ({ name, autoConfirm? }). Returns it, or null. See the State Engine API Reference, "Character API".
 export async function createCharacterSetting(extensionId, setting) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
