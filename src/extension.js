@@ -24,6 +24,7 @@ import { LAYOUT_VARIABLE } from './chat/pp-config.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 import { addLayoutToolbar } from './ui/layout-toolbar.js';
+import { initLayoutGate } from './ui/layout-gate.js';
 
 // EXTENSION_ID / NAMESPACE live in src/constants.js - every module that
 // calls the State Engine API needs them.
@@ -91,5 +92,6 @@ export async function initExtension() {
     addWandMenuItems();
     addLayoutToolbar();
     await addSettingsDrawer();
+    initLayoutGate();
     await startChatSession();
 }

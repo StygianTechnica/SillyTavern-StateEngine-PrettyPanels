@@ -9,7 +9,7 @@
 // rather than writing anything itself.
 
 import {
-    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel,
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel, bindingRef,
 } from './element-model.js';
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
@@ -33,6 +33,20 @@ const DRAG_THRESHOLD = 3;
 export function releasePaneFocus() {
     const active = document.activeElement;
     if (active instanceof HTMLElement && active.closest('.pp-properties')) active.blur();
+}
+
+// What a bound element's tooltip names: the variable, or the role.
+function bindingTitle(binding) {
+    return binding.role ? `Role "${binding.role}"` : binding.name;
+}
+
+// Why a bound element shows no value. A role with no value is usually a
+// role this chat has not assigned (the variable's own value is rarely
+// missing once it is assigned).
+function missingTitle(binding) {
+    return binding.role
+        ? `Role "${binding.role}": not assigned in this chat (State Engine → Roles), or its variable has no value`
+        : `${binding.name}: no value in this chat (is its preset active?)`;
 }
 
 function clamp(value, min, max) {
@@ -83,7 +97,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
         container.classList.toggle('pp-element-missing', !!element.binding && entry === undefined);
         container.title = !element.binding
             ? 'Unbound - drag a variable onto this element to bind it'
-            : `${element.binding.name}${entry === undefined ? ': no value in this chat (is its preset active?)' : ''}`;
+            : (entry === undefined ? missingTitle(element.binding) : bindingTitle(element.binding));
         if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry, clockDefaultsFor(element, theme, context));
         else renderWidget(container, element, entry, theme?.formatting);
         return;
@@ -105,10 +119,10 @@ export function renderElementContent(container, stored, entry, theme = null, con
     if (entry === undefined) {
         container.classList.add('pp-element-missing');
         valueEl.textContent = '—';
-        container.title = `${element.binding.name}: no value in this chat (is its preset active?)`;
+        container.title = missingTitle(element.binding);
         return;
     }
-    container.title = element.role ? `${element.binding.name} (${element.role})` : element.binding.name;
+    container.title = bindingTitle(element.binding);
     const shown = formatValue(entry.value, def, element.format, element.formatPattern, theme?.formatting);
     if (shown.image) {
         const img = document.createElement('img');
@@ -180,12 +194,14 @@ export class ElementView {
             width: `${element.width}px`,
             height: `${element.height}px`,
         });
-        this.el.dataset.role = element.role;
+        if (element.binding?.role) this.el.dataset.role = element.binding.role;
+        else delete this.el.dataset.role;
         this.render();
     }
 
     render() {
-        const entry = this.element.binding ? this.panel.hooks.getValue(this.element.binding.name) : undefined;
+        const ref = bindingRef(this.element.binding);
+        const entry = ref ? this.panel.hooks.getValue(ref) : undefined;
         renderElementContent(this.el, this.element, entry, this.panel.theme, this.panel.clockContext());
     }
 

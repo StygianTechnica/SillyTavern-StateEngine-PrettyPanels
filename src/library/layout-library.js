@@ -1,9 +1,9 @@
 // Layout Library: global HUD layouts, each a named set of panel
 // instances plus layout-level background layers. Exactly one layout is
-// active (on screen, and the one edited); which one is chosen per chat
-// (src/chat/chat-session.js). One layout is the DEFAULT, shown in a chat
-// that has not chosen one. Switching or deleting the active layout must
-// go through panel-manager.js (switchLayout/removeLayout) so the
+// active (the one on screen and edited); which one is chosen per chat
+// (src/chat/chat-session.js). There is no default layout - a chat that
+// has not chosen one shows none. Switching or deleting the active layout
+// must go through panel-manager.js (switchLayout/removeLayout) so the
 // on-screen panels follow.
 //
 // Layouts carry their elements' variable bindings (a chat chooses a
@@ -80,12 +80,10 @@ function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPa
 }
 
 export function listLayouts() {
-    const defaultId = getStore().defaultLayoutId;
     return sortedLayouts().map((l) => ({
         id: l.id,
         name: l.name,
         panelCount: Object.keys(l.panels).length,
-        isDefault: l.id === defaultId,
     }));
 }
 
@@ -96,20 +94,6 @@ export function getLayout(id) {
 
 export function getActiveLayoutId() {
     return getStore().activeLayoutId;
-}
-
-export function getDefaultLayoutId() {
-    return getStore().defaultLayoutId;
-}
-
-export function setDefaultLayoutId(id) {
-    const store = getStore();
-    if (!store.layouts[id]) return false;
-    if (store.defaultLayoutId === id) return true;
-    store.defaultLayoutId = id;
-    save();
-    emitLibraryChange();
-    return true;
 }
 
 // Store-only; use panel-manager.js switchLayout() to also swap the
@@ -150,17 +134,15 @@ export function renameLayout(id, name) {
     return true;
 }
 
-// Refuses to delete the last remaining layout. Deleting the default
-// makes the oldest remaining layout the default; deleting the active
-// layout makes the default active (store-only; see panel-manager.js
-// removeLayout()). A chat that had chosen the deleted layout falls back
-// to the default the next time it loads.
+// Refuses to delete the last remaining layout. Deleting the active
+// layout makes the oldest remaining one active (store-only; see
+// panel-manager.js removeLayout()). A chat that had chosen the deleted
+// layout shows no layout the next time it loads, and asks for one.
 export function deleteLayout(id) {
     const store = getStore();
     if (!store.layouts[id] || Object.keys(store.layouts).length <= 1) return false;
     delete store.layouts[id];
-    if (store.defaultLayoutId === id) store.defaultLayoutId = sortedLayouts(store)[0].id;
-    if (store.activeLayoutId === id) store.activeLayoutId = store.defaultLayoutId;
+    if (store.activeLayoutId === id) store.activeLayoutId = sortedLayouts(store)[0].id;
     save();
     emitLibraryChange();
     return true;

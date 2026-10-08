@@ -9,9 +9,10 @@
 //     version, enabled, editingMode,
 //     snapToGrid, gridSize, showGrid,
 //     toolbar: { x, y, collapsed },   the Layout Tools toolbar
-//     activeLayoutId,     the layout currently on screen
-//     defaultLayoutId,    shown in a chat that has not chosen one
-//                         (see src/chat/chat-session.js)
+//     activeLayoutId,     the layout on screen (or, while a chat has not
+//                         chosen one, the last one edited - see
+//                         src/chat/chat-session.js). There is no default
+//                         layout: a chat that has not chosen one shows none.
 //     layouts:   { [id]: { id, name, createdAt, nextPanelNumber, backgrounds, panels: { [id]: instance } } },
 //                instance.zIndex: stacking order within the layout, 0..MAX_Z_INDEX
 //                layout.groups: { [id]: { id, panelIds: [...] } } - panels that move
@@ -27,7 +28,8 @@
 
 const SETTINGS_KEY = 'prettyPanels';
 const SCHEMA_VERSION = 2;
-const DEFAULT_LAYOUT_NAME = 'Default';
+// The layout created when the library is empty (it always holds one).
+const FIRST_LAYOUT_NAME = 'My Layout';
 export const DEFAULT_GRID_SIZE = 8;
 export const MIN_GRID_SIZE = 2;
 export const MAX_GRID_SIZE = 64;
@@ -70,10 +72,10 @@ export function newLayoutRecord(name) {
     };
 }
 
-// v1 kept one flat set of panels; it becomes the "Default" layout.
+// v1 kept one flat set of panels; it becomes the first layout.
 function migrate(store) {
     if (isObject(store.panels) && !isObject(store.layouts)) {
-        const layout = newLayoutRecord(DEFAULT_LAYOUT_NAME);
+        const layout = newLayoutRecord(FIRST_LAYOUT_NAME);
         layout.panels = store.panels;
         if (Number.isFinite(store.nextPanelNumber)) layout.nextPanelNumber = store.nextPanelNumber;
         store.layouts = { [layout.id]: layout };
@@ -215,16 +217,18 @@ export function getStore() {
     }
 
     if (Object.keys(store.layouts).length === 0) {
-        const layout = newLayoutRecord(DEFAULT_LAYOUT_NAME);
+        const layout = newLayoutRecord(FIRST_LAYOUT_NAME);
         store.layouts[layout.id] = layout;
         changed = true;
     }
-    if (!store.layouts[store.defaultLayoutId]) {
-        store.defaultLayoutId = store.layouts[store.activeLayoutId] ? store.activeLayoutId : sortedLayouts(store)[0].id;
+// The default layout is gone (a chat that has not chosen a layout shows
+    // none); a stored default id is dropped.
+    if ('defaultLayoutId' in store) {
+        delete store.defaultLayoutId;
         changed = true;
     }
     if (!store.layouts[store.activeLayoutId]) {
-        store.activeLayoutId = store.defaultLayoutId;
+        store.activeLayoutId = sortedLayouts(store)[0].id;
         changed = true;
     }
 

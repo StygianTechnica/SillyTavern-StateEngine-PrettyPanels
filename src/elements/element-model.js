@@ -10,8 +10,9 @@
 //                              'composite-bar' | 'shape' | 'free-text' |
 //                              'analogClock'
 //     x, y, width, height,     position/size inside the panel body, px
-//     role,                    optional conceptual tag ("health", ...)
-//     binding: { name } | null fully-qualified State Engine variable name
+//     binding: { name }        a fully-qualified State Engine variable name,
+//            | { role }        or a State Engine role ("scene.title") - shows
+//            | null            whichever variable the chat assigned to it
 //                              (always null for a shape or free text)
 //     content,                 free text only: the text it shows
 //     zIndex,                  stacking order inside the panel, any integer:
@@ -134,8 +135,44 @@ export const DEFAULT_ELEMENT_HEIGHT = 32;
 export const MIN_ELEMENT_WIDTH = 24;
 export const MIN_ELEMENT_HEIGHT = 16;
 
-// Suggestions for the Role field - free text, these are just offered.
-export const ROLE_SUGGESTIONS = ['name', 'health', 'mana', 'stamina', 'status', 'mood', 'location', 'time', 'date', 'inventory', 'currency', 'objective'];
+// A binding as one string - a variable's name, or `role:<role name>` for a
+// role (a variable name can never contain ':'). The variable picker, the
+// Binding field and drag-and-drop all pass these.
+export const ROLE_REF_PREFIX = 'role:';
+// State Engine's role name rule: lowercase words separated by dots.
+const ROLE_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/;
+
+export function isRoleRef(ref) {
+    return typeof ref === 'string' && ref.startsWith(ROLE_REF_PREFIX);
+}
+
+// "role:scene.title" -> "scene.title"; a variable ref -> null.
+export function roleOfRef(ref) {
+    return isRoleRef(ref) ? ref.slice(ROLE_REF_PREFIX.length) : null;
+}
+
+export function roleRef(role) {
+    return `${ROLE_REF_PREFIX}${role}`;
+}
+
+// { name } -> name, { role } -> "role:<role>", anything else -> null.
+export function bindingRef(binding) {
+    if (binding?.role) return roleRef(binding.role);
+    return binding?.name || null;
+}
+
+// The binding a ref stands for (null for an empty or invalid one).
+export function bindingFromRef(ref) {
+    return normalizeBinding(isRoleRef(ref) ? { role: roleOfRef(ref) } : { name: ref });
+}
+
+// The role type an element needs of the variable behind its role: bars and
+// gauges show a number, an analog clock a datetime; text shows anything.
+export function roleTypeForElement(type) {
+    if (type === 'analogClock') return 'date';
+    if (type === ELEMENT_TYPE_TEXT) return 'any';
+    return 'number';
+}
 
 function finite(value, fallback) {
     return Number.isFinite(value) ? Math.round(value) : fallback;
@@ -149,9 +186,22 @@ function newElementId() {
     return `ppe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// { name } or { role }; a name written as a role ref becomes a role. A role
+// name that breaks State Engine's rule is no binding at all.
 function normalizeBinding(binding) {
     const name = typeof binding?.name === 'string' ? binding.name.trim() : '';
-    return name ? { name } : null;
+    if (isRoleRef(name)) return normalizeBinding({ role: roleOfRef(name) });
+    if (name) return { name };
+    const role = typeof binding?.role === 'string' ? binding.role.trim() : '';
+    return ROLE_NAME.test(role) ? { role } : null;
+}
+
+// The free-text Role tag elements had before roles were State Engine's
+// ("health", "Mood"): it becomes a role binding when the element shows no
+// variable, lowercased - otherwise it is dropped.
+function legacyRoleBinding(tag) {
+    const role = typeof tag === 'string' ? tag.trim().toLowerCase().replace(/\s+/g, '_') : '';
+    return role ? normalizeBinding({ role }) : null;
 }
 
 // The image-styling fields an element has, validated (absent ones stay
@@ -177,16 +227,16 @@ function normalizeImageFields(element) {
 export function normalizeVariableElement(element) {
     const type = TYPE_IDS.has(element.type) ? element.type : ELEMENT_TYPE_TEXT;
     const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+    const { role: legacyRole, ...rest } = element;
     return {
-        ...element,
+        ...rest,
         id: typeof element.id === 'string' && element.id ? element.id : newElementId(),
         type,
         x: Math.max(0, finite(element.x, 0)),
         y: Math.max(0, finite(element.y, 0)),
         width: Math.max(MIN_ELEMENT_WIDTH, finite(element.width, DEFAULT_ELEMENT_WIDTH)),
         height: Math.max(MIN_ELEMENT_HEIGHT, finite(element.height, DEFAULT_ELEMENT_HEIGHT)),
-        role: text(element.role),
-        binding: UNBOUND_TYPES.has(type) ? null : normalizeBinding(element.binding),
+        binding: UNBOUND_TYPES.has(type) ? null : (normalizeBinding(element.binding) ?? legacyRoleBinding(legacyRole)),
         content: text(element.content).slice(0, MAX_FREE_TEXT_LENGTH),
         showLabel: element.showLabel !== false,
         labelOverride: text(element.labelOverride),
@@ -230,6 +280,7 @@ export function elementLabel(element, def) {
     if (element.type === ELEMENT_TYPE_FREE_TEXT) return 'Text';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
+    if (element.binding?.role) return element.binding.role;
     return element.binding ? localName(element.binding.name) : 'Unbound';
 }
 

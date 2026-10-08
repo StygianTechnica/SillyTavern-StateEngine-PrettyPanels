@@ -14,8 +14,8 @@ activation.
   - **Editing Mode** - shows editing chrome and the wand entries. When off, panels are a clean HUD.
   - **Snap to grid** and **grid size** (default 8px) - soft, magnetic snapping for panels
     (layout grid) and elements (each panel's grid).
-  - **Layout Library** - choose this chat's layout, or create, duplicate, rename, make default
-    (★), export, import and delete layouts.
+  - **Layout Library** - choose this chat's layout, or create, duplicate, rename, export,
+    import and delete layouts.
   - **Panel Library** - view, rename, export, import and delete panel templates.
 - **Magic Wand** (only in Editing Mode):
   - **Add New Panel** creates an empty panel in the active layout.
@@ -68,7 +68,8 @@ selecting a panel or element expands its section.
   the colour layer only. At Panel opacity 0 there is no frosted backdrop and the drop shadow
   follows the image's own (transparent) shape; with image opacity 0 (or no image) and border
   0 too, the panel is fully invisible but still shows its elements.
-- **Element Properties** - Type, Role, Binding (search, pick or type a variable name),
+- **Element Properties** - Type, Binding (search, pick or type a variable name, or a State
+  Engine role as `role:scene.title` - see "Roles" below),
   Position X/Y and Size W/H (type for live changes, Enter/blur snaps to the grid, ↑/↓ = 1px,
   Shift+↑/↓ = one grid step), **Z Index** (any integer, plus Send to Back / Backward /
   Forward / Bring to Front); for a Text element showing an **image variable**: **Image**
@@ -241,13 +242,36 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 - Each chat chooses its layout. The choice is stored as the State Engine variable
   `prettyPanels__layoutId` in Pretty Panels' own **PP Configuration** preset (created
   through the State Engine API, hidden from the tracker).
-- A chat without PP Configuration (or with no choice in it) shows the **default** layout (★);
-  the dropdown then reads "Default (…) - not saved to this chat", and picking any layout -
-  including the default one - saves it for the chat. A new chat that continues from a
-  previous one inherits its PP Configuration, and so its layout.
+- There is **no default layout**. A chat without PP Configuration (or with no choice in it,
+  or whose layout was deleted) shows **no layout**: the screen stays empty except for a
+  small card, "Select a layout to use for this chat.", and the drawer's dropdown reads
+  "— Select a layout —". Picking a layout there (or in the drawer) shows it and saves it
+  for the chat. A new chat that continues from a previous one inherits its PP
+  Configuration, and so its layout.
 - When a layout becomes active in a chat, the presets owning the variables its elements show
   are activated there. Presets are never deactivated when switching away.
 - Element values update live from State Engine's `state_engine_variables_changed` event.
+
+## Roles
+
+A State Engine **role** says what a variable means (`scene.title`, `character.health`);
+each chat assigns one variable to each role in State Engine's **Roles** tab. An element can
+be bound to a role instead of a variable - it then shows whichever variable the chat
+assigned, so one layout works in chats that keep the scene title in different variables.
+
+- Bind an element to a role from the **Roles** group in the Variables list (drag or click),
+  or type `role:<name>` in the Binding field. A role that doesn't exist yet in the chat is
+  fine - showing the layout asks State Engine for it.
+- When a layout is shown in a chat, Pretty Panels requests its roles from State Engine
+  for that chat (with the type each needs: number for bars and gauges, date for analog
+  clocks, any for text) and checks them. If any is unassigned or assigned to a variable of
+  the wrong type, a warning lists them - "Required roles are not assigned. Open State
+  Engine → Roles Panel to assign them." - and the layout still renders, with those
+  elements blank. Assigning them updates the screen live.
+- Elements with the old free-text **Role** tag (before roles were State Engine's) are
+  bound to that role when they had no variable (lowercased - "Health" becomes
+  `health`); otherwise the tag is dropped.
+- Panel templates don't keep role bindings, the same as variable bindings.
 
 ## Layouts, templates and storage
 
@@ -260,7 +284,8 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 - Both libraries are global (`extensionSettings.prettyPanels`) and shared by every chat.
 - Exports are JSON files tagged with a format, kind and version; a template file can't be
   imported as a layout or vice versa. Importing never changes the active layout.
-- Settings from 0.1 (a single flat set of panels) are migrated into a layout named "Default".
+- Settings from 0.1 (a single flat set of panels) are migrated into a layout named "My Layout".
+  A stored default layout from before 0.2 is dropped (there is no default layout any more).
   Panels saved before z-index existed get one from their creation order.
 
 ## Code map
@@ -270,7 +295,7 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 | `src/constants.js` | Extension ID and namespace |
 | `src/storage/store.js` | Persisted schema, migration, library-change signal |
 | `src/storage/design.js` | The design-field whitelist; binding stripping for templates |
-| `src/library/layout-library.js` | Layout Library CRUD, default layout, export/import |
+| `src/library/layout-library.js` | Layout Library CRUD, export/import |
 | `src/library/panel-library.js` | Panel Library CRUD, export/import |
 | `src/library/format.js` | Export file envelope and validation |
 | `src/panels/panel-registry.js` | Panel instances of the active layout; Enabled/Editing/grid settings |
@@ -300,8 +325,9 @@ themselves stay in the folder, as replaced ones do). Panel templates keep their 
 | `fonts/curated/` | Bundled OFL fonts and their manifest (generated by `tools/build-curated-fonts.mjs`) |
 | `vendor/` | HarfBuzz subsetter and WOFF2 encoder (WebAssembly, MIT) |
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
-| `src/chat/chat-session.js` | Per-chat layout choice, preset activation, live refresh |
-| `src/chat/variable-service.js` | Variable catalog and current values |
+| `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
+| `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
+| `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
 | `src/ui/variable-picker.js` | Searchable, draggable variable list |
 | `src/ui/layout-toolbar.js` | Layout Tools toolbar |
 | `src/ui/guides.js` | Alignment guides while dragging |

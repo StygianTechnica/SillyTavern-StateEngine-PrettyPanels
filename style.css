@@ -2457,3 +2457,76 @@ body.pp-anchor-margins .fillRight {
     height: 36px;
     object-fit: contain;
 }
+
+/* Layout gate (src/ui/layout-gate.js): the "select a layout" card while a
+   chat shows no layout, and the missing-roles warning. Same layer as the
+   panels (BASE_Z_INDEX), below every SillyTavern drawer and popup. */
+.pp-layout-prompt,
+.pp-role-warning {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    max-width: min(520px, calc(100vw - 32px));
+    padding: 10px 14px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    color: var(--SmartThemeBodyColor);
+}
+.pp-layout-prompt {
+    top: calc(var(--topBarBlockSize, 40px) + 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.pp-layout-prompt[hidden],
+.pp-role-warning[hidden] {
+    display: none;
+}
+.pp-layout-prompt-title {
+    font-weight: 600;
+    opacity: 0.8;
+}
+.pp-layout-prompt-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.pp-layout-prompt-select {
+    flex: 1 1 auto;
+    margin: 0;
+}
+.pp-role-warning {
+    bottom: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border-color: color-mix(in srgb, #e5c07b 70%, var(--SmartThemeBorderColor));
+}
+.pp-role-warning > .fa-triangle-exclamation {
+    color: #e5c07b;
+    margin-top: 3px;
+}
+.pp-role-warning-text {
+    flex: 1 1 auto;
+}
+.pp-role-warning-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+.pp-role-warning-roles[hidden] {
+    display: none;
+}
+.pp-role-warning-close {
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 2px;
+}
+.pp-role-warning-close:hover {
+    opacity: 1;
+}

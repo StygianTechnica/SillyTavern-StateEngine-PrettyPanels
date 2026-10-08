@@ -1,7 +1,8 @@
 // The Layout Library and Panel Library sections of the Pretty Panels
 // drawer (markup in settings.html). Layout actions: choose this chat's
-// layout (src/chat/chat-session.js), new, duplicate, rename, make
-// default, delete, export, import. Panel Library management:
+// layout (src/chat/chat-session.js), new, duplicate, rename, delete,
+// export, import - all but new and import act on the layout on screen, so
+// they need one shown. Panel Library management:
 // view, rename, delete, export, import - none of which touch the active
 // layout or create instances. Both lists re-render on any library change.
 
@@ -9,7 +10,6 @@ import {
     listLayouts,
     getLayout,
     getActiveLayoutId,
-    setDefaultLayoutId,
     createLayout,
     duplicateLayout,
     renameLayout,
@@ -31,26 +31,17 @@ import { confirmYesNo, promptText, notify } from './dialogs.js';
 import { downloadJson, pickJsonFile, safeFilename } from './files.js';
 import { attachFonts, receiveFonts } from './font-transfer.js';
 
-// When a chat is open but hasn't chosen a layout, the list starts with a
-// "Default (...)" entry that is selected - so picking ANY real layout,
-// including the default one already on screen, is a change that records
-// it for the chat.
+// While no layout is shown (a chat that hasn't chosen one), the list
+// starts with a selected "Select a layout" entry - so picking ANY layout
+// is a change that shows it and records it for the chat.
 function renderLayouts() {
     const select = document.getElementById('pp_layout_select');
     if (!select) return;
-    const activeId = getActiveLayoutId();
-    const { chatId, chosen } = getSessionState();
-    const layouts = listLayouts();
-    const options = layouts.map((layout) => {
-        const option = document.createElement('option');
-        option.value = layout.id;
-        option.textContent = layout.isDefault ? `${layout.name} ★` : layout.name;
-        return option;
-    });
-    let selectedValue = activeId;
-    if (chatId && !chosen) {
-        const current = layouts.find((l) => l.id === activeId);
-        options.unshift(new Option(`Default (${current?.name ?? 'none'} ★) - not saved to this chat`, ''));
+    const { layoutId } = getSessionState();
+    const options = listLayouts().map((layout) => new Option(layout.name, layout.id));
+    let selectedValue = layoutId;
+    if (!layoutId) {
+        options.unshift(new Option('— Select a layout —', ''));
         selectedValue = '';
     }
     select.replaceChildren(...options);
@@ -64,7 +55,7 @@ function renderChatHint() {
     const { chatId, chosen } = getSessionState();
     if (!chatId) hint.textContent = 'No chat open - choosing a layout only changes what is on screen.';
     else if (chosen) hint.textContent = 'This chat\'s layout.';
-    else hint.textContent = 'This chat hasn\'t chosen a layout, so it shows the default. Pick one to remember it for this chat.';
+    else hint.textContent = 'This chat hasn\'t chosen a layout, so none is shown. Pick one to use it in this chat.';
 }
 
 function renderTemplates() {
@@ -116,9 +107,6 @@ const layoutActions = {
         const name = await promptText('Name for the new layout:', 'New Layout');
         if (!name) return;
         await chooseLayout(createLayout(name));
-    },
-    default(id) {
-        if (setDefaultLayoutId(id)) notify('success', `"${getLayout(id).name}" is now the default layout.`);
     },
     duplicate(id) {
         const newId = duplicateLayout(id);
@@ -183,9 +171,16 @@ export function initLibraryDrawer() {
         if (e.target.value) void chooseLayout(e.target.value);
     });
 
+    // New and import need no layout; the rest act on the one on screen.
+    const needsLayout = new Set(['duplicate', 'rename', 'delete', 'export']);
     root.querySelectorAll('[data-layout-action]').forEach((button) => {
         button.addEventListener('click', () => {
-            void layoutActions[button.dataset.layoutAction](getActiveLayoutId());
+            const action = button.dataset.layoutAction;
+            if (needsLayout.has(action) && !getSessionState().layoutId) {
+                notify('info', 'Select a layout first.');
+                return;
+            }
+            void layoutActions[action](getActiveLayoutId());
         });
     });
 

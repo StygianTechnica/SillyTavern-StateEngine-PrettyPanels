@@ -9,10 +9,13 @@
 // down the DOM - saved records are untouched, and re-enabling rebuilds
 // every panel from the registry.
 //
-// Only the active layout's panels are ever mounted. Switching or
-// deleting the active layout goes through switchLayout()/removeLayout()
-// here so the screen follows the Layout Library (which layout a chat
-// shows is decided in src/chat/chat-session.js).
+// Only the active layout's panels are ever mounted, and only while a layout
+// is SHOWN: a chat that has not chosen a layout shows none (an empty
+// screen - src/chat/chat-session.js decides, setLayoutShown() here). The
+// active layout still exists then (the store always has one); it is just
+// not on screen, and nothing can be added to it. Switching or deleting the
+// active layout goes through switchLayout()/removeLayout() here so the
+// screen follows the Layout Library.
 //
 // Elements (VariableElements inside panels) are edited here too: add,
 // rebind, move/resize, change properties, delete - each a whole-widgets
@@ -58,6 +61,7 @@ import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storag
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
     ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
+    bindingRef, bindingFromRef, roleTypeForElement,
 } from '../elements/element-model.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
@@ -83,6 +87,9 @@ const CASCADE_SLOTS = 8;
 
 const panels = new Map();
 const stateListeners = new Set();
+// Whether the active layout is on screen (see the header). Off until the
+// chat session shows one.
+let layoutShown = false;
 const bindingListeners = new Set();
 const selectionListeners = new Set();
 // Selected panel IDs, in the order they were picked - the first is the
@@ -286,17 +293,38 @@ export function onBindingsChange(listener) {
     return () => bindingListeners.delete(listener);
 }
 
-// Every variable name the active layout uses - element bindings and panel
-// background image variables (from the registry, so it's right even while
-// panels are unmounted). Their presets get activated in the chat.
+// Every binding ref the active layout uses - element bindings (variable
+// names and "role:<name>" refs) and panel background image variables (from
+// the registry, so it's right even while panels are unmounted). The
+// variables' presets get activated in the chat.
 export function getBoundVariableNames() {
     const names = new Set(getBoundImageNames());
     for (const record of listPanels()) {
         for (const widget of record.widgets) {
-            if (isVariableElement(widget) && widget.binding) names.add(widget.binding.name);
+            const ref = isVariableElement(widget) ? bindingRef(widget.binding) : null;
+            if (ref) names.add(ref);
         }
     }
     return [...names];
+}
+
+// The State Engine roles the active layout's elements are bound to, each
+// with the type its elements need: [{ name, type }] sorted by name. Text
+// accepts any type, so a role shared by text and a bar needs the bar's
+// number; two elements needing different types (a bar and a clock) leave
+// it 'any'.
+export function getLayoutRoleRequirements() {
+    const types = new Map();
+    for (const record of listPanels()) {
+        for (const widget of record.widgets) {
+            const role = isVariableElement(widget) ? widget.binding?.role : null;
+            if (!role) continue;
+            const type = roleTypeForElement(widget.type);
+            const seen = types.get(role);
+            types.set(role, seen === undefined || seen === type ? type : (seen === 'any' ? type : (type === 'any' ? seen : 'any')));
+        }
+    }
+    return [...types].map(([name, type]) => ({ name, type })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // The image variables panels use as backgrounds, and analog clocks for
@@ -574,6 +602,7 @@ async function confirmAndDelete(id) {
 }
 
 function mountAllPanels() {
+    if (!layoutShown) return;
     // Panels from before themes (or an imported layout's) get the first
     // theme and its default variant.
     assignMissingThemes(defaultThemeChoice());
@@ -661,6 +690,10 @@ export function initPanels() {
 // the wand entry is shown).
 export function createPanel() {
     if (!isEnabled() || !isEditingMode()) return null;
+    if (!layoutShown) {
+        notify('warning', 'Select a layout for this chat first (Pretty Panels drawer).');
+        return null;
+    }
     const record = createPanelRecord({ ...defaultPlacement(), ...defaultThemeChoice() });
     return mountPanel(record);
 }
@@ -669,6 +702,10 @@ export function createPanel() {
 // layout. The instance is independent: the template is only read.
 export function insertTemplate(templateId) {
     if (!isEnabled() || !isEditingMode()) return null;
+    if (!layoutShown) {
+        notify('warning', 'Select a layout for this chat first (Pretty Panels drawer).');
+        return null;
+    }
     const template = getTemplate(templateId);
     if (!template) return null;
     // A new instance starts unanchored (it would otherwise land exactly on
@@ -685,12 +722,28 @@ export function insertTemplate(templateId) {
     return mountPanel(record);
 }
 
-// Makes `id` the active layout and swaps the on-screen panels to it.
+// Makes `id` the active layout and swaps the on-screen panels to it (when
+// a layout is shown - see setLayoutShown).
 export function switchLayout(id) {
     if (id === getActiveLayoutId()) return true;
     if (!setActiveLayoutId(id)) return false;
     reloadPanels();
     return true;
+}
+
+// Shows the active layout, or none (an empty screen: a chat that has not
+// chosen a layout). Hiding leaves Editing Mode as it is - there is just
+// nothing to edit until a layout is chosen.
+export function setLayoutShown(shown) {
+    shown = shown === true;
+    if (shown === layoutShown) return;
+    layoutShown = shown;
+    reloadPanels();
+    applyState();
+}
+
+export function isLayoutShown() {
+    return layoutShown;
 }
 
 // Deletes a layout from the Layout Library; if it was the active one,
@@ -736,9 +789,9 @@ export function updateElement(panel, elementId, patch) {
     const next = { ...current, ...patch, id: current.id };
     const widgets = panel.record.widgets.map((w) => (w.id === elementId ? next : w));
     if (!saveWidgets(panel, widgets)) return false;
-    const before = current.binding?.name ?? null;
+    const before = bindingRef(current.binding);
     const saved = panel.getElement(elementId);
-    const after = saved?.binding?.name ?? null;
+    const after = bindingRef(saved?.binding);
     // A clock's image variables are watched like a panel background's.
     const imagesBefore = clockImageVariables(current);
     const imagesAfter = clockImageVariables(saved);
@@ -770,10 +823,11 @@ function imageFieldsFor(panel, element, name) {
     return Object.keys(missing).length ? { ...missing, showLabel: false } : {};
 }
 
+// `name` is a binding ref: a variable name or "role:<role name>".
 export function rebindElement(panel, elementId, name) {
     const current = panel.getElement(elementId);
     if (!current) return false;
-    return updateElement(panel, elementId, { binding: name ? { name } : null, ...imageFieldsFor(panel, current, name) });
+    return updateElement(panel, elementId, { binding: name ? bindingFromRef(name) : null, ...imageFieldsFor(panel, current, name) });
 }
 
 export function deleteElement(panel, elementId) {
@@ -810,7 +864,7 @@ export function addVariableElement(panel, name, at = null) {
     y = Math.max(0, Math.round(y));
     const image = isImageDefinition(variableDef(name));
     const element = createVariableElement({
-        x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? { name } : null,
+        x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? bindingFromRef(name) : null,
         ...(image ? { ...imageDefaultsFor(panel), showLabel: false, zIndex: IMAGE_Z_INDEX } : {}),
     });
     saveWidgets(panel, [...panel.record.widgets, element]);
@@ -942,7 +996,7 @@ function applyState() {
         for (const panel of panels.values()) panel.closeProperties();
         if (selection.length) setSelection([]);
     }
-    const state = { enabled, editingMode: editing };
+    const state = { enabled, editingMode: editing, layoutShown };
     for (const listener of stateListeners) listener(state);
 }
 
@@ -966,7 +1020,7 @@ export function setEditingMode(enabled) {
 
 export function getState() {
     const enabled = isEnabled();
-    return { enabled, editingMode: enabled && isEditingMode() };
+    return { enabled, editingMode: enabled && isEditingMode(), layoutShown };
 }
 
 // Lets UI (wand menu, settings drawer) follow Enabled/Editing Mode.

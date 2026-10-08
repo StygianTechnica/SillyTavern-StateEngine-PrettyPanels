@@ -6,7 +6,7 @@
 //     anchor target), Theme (theme + variant, src/themes/), Panel Library
 //     (save/export template),
 //     and the collapsible Panel Styling subsection
-//   - Element Properties: the selected element's Type, Role, Binding, X/Y,
+//   - Element Properties: the selected element's Type, Binding (a variable or a State Engine role), X/Y,
 //     Width/Height, Z Index, then per type: Show Label, Label Override,
 //     Format (+ Custom pattern) and Element Styling (text), Text + Preset
 //     and Element Styling (free text), Widget Properties (bars/gauges),
@@ -26,9 +26,9 @@ import { VariablePicker, ElementPalette } from '../ui/variable-picker.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
-import { loadCatalog, getCatalog, findVariable, onCatalogChange } from '../chat/variable-service.js';
+import { loadCatalog, getCatalog, findVariable, onCatalogChange, getRole } from '../chat/variable-service.js';
 import {
-    ROLE_SUGGESTIONS, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
+    bindingRef, bindingFromRef, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
@@ -352,13 +352,15 @@ export class PanelPropertiesPopup {
     }
 
     #entry(element) {
-        return element.binding ? this.hooks.getValue(element.binding.name) : undefined;
+        const ref = bindingRef(element.binding);
+        return ref ? this.hooks.getValue(ref) : undefined;
     }
 
     // The definition to label/format by: the live value's, else the catalog's.
     #def(element) {
-        if (!element.binding) return null;
-        return this.#entry(element)?.def ?? findVariable(element.binding.name)?.def ?? null;
+        const ref = bindingRef(element.binding);
+        if (!ref) return null;
+        return this.#entry(element)?.def ?? findVariable(ref)?.def ?? null;
     }
 
     #applySections() {
@@ -372,7 +374,15 @@ export class PanelPropertiesPopup {
     #refreshBindingInfo(element) {
         const info = this.el.querySelector('[data-el="binding-info"]');
         if (!element.binding) {
-            info.textContent = 'Not bound. Drag a variable here, or type or pick a name.';
+            info.textContent = 'Not bound. Drag a variable or role here, or type or pick a name (a role as role:scene.title).';
+            return;
+        }
+        if (element.binding.role) {
+            // Which variable the chat assigned to the role, from State Engine.
+            const role = getRole(element.binding.role);
+            if (!role) info.textContent = `Role · not in this chat yet - choosing this layout requests it; assign it in State Engine → Roles`;
+            else if (!role.variable) info.textContent = `Role · ${role.type} · not assigned in this chat - assign it in State Engine → Roles`;
+            else info.textContent = `Role · ${role.type} · ${role.variable}${role.problem ? ` · ${role.problem}` : ''}`;
             return;
         }
         const found = findVariable(element.binding.name);
@@ -408,8 +418,7 @@ export class PanelPropertiesPopup {
         const def = this.#def(element);
         set('type', (f) => { f.value = element.type; });
         this.#applyTypeVisibility(element.type);
-        set('role', (f) => { f.value = element.role; });
-        set('binding', (f) => { f.value = element.binding?.name ?? ''; });
+        set('binding', (f) => { f.value = bindingRef(element.binding) ?? ''; });
         set('showLabel', (f) => { f.checked = element.showLabel; });
         set('labelOverride', (f) => {
             f.value = element.labelOverride;
@@ -984,11 +993,8 @@ export class PanelPropertiesPopup {
                         ${ELEMENT_TYPES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
                     </select>
                 </label>
-                <label class="pp-field"><span>Role</span>
-                    <input type="text" class="text_pole" data-el="role" placeholder="optional, e.g. health" />
-                </label>
                 <label class="pp-field" data-for-types="${BOUND_TYPES}"><span>Binding</span>
-                    <input type="text" class="text_pole" data-el="binding" placeholder="search or type, e.g. se__hp" autocomplete="off" />
+                    <input type="text" class="text_pole" data-el="binding" placeholder="search or type, e.g. se__hp or role:scene.title" autocomplete="off" />
                 </label>
                 <small class="pp-field-info" data-el="binding-info" data-for-types="${BOUND_TYPES}"></small>
                 <div class="pp-geometry">
@@ -1192,18 +1198,13 @@ export class PanelPropertiesPopup {
             ${elementSection}
             ${variablesSection}
             <datalist class="pp-binding-options"></datalist>
-            <datalist class="pp-role-options"></datalist>
             <datalist class="pp-icon-options"></datalist>
         `;
 
         // datalist ids must be unique per page - one pair per popup.
         const bindingList = el.querySelector('.pp-binding-options');
-        const roleList = el.querySelector('.pp-role-options');
         bindingList.id = `pp-binding-options-${this.panel.id}`;
-        roleList.id = `pp-role-options-${this.panel.id}`;
-        roleList.replaceChildren(...ROLE_SUGGESTIONS.map((role) => new Option(role, role)));
         el.querySelector('[data-el="binding"]').setAttribute('list', bindingList.id);
-        el.querySelector('[data-el="role"]').setAttribute('list', roleList.id);
         const iconList = el.querySelector('.pp-icon-options');
         iconList.id = `pp-icon-options-${this.panel.id}`;
         iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));
@@ -1292,10 +1293,9 @@ export class PanelPropertiesPopup {
             }
             this.hooks.onElementChange(element.id, patch);
         });
-        field('role').addEventListener('change', (e) => this.#change({ role: e.target.value.trim() }));
         field('binding').addEventListener('change', (e) => {
-            const name = e.target.value.trim();
-            this.#change({ binding: name ? { name } : null });
+            const ref = e.target.value.trim();
+            this.#change({ binding: ref ? bindingFromRef(ref) : null });
         });
         field('showLabel').addEventListener('change', (e) => this.#change({ showLabel: e.target.checked }));
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));
