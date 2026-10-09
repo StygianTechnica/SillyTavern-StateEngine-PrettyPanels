@@ -22,6 +22,7 @@ import { migrateInlineImages } from './storage/pp-variables.js';
 import { startChatSession } from './chat/chat-session.js';
 import { LAYOUT_VARIABLE } from './chat/pp-config.js';
 import { addWandMenuItems } from './ui/wand-menu.js';
+import { registerSlashCommands } from './ui/slash-commands.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 import { addLayoutToolbar } from './ui/layout-toolbar.js';
 import { initLayoutGate } from './ui/layout-gate.js';
@@ -91,6 +92,7 @@ export async function initExtension() {
 
     initPanels();
     addWandMenuItems();
+    registerSlashCommands();
     addLayoutToolbar();
     await addSettingsDrawer();
     initLayoutGate();

@@ -130,12 +130,27 @@ function sweepFloating() {
     for (const [key, { anchor }] of floating) if (!anchor.isConnected) closeFloating(key);
 }
 
+// In its list a card inherits the styling variables it doesn't set itself
+// (Panel Styling such as background opacity, theme colours and fonts) from
+// the panel it sits in. Floating from <body> it has no such parent, so it
+// takes them over from the collapsed card - open looks like closed.
+function inheritPanelVars(card, anchor) {
+    const inherited = getComputedStyle(anchor);
+    for (let i = 0; i < inherited.length; i++) {
+        const name = inherited[i];
+        if (!name.startsWith('--pp') || name.startsWith('--pp-compact') || card.style.getPropertyValue(name)) continue;
+        const value = inherited.getPropertyValue(name);
+        if (value) card.style.setProperty(name, value);
+    }
+}
+
 // The floating open card for `key`, over the collapsed `anchor` card.
 function showFloating(key, anchor, template, character, services, onClick) {
     closeFloating(key);
     const rect = anchor.getBoundingClientRect();
     const card = buildTemplateCard(template, character, services, true);
     card.classList.add('pp-card-drawer');
+    inheritPanelVars(card, anchor);
     document.body.append(card);
     const { area } = cardArea(card, template);
     const box = openBox({ x: rect.left, y: rect.top }, area, template.width, template.height, window.innerWidth, window.innerHeight);

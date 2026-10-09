@@ -118,6 +118,29 @@ selecting a panel or element expands its section.
   `weather.contains("Rainy")`, a prompted or flag-mode boolean). Outside Editing Mode a hidden
   element is gone; in Editing Mode it shows faded, with an eye badge.
 
+### Conditional panels and banners
+
+Panel Properties > **Display** decides when a panel is on screen:
+
+- **Always** - every panel as it always was.
+- **While a flag is on** - shown while a State Engine boolean is on (*Reverse*: while it is
+  off); it animates in and out as the flag changes, but not when a chat loads.
+- **Banner** - hidden until its **trigger** fires: the flag turning on (*Reverse*: off), or a
+  **variable changing** (any type - e.g. the location, for a "new scene" banner). It animates
+  in, holds for *Hold* seconds and animates out, even if the flag stays on. Banners that fire
+  together play one after another; *Min gap* stops one replaying sooner than that (a flickering
+  flag). A chat load never fires one. Note: a variable rewritten every update (a scene title)
+  changes every update - follow a steadier one.
+- **Animate in / out**: none, fade, slide from any side, zoom; **Duration** in ms. **Full width**
+  stretches a floating panel across the window at its height - the cinematic band.
+- **Preview** plays the animation once.
+
+In Editing Mode a conditional panel is hidden unless **pinned**, so a full-screen banner is
+edited on its own. The drawer's **Layout Panels** list shows every panel of the layout and when
+it shows; pin one there (or open its properties from there, which pins it), preview it, or open
+its properties. Making a panel conditional from its own properties pins it. `/pp-banner <panel
+name>` plays a banner from STscript or a Quick Reply.
+
 ### Text Formatting
 
 Every piece of text a panel shows - free text, a variable's value, a role's value, a gauge's
@@ -467,6 +490,10 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
 | `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
+| `src/panels/drawer.js` | Drawers: compact area geometry, open / closed per chat and session |
+| `src/panels/panel-display.js` | Conditional panels and banners: display settings, banner queue, editing pins |
+| `src/ui/layout-panels-drawer.js` | The drawer's Layout Panels list |
+| `src/ui/slash-commands.js` | `/pp-banner` |
 | `src/chat/flag-watch.js` + `flag-watch-core.js` | Flag and change watcher: `onFlag`, `onChange`, `isFlagOn` for flag-driven features (baseline on chat load) |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
 | `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |

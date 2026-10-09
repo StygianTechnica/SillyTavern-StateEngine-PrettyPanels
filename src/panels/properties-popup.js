@@ -48,6 +48,7 @@ import {
     TOGGLE_SIZE_LIMITS,
 } from '../elements/element-model.js';
 import { normalizeCompact } from './drawer.js';
+import { DISPLAY_MODES, DISPLAY_TRIGGERS, DISPLAY_ANIMATIONS, DISPLAY_LIMITS, normalizeDisplay } from './panel-display.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import {
     TEXT_CASES, THEME_STYLES, VALUE_FORMATS, DECIMAL_LIMITS, DECIMAL_FORMATS, DATETIME_PATTERN_HINT, NUMBER_PATTERN_HINT,
@@ -221,7 +222,7 @@ export class PanelPropertiesPopup {
     //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
     //          onThemeChange({ themeId?, themeVariant? }), onPanelClockChange(clock),
     //          onElementChange(elementId, patch), onElementDelete(elementId), onElementDuplicate(elementId),
-    //          onCompactChange(compact | null),
+    //          onCompactChange(compact | null), onDisplayChange(display | null), onPreviewDisplay(),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
     //          getValue(name), onClose() }
@@ -341,6 +342,7 @@ export class PanelPropertiesPopup {
         this.#fillTheme();
         this.#fillPanelStyle();
         this.#fillDrawer();
+        this.#fillDisplay();
 
         this.#applySections();
         this.#refreshElement();
@@ -360,6 +362,48 @@ export class PanelPropertiesPopup {
         }
         this.el.querySelector('[data-drawer="keepOnScreen"]').checked = compact.keepOnScreen;
         this.el.querySelector('[data-action="compact-from-element"]').disabled = !this.#selected();
+    }
+
+    // The Display fields from the panel's display (null: always).
+    #fillDisplay() {
+        const display = this.panel.record.display;
+        const mode = display?.mode ?? 'always';
+        const set = (key, value) => {
+            const input = this.el.querySelector(`[data-display="${key}"]`);
+            if (input === document.activeElement) return;
+            if (input.type === 'checkbox') input.checked = value === true;
+            else input.value = value ?? '';
+        };
+        set('mode', mode);
+        const conditional = mode !== 'always';
+        for (const node of this.el.querySelectorAll('[data-display-fields]')) node.hidden = !conditional;
+        for (const node of this.el.querySelectorAll('[data-display-for]')) node.hidden = node.dataset.displayFor !== mode;
+        set('fullWidth', display?.fullWidth === true);
+        if (!conditional) return;
+        for (const key of ['ref', 'trigger', 'holdSeconds', 'minGapSeconds', 'animIn', 'animOut', 'durationMs']) set(key, display[key]);
+        set('invert', display.invert);
+        const change = mode === 'timed' && display.trigger === 'change';
+        this.el.querySelector('[data-display-ref-label]').textContent = change ? 'Variable' : 'Flag';
+        this.el.querySelector('[data-display-invert]').hidden = change;
+        this.el.querySelector('[data-display-invert-label]').textContent = mode === 'timed' ? 'Reverse (when the flag turns off)' : 'Reverse (while the flag is off)';
+    }
+
+    // A Display field changed: the display from every field.
+    #commitDisplay() {
+        const field = (key) => this.el.querySelector(`[data-display="${key}"]`);
+        const number = (key) => (Number.isFinite(field(key).valueAsNumber) ? field(key).valueAsNumber : undefined);
+        this.hooks.onDisplayChange(normalizeDisplay({
+            mode: field('mode').value,
+            ref: field('ref').value,
+            trigger: field('trigger').value,
+            invert: field('invert').checked,
+            holdSeconds: number('holdSeconds'),
+            minGapSeconds: number('minGapSeconds'),
+            animIn: field('animIn').value,
+            animOut: field('animOut').value,
+            durationMs: number('durationMs'),
+            fullWidth: field('fullWidth').checked,
+        }));
     }
 
     // A Drawer field changed: the compact area from every field.
@@ -1202,6 +1246,47 @@ export class PanelPropertiesPopup {
                     <option value="false">Hide</option>
                 </select>
             </label>
+            <div class="pp-properties-section-label" data-template-hide>Display</div>
+            <div data-template-hide>
+                <label class="pp-field" title="When this panel is on screen. A flag is a State Engine boolean (a calculated, prompted or flag-mode one) - Pretty Panels never evaluates conditions itself."><span>Show</span>
+                    <select class="text_pole" data-display="mode">${DISPLAY_MODES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                </label>
+                <div data-display-fields>
+                    <label class="pp-field" data-display-for="timed"><span>Trigger</span>
+                        <select class="text_pole" data-display="trigger">${DISPLAY_TRIGGERS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                    </label>
+                    <label class="pp-field"><span data-display-ref-label>Flag</span>
+                        <input type="text" class="text_pole" data-display="ref" placeholder="e.g. se__is_raining, se__scene_location or role:..." autocomplete="off" />
+                    </label>
+                    <label class="checkbox_label pp-field-check" data-display-invert>
+                        <input type="checkbox" data-display="invert" /><span data-display-invert-label>Reverse (while the flag is off)</span>
+                    </label>
+                    <label class="pp-field" data-display-for="timed"><span>Hold (s)</span>
+                        <input type="number" class="text_pole" data-display="holdSeconds" min="${DISPLAY_LIMITS.holdSeconds[0]}" max="${DISPLAY_LIMITS.holdSeconds[1]}" step="0.5" />
+                    </label>
+                    <label class="pp-field" data-display-for="timed" title="A banner plays at most once per this many seconds - a flickering flag can't repeat it"><span>Min gap (s)</span>
+                        <input type="number" class="text_pole" data-display="minGapSeconds" min="${DISPLAY_LIMITS.minGapSeconds[0]}" max="${DISPLAY_LIMITS.minGapSeconds[1]}" step="1" />
+                    </label>
+                    <label class="pp-field"><span>Animate in</span>
+                        <select class="text_pole" data-display="animIn">${DISPLAY_ANIMATIONS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                    </label>
+                    <label class="pp-field"><span>Animate out</span>
+                        <select class="text_pole" data-display="animOut">${DISPLAY_ANIMATIONS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>
+                    </label>
+                    <label class="pp-field"><span>Duration (ms)</span>
+                        <input type="number" class="text_pole" data-display="durationMs" min="${DISPLAY_LIMITS.durationMs[0]}" max="${DISPLAY_LIMITS.durationMs[1]}" step="50" />
+                    </label>
+                </div>
+                <label class="checkbox_label pp-field-check" title="Stretch across the window at the panel's height position - a cinematic band. Floating panels only.">
+                    <input type="checkbox" data-display="fullWidth" /><span>Full width</span>
+                </label>
+                <div class="pp-properties-actions" data-display-fields>
+                    <button type="button" class="menu_button pp-properties-button" data-action="display-preview" title="Play the animation once: in, hold, out">
+                        <i class="fa-solid fa-play"></i><span>Preview</span>
+                    </button>
+                </div>
+                <small class="pp-field-info" data-display-fields>In Editing Mode a conditional panel is hidden unless pinned in the drawer's Layout Panels list (opening its properties from there pins it).</small>
+            </div>
             <div class="pp-properties-section-label">Drawer</div>
             <label class="checkbox_label pp-field-check" title="Collapsed, the panel shows only its compact area; a Toggle element opens the whole design over its neighbours. Where the area sits decides which way it opens (at the bottom: upward).">
                 <input type="checkbox" data-drawer="enabled" /><span>Compact area (fold-out drawer)</span>
@@ -1602,6 +1687,7 @@ export class PanelPropertiesPopup {
         bindingList.id = `pp-binding-options-${this.panel.id}`;
         el.querySelector('[data-el="binding"]').setAttribute('list', bindingList.id);
         el.querySelector('[data-el="visibleFlag"]').setAttribute('list', bindingList.id);
+        el.querySelector('[data-display="ref"]').setAttribute('list', bindingList.id);
         const iconList = el.querySelector('.pp-icon-options');
         iconList.id = `pp-icon-options-${this.panel.id}`;
         iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));
@@ -1670,6 +1756,8 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-field="clockSeconds"]').addEventListener('change', (e) => {
             this.hooks.onPanelClockChange(e.target.value === '' ? {} : { showSecondsHand: e.target.value === 'true' });
         });
+        for (const input of el.querySelectorAll('[data-display]')) input.addEventListener('change', () => this.#commitDisplay());
+        el.querySelector('[data-action="display-preview"]').addEventListener('click', () => this.hooks.onPreviewDisplay());
         // Drawer: turning it on starts from the top strip of the panel's canvas.
         el.querySelector('[data-drawer="enabled"]').addEventListener('change', (e) => {
             const width = Math.max(24, this.panel.body.clientWidth || this.panel.record.width);

@@ -8,6 +8,7 @@
 import { getState, onStateChange, setEnabled, setEditingMode, getGrid, setGrid } from '../panels/panel-manager.js';
 import { initLibraryDrawer } from './library-drawer.js';
 import { initLayoutRolesDrawer } from './layout-roles-drawer.js';
+import { initLayoutPanelsDrawer } from './layout-panels-drawer.js';
 import { openThemeEditor } from './theme-editor.js';
 
 // SillyTavern resolves extension templates relative to
@@ -61,4 +62,5 @@ export async function addSettingsDrawer() {
 
     initLibraryDrawer();
     initLayoutRolesDrawer();
+    initLayoutPanelsDrawer();
 }

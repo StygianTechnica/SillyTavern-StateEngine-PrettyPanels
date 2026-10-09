@@ -75,6 +75,7 @@ import { addLayoutRole } from '../library/role-library.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
 import { LINE_DEFAULT_SIZE } from '../elements/shapes.js';
 import { refreshElementTitles } from '../elements/element-view.js';
+import { isConditional, setPinned } from './panel-display.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
@@ -232,6 +233,19 @@ const hooks = {
         const updated = writeRecord(panel, { compact });
         if (updated) panel.update(updated);
     },
+    // When the panel is on screen (src/panels/panel-display.js), or null.
+    onDisplayChange(panel, display) {
+        const before = panel.record.display?.ref ?? null;
+        // Made conditional from its own properties: pinned, so the panel
+        // being edited doesn't vanish (unpin it in the Layout Panels list).
+        if (isConditional(display) && !isConditional(panel.record.display)) setPinned(panel.id, true);
+        const updated = writeRecord(panel, { display });
+        if (updated) panel.update(updated);
+        if ((updated?.display?.ref ?? null) !== before) emitBindingsChange();
+    },
+    onPreviewDisplay(panel) {
+        panel.previewDisplay();
+    },
     // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
     // toggles it in the selection; a plain press selects it (keeping a
     // multi-selection it's already part of, so a drag doesn't drop it).
@@ -379,6 +393,9 @@ export function getBoundVariableNames() {
             // A visibility flag is read like a binding.
             if (widget.visibleWhen?.flag) names.add(widget.visibleWhen.flag);
         }
+        // So is the flag a panel shows while (a banner's trigger is followed
+        // by flag-watch.js, which reads its own).
+        if (record.display?.mode === 'while' && record.display.ref) names.add(record.display.ref);
     }
     // What the Character elements' templates show besides character fields.
     for (const id of usedTemplateIds()) for (const ref of templateBindings(id).refs) names.add(ref);
@@ -1148,6 +1165,39 @@ export function setEnabled(enabled) {
 }
 
 // Ignored while the extension is disabled.
+// ---- Layout Panels list (the drawer) --------------------------------------
+
+// Plays a panel's display animation once (in, hold, out).
+export function previewPanelDisplay(id) {
+    const panel = panels.get(id);
+    if (!panel) return false;
+    panel.previewDisplay();
+    return true;
+}
+
+// Opens a panel's properties from the list: Editing Mode on, the panel
+// selected - and, when it is conditional, pinned so it is on screen.
+export function openPanelProperties(id) {
+    const panel = panels.get(id);
+    if (!panel) return false;
+    if (!getState().editingMode) setEditingMode(true);
+    if (isConditional(panel.record.display)) setPinned(id, true);
+    closeOtherProperties(panel);
+    setSelection([id]);
+    panel.openProperties('panel');
+    return true;
+}
+
+// Replays the active layout's banner (or any panel) named `name`
+// (case-insensitive) - the /pp-banner command. Returns whether one was found.
+export function replayPanelByName(name) {
+    const wanted = String(name ?? '').trim().toLowerCase();
+    const panel = [...panels.values()].find((p) => p.record.name.trim().toLowerCase() === wanted);
+    if (!panel) return false;
+    panel.previewDisplay();
+    return true;
+}
+
 export function setEditingMode(enabled) {
     setEditingModeFlag(enabled === true && isEnabled());
     applyState();

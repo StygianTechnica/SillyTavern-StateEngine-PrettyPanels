@@ -3108,3 +3108,42 @@ body.pp-editing .pp-element[data-flag-badge]:not(.pp-element-flag-hidden)::after
     position: fixed;
     z-index: 700;
 }
+
+/* ---------- Conditional panels and banners (src/panels/panel-display.js) ---------- */
+
+.pp-panel.pp-display-hidden {
+    display: none !important;
+}
+/* Pinned for editing (a conditional panel shown in Editing Mode). */
+.pp-panel.pp-display-pinned > .pp-panel-box {
+    outline: 2px dashed color-mix(in srgb, var(--SmartThemeQuoteColor) 80%, transparent);
+    outline-offset: 2px;
+}
+.pp-panel.pp-display-pinned::before {
+    content: "Conditional - pinned for editing";
+    position: absolute;
+    left: 6px;
+    top: -18px;
+    padding: 0 6px;
+    font-size: 10px;
+    line-height: 16px;
+    white-space: nowrap;
+    color: var(--SmartThemeBodyColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 75%, transparent);
+    border-radius: 4px 4px 0 0;
+    pointer-events: none;
+}
+
+/* The drawer's Layout Panels list. */
+.pp-layout-panel-row .pp-layout-panel-mode {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+.pp-layout-panel-row .menu_button.pp-active {
+    color: var(--SmartThemeQuoteColor);
+}

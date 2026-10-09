@@ -11,6 +11,25 @@
 import { getStore, getActiveLayout, save, generateId, MIN_GRID_SIZE, MAX_GRID_SIZE, MAX_Z_INDEX } from '../storage/store.js';
 import { pickDesign } from '../storage/design.js';
 
+// Panel instances of the active layout were created, changed or deleted -
+// one notice per burst of writes (the drawer's Layout Panels list).
+const recordListeners = new Set();
+let recordNoticePending = false;
+
+function noticeRecords() {
+    if (recordNoticePending) return;
+    recordNoticePending = true;
+    queueMicrotask(() => {
+        recordNoticePending = false;
+        for (const listener of [...recordListeners]) listener();
+    });
+}
+
+export function onPanelRecordsChange(listener) {
+    recordListeners.add(listener);
+    return () => recordListeners.delete(listener);
+}
+
 // Fills any missing fields on a stored record with sane values, so a
 // hand-edited or partially-written record can never break rendering.
 // Unknown fields are preserved, so a later version's fields survive a
@@ -65,6 +84,7 @@ export function createPanelRecord(init = {}) {
     });
     layout.panels[record.id] = record;
     save();
+    noticeRecords();
     return { ...record };
 }
 
@@ -77,6 +97,7 @@ export function updatePanelRecord(id, patch) {
     const { id: _ignoredId, createdAt: _ignoredCreated, ...rest } = patch;
     panels[id] = normalize({ ...current, ...rest });
     save();
+    noticeRecords();
     return { ...panels[id] };
 }
 
@@ -101,6 +122,7 @@ export function deletePanelRecord(id) {
     delete layout.panels[id];
     removeFromGroups([id]);
     save();
+    noticeRecords();
     return true;
 }
 

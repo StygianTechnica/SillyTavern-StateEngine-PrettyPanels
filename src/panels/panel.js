@@ -21,6 +21,8 @@ import { softSnap, softSnapSpan } from './snap.js';
 import { applyPanelTheme } from '../themes/theme-apply.js';
 import { fitCompact, collapsedBox, openBox, dragCompact, drawerKey, isDrawerOpen, toggleDrawer } from './drawer.js';
 import { currentChatId } from '../chat/variable-service.js';
+import { isConditional, isPinned, onPinChange, bannerQueue } from './panel-display.js';
+import { onFlag, onChange } from '../chat/flag-watch.js';
 
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
 // imports this module).
@@ -32,6 +34,19 @@ const VISIBLE_MARGIN = 40;
 
 // An open drawer is raised above the other panels by this much.
 const DRAWER_RAISE = 500;
+
+// Banner animations (Web Animations keyframes, played forward to show,
+// backward to hide). `none` has none.
+const DISPLAY_KEYFRAMES = {
+    fade: [{ opacity: 0 }, { opacity: 1 }],
+    'slide-top': [{ opacity: 0, translate: '0 -60px' }, { opacity: 1, translate: '0 0' }],
+    'slide-bottom': [{ opacity: 0, translate: '0 60px' }, { opacity: 1, translate: '0 0' }],
+    'slide-left': [{ opacity: 0, translate: '-80px 0' }, { opacity: 1, translate: '0 0' }],
+    'slide-right': [{ opacity: 0, translate: '80px 0' }, { opacity: 1, translate: '0 0' }],
+    zoom: [{ opacity: 0, scale: '0.85' }, { opacity: 1, scale: '1' }],
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -56,6 +71,7 @@ export class Panel {
     //   onThemeChange(panel, { themeId?, themeVariant? }),
     //   onPanelClockChange(panel, { showSecondsHand? }),
     //   onCompactChange(panel, { x, y, width, height, keepOnScreen } | null),
+    //   onDisplayChange(panel, display | null), onPreviewDisplay(panel),
     //   onElementDelete(panel, elementId), onElementDuplicate(panel, elementId),
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
@@ -93,6 +109,9 @@ export class Panel {
         this.#bindDrag();
         this.#bindResize();
         this.#bindEditAffordance();
+        this.stopPinWatch = onPinChange((panelId) => {
+            if (panelId === this.record.id) this.#applyDisplay();
+        });
         this.applyRecord();
     }
 
@@ -113,6 +132,9 @@ export class Panel {
 
     destroy() {
         this.closeProperties();
+        this.stopPinWatch?.();
+        this.displayUnsubscribe?.();
+        this.displayUnsubscribe = null;
         this.el.remove();
     }
 
@@ -129,6 +151,8 @@ export class Panel {
         this.#applyStyle();
         this.el.querySelector('.pp-panel-edit').title = locked ? 'Panel properties (locked)' : 'Panel properties';
         this.#renderElements();
+        this.#syncDisplayTrigger();
+        this.#applyDisplay();
         this.popup?.refresh();
     }
 
@@ -143,6 +167,103 @@ export class Panel {
             this.el.style.top = `${pos.y}px`;
         }
         this.#applyDrawer();
+        // Full width (a cinematic band): across the window at its y.
+        if (this.record.display?.fullWidth && !this.docked) {
+            this.el.style.left = '0px';
+            this.el.style.width = `${window.innerWidth}px`;
+        }
+    }
+
+    // ---- display (src/panels/panel-display.js) ------------------------------
+
+    // A banner listens to its trigger: the flag turning on (off, with
+    // invert) or the variable changing - never a chat load (flag-watch.js).
+    #syncDisplayTrigger() {
+        const display = this.record.display;
+        const signature = display?.mode === 'timed' && display.ref ? `${display.trigger}|${display.ref}|${display.invert}` : '';
+        if (signature === this.displaySignature) return;
+        this.displayUnsubscribe?.();
+        this.displayUnsubscribe = null;
+        this.displaySignature = signature;
+        if (!signature) return;
+        const fire = () => this.triggerBanner();
+        this.displayUnsubscribe = display.trigger === 'change'
+            ? onChange(display.ref, fire)
+            : onFlag(display.ref, (event) => { if (event.on !== display.invert) fire(); });
+    }
+
+    // The banner's trigger fired: queued to play (not while editing).
+    triggerBanner() {
+        const display = this.record.display;
+        if (display?.mode !== 'timed' || document.body.classList.contains('pp-editing')) return;
+        bannerQueue.enqueue(this.record.id, () => this.#playBanner(display.holdSeconds), display.minGapSeconds * 1000);
+    }
+
+    // Plays the panel's animation once - in, hold, out - whatever its mode
+    // (the Layout Panels list's Preview; works in Editing Mode too).
+    previewDisplay() {
+        const display = this.record.display;
+        const hold = display?.mode === 'timed' ? display.holdSeconds : 2;
+        bannerQueue.enqueue(this.record.id, () => this.#playBanner(hold), 0);
+    }
+
+    async #playBanner(holdSeconds) {
+        this.bannerShowing = true;
+        this.#applyDisplay();
+        await this.#animate('in');
+        await wait(holdSeconds * 1000);
+        await this.#animate('out');
+        this.bannerShowing = false;
+        this.#applyDisplay(true);
+    }
+
+    // The display animation in or out (resolves at once for 'none').
+    #animate(direction) {
+        const display = this.record.display;
+        const kind = direction === 'in' ? display?.animIn : display?.animOut;
+        const frames = DISPLAY_KEYFRAMES[kind];
+        if (!frames || !display.durationMs || typeof this.el.animate !== 'function') return Promise.resolve();
+        const animation = this.el.animate(frames, {
+            duration: display.durationMs,
+            easing: direction === 'in' ? 'ease-out' : 'ease-in',
+            direction: direction === 'in' ? 'normal' : 'reverse',
+            fill: 'both',
+        });
+        return animation.finished.then(() => animation.cancel(), () => {});
+    }
+
+    // Shows or hides the panel for its display: always; while its flag is
+    // on (fading as the flag changes - not on a chat load or switch); a
+    // banner only while it plays. In Editing Mode a conditional panel shows
+    // only while pinned (or previewing). `quiet`: no animation.
+    #applyDisplay(quiet = false) {
+        const display = this.record.display;
+        const editing = document.body.classList.contains('pp-editing');
+        let shown = true;
+        if (this.bannerShowing) shown = true;
+        else if (isConditional(display)) {
+            if (editing) shown = isPinned(this.record.id);
+            else if (display.mode === 'while') shown = !!display.ref && (this.hooks.getValue(display.ref)?.value === true) !== display.invert;
+            else shown = false;
+        }
+        const key = currentChatId();
+        const before = this.displayShown;
+        const animate = !quiet && !editing && display?.mode === 'while' && before !== undefined && before !== shown && this.displayChat === key;
+        this.displayShown = shown;
+        this.displayChat = key;
+        this.el.classList.toggle('pp-display-pinned', editing && isConditional(display) && isPinned(this.record.id));
+        if (shown) {
+            this.el.classList.remove('pp-display-hidden');
+            if (animate) void this.#animate('in');
+            return;
+        }
+        if (!animate) {
+            this.el.classList.add('pp-display-hidden');
+            return;
+        }
+        void this.#animate('out').then(() => {
+            if (!this.displayShown) this.el.classList.add('pp-display-hidden');
+        });
     }
 
     // ---- drawer (src/panels/drawer.js) --------------------------------------
@@ -331,6 +452,7 @@ export class Panel {
         const key = this.#drawerKey();
         if (this.record.compact && key !== this.lastDrawerKey) this.applyPosition();
         this.lastDrawerKey = key;
+        this.#applyDisplay();
         this.#applyStyle();
         for (const view of this.elementViews.values()) view.render();
         this.popup?.refreshElementPreview();
@@ -387,6 +509,8 @@ export class Panel {
                 onThemeChange: (patch) => this.hooks.onThemeChange(this, patch),
                 onPanelClockChange: (clock) => this.hooks.onPanelClockChange(this, clock),
                 onCompactChange: (compact) => this.hooks.onCompactChange(this, compact),
+                onDisplayChange: (display) => this.hooks.onDisplayChange(this, display),
+                onPreviewDisplay: () => this.hooks.onPreviewDisplay(this),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onElementDuplicate: (elementId) => this.hooks.onElementDuplicate(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),
