@@ -3147,3 +3147,60 @@ body.pp-editing .pp-element[data-flag-badge]:not(.pp-element-flag-hidden)::after
 .pp-layout-panel-row .menu_button.pp-active {
     color: var(--SmartThemeQuoteColor);
 }
+
+/* ---------- Atmosphere (src/atmosphere/) ---------- */
+
+/* Between SillyTavern's background (#bg1, z-index -1) and the chat column
+   (#sheld, z-index 30): behind the chat text, never taking a click. */
+#pp_atmosphere {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+}
+#pp_atmosphere[hidden] {
+    display: none;
+}
+
+/* The drawer's Atmosphere section. */
+.pp-atmo-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+}
+.pp-atmo-settings label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pp-atmo-layer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto;
+    align-items: center;
+    gap: 4px 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 40%, transparent);
+}
+.pp-atmo-layer .text_pole {
+    margin: 0;
+    min-width: 0;
+}
+.pp-atmo-layer .menu_button {
+    margin: 0;
+}
+.pp-atmo-layer .menu_button.pp-active {
+    color: var(--SmartThemeQuoteColor);
+}
+.pp-atmo-intensity {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+}
+.pp-atmo-intensity input[type="range"] {
+    flex: 1 1 auto;
+}

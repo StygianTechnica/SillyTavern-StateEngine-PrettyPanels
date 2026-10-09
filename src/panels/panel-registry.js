@@ -10,6 +10,7 @@
 
 import { getStore, getActiveLayout, save, generateId, MIN_GRID_SIZE, MAX_GRID_SIZE, MAX_Z_INDEX } from '../storage/store.js';
 import { pickDesign } from '../storage/design.js';
+import { normalizeAtmosphereSettings } from '../atmosphere/atmosphere-model.js';
 
 // Panel instances of the active layout were created, changed or deleted -
 // one notice per burst of writes (the drawer's Layout Panels list).
@@ -175,6 +176,27 @@ export function ungroupPanels(panelIds) {
     }
     if (removed) save();
     return removed;
+}
+
+// Atmosphere's global settings (src/atmosphere/atmosphere-model.js):
+// { enabled, scale } - for every layout.
+export function getAtmosphereSettings() {
+    return normalizeAtmosphereSettings(getStore().atmosphere);
+}
+
+export function setAtmosphereSettings(patch) {
+    const store = getStore();
+    store.atmosphere = normalizeAtmosphereSettings({ ...store.atmosphere, ...patch });
+    save();
+    for (const listener of [...atmosphereSettingsListeners]) listener();
+    return { ...store.atmosphere };
+}
+
+const atmosphereSettingsListeners = new Set();
+
+export function onAtmosphereSettingsChange(listener) {
+    atmosphereSettingsListeners.add(listener);
+    return () => atmosphereSettingsListeners.delete(listener);
 }
 
 export function isEnabled() {

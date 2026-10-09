@@ -29,6 +29,9 @@
 //                they KEEP their bindings (character fields, variables, roles)
 //     userFonts: { [font_id]: sanitized user font record } - see
 //                src/fonts/font-registry.js; never a raw font file
+//     atmosphere: { enabled, scale } - atmosphere's global settings; each
+//                layout keeps its own effect layers in layout.atmosphere
+//                (src/atmosphere/atmosphere-model.js)
 //   }
 //
 // Layouts hold design data plus their elements' variable bindings - a

@@ -141,6 +141,24 @@ it shows; pin one there (or open its properties from there, which pins it), prev
 its properties. Making a panel conditional from its own properties pins it. `/pp-banner <panel
 name>` plays a banner from STscript or a Quick Reply.
 
+### Atmosphere
+
+Weather and ambience drawn **behind the chat text**, over SillyTavern's background - the drawer's
+**Atmosphere** section, per layout:
+
+- **Effects**: rain, drizzle, storm (heavy rain with lightning), snow, hail, fog, embers, falling
+  leaves, dust motes. Each is a layer with a **flag** (a State Engine boolean; the effect runs while
+  it is on) and an **intensity**. Layers mix - snow and embers at once is two layers on.
+- Make the flags in State Engine; Pretty Panels never evaluates conditions. The recommended
+  pattern: weather as an **array of enum** (`["Rainy", "Stormy"]`) and calculated booleans from it -
+  `weather.contains("Rainy")`, or `weather.contains("Rainy") && !scene_isindoor` for rain only
+  outdoors.
+- The eye button **previews** a layer (on whatever its flag, this session). *Atmosphere on* and
+  *Overall* (an intensity scale) apply to every layout.
+- Light on resources: one canvas and animation loop, a particle cap, paused while the tab is
+  hidden, gone when nothing runs; an effect turned off fades out. With the system's *reduce
+  motion* setting, effects are a faint still tint instead.
+
 ### Text Formatting
 
 Every piece of text a panel shows - free text, a variable's value, a role's value, a gauge's
@@ -494,6 +512,8 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/panels/panel-display.js` | Conditional panels and banners: display settings, banner queue, editing pins |
 | `src/ui/layout-panels-drawer.js` | The drawer's Layout Panels list |
 | `src/ui/slash-commands.js` | `/pp-banner` |
+| `src/atmosphere/` | Atmosphere: layers and settings (`atmosphere-model.js`), effects (`effects.js`), the canvas (`atmosphere.js`), flags to effects (`atmosphere-controller.js`) |
+| `src/ui/atmosphere-drawer.js` | The drawer's Atmosphere section |
 | `src/chat/flag-watch.js` + `flag-watch-core.js` | Flag and change watcher: `onFlag`, `onChange`, `isFlagOn` for flag-driven features (baseline on chat load) |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
 | `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |

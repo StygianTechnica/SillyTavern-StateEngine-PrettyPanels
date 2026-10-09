@@ -103,6 +103,25 @@
 
             <hr class="sysHR" />
 
+            <div class="pp-library" id="pp_atmosphere_section">
+                <div class="pp-library-heading">
+                    <i class="fa-solid fa-cloud-rain"></i>
+                    <b>Atmosphere</b>
+                </div>
+                <small class="pp-library-hint">Weather and ambience drawn behind the chat for this layout. Each effect runs while its flag - a State Engine boolean, e.g. a calculated isRaining = weather.contains("Rainy") - is on; effects mix.</small>
+                <div class="pp-atmo-settings">
+                    <label class="checkbox_label"><input type="checkbox" id="pp_atmo_enabled" /><span>Atmosphere on (all layouts)</span></label>
+                    <label title="Scales every effect's intensity, for all layouts"><span>Overall</span><input type="range" id="pp_atmo_scale" step="10" /><span id="pp_atmo_scale_value"></span></label>
+                </div>
+                <div id="pp_atmo_layers" class="pp-template-list"></div>
+                <div class="pp-library-actions">
+                    <div id="pp_atmo_add" class="menu_button menu_button_icon" title="Add an effect to this layout"><i class="fa-solid fa-plus"></i><span>Add effect</span></div>
+                </div>
+                <datalist id="pp_atmo_flags"></datalist>
+            </div>
+
+            <hr class="sysHR" />
+
             <div class="pp-library">
                 <div class="pp-library-heading">
                     <i class="fa-solid fa-shapes"></i>

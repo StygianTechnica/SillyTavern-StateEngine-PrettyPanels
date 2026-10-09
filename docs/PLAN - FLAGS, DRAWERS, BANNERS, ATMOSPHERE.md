@@ -2,7 +2,8 @@
 
 Status (2026-10-09): phase 0 built (`src/chat/flag-watch.js`, `flag-watch-core.js`); phases 1
 and 2 built (`src/panels/drawer.js`, the Toggle element, `visibleWhen`); phase 3 built
-(`src/panels/panel-display.js`, Layout Panels list, `/pp-banner`). Phase 4 not built.
+(`src/panels/panel-display.js`, Layout Panels list, `/pp-banner`); phase 4 built (`src/atmosphere/`,
+the drawer's Atmosphere section). Every phase is built.
 
 ## Principle: Pretty Panels reads flags, State Engine decides them
 

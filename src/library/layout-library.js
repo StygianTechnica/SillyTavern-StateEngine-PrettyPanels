@@ -9,6 +9,7 @@
 // Layouts carry their elements' variable bindings (a chat chooses a
 // layout for what it displays); panel templates never do.
 
+import { normalizeAtmosphere } from '../atmosphere/atmosphere-model.js';
 import {
     getStore,
     save,
@@ -68,10 +69,12 @@ function portableGroups(layout, instances) {
 // Adds a new layout built from portable instance data. Every instance
 // gets a fresh ID; `groups` (index arrays) are rebuilt onto those IDs.
 // Does not change which layout is active.
-function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPanelNumber = 1, roles = [] } = {}) {
+function addLayout(name, { backgrounds = [], instances = [], groups = [], nextPanelNumber = 1, roles = [], atmosphere = [] } = {}) {
     const store = getStore();
     const layout = newLayoutRecord(uniqueName(name, layoutNames(store)));
     layout.backgrounds = Array.isArray(backgrounds) ? clone(backgrounds) : [];
+    // Fresh layer ids: a copy or an import never shares them with its source.
+    layout.atmosphere = normalizeAtmosphere((Array.isArray(atmosphere) ? clone(atmosphere) : []).map((layer) => (layer && typeof layer === 'object' ? { ...layer, id: undefined } : layer)));
     layout.roles = roles.filter((n) => store.roles[n]);
     const now = Date.now();
     const ids = instances.map((source, i) => {
@@ -137,7 +140,31 @@ export function duplicateLayout(id) {
         groups: portableGroups(source, instances),
         nextPanelNumber: source.nextPanelNumber,
         roles: source.roles,
+        atmosphere: source.atmosphere,
     });
+}
+
+// ---- atmosphere (src/atmosphere/) ---------------------------------------------
+
+const atmosphereListeners = new Set();
+
+// A layout's effect layers (atmosphere-model.js), as copies.
+export function getLayoutAtmosphere(id) {
+    return clone(normalizeAtmosphere(getStore().layouts[id]?.atmosphere));
+}
+
+export function setLayoutAtmosphere(id, layers) {
+    const layout = getStore().layouts[id];
+    if (!layout) return null;
+    layout.atmosphere = normalizeAtmosphere(layers);
+    save();
+    for (const listener of [...atmosphereListeners]) listener(id);
+    return clone(layout.atmosphere);
+}
+
+export function onAtmosphereChange(listener) {
+    atmosphereListeners.add(listener);
+    return () => atmosphereListeners.delete(listener);
 }
 
 export function renameLayout(id, name) {
@@ -175,6 +202,7 @@ export function exportLayout(id) {
         name: layout.name,
         backgrounds: clone(layout.backgrounds),
         panels: instances.map(instanceData),
+        atmosphere: normalizeAtmosphere(layout.atmosphere),
         groups: portableGroups(layout, instances),
         // The layout's roles travel with it (an element bound to a role
         // needs its definition in the importing install).
@@ -215,6 +243,7 @@ export function importLayout(data) {
         instances,
         groups: data.groups,
         roles: names,
+        atmosphere: data.atmosphere,
     });
     if (names.length) announceRolesChange();
     return id;
