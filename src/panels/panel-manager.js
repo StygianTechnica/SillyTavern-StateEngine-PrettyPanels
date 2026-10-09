@@ -67,7 +67,7 @@ import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
-    ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
+    ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_TOGGLE, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
     bindingRef, bindingFromRef, isCharacterDefinition, ELEMENT_TYPE_CHARACTER, isCharRef,
 } from '../elements/element-model.js';
 import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
@@ -226,6 +226,12 @@ const hooks = {
         const updated = writeRecord(panel, { clock });
         if (updated) panel.update(updated);
     },
+    // The drawer's compact area ({ x, y, width, height, keepOnScreen }, or
+    // null for none).
+    onCompactChange(panel, compact) {
+        const updated = writeRecord(panel, { compact });
+        if (updated) panel.update(updated);
+    },
     // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
     // toggles it in the selection; a plain press selects it (keeping a
     // multi-selection it's already part of, so a drag doesn't drop it).
@@ -370,6 +376,8 @@ export function getBoundVariableNames() {
         for (const widget of record.widgets) {
             const ref = isVariableElement(widget) ? bindingRef(widget.binding) : null;
             if (ref && !isCharRef(ref)) names.add(ref);
+            // A visibility flag is read like a binding.
+            if (widget.visibleWhen?.flag) names.add(widget.visibleWhen.flag);
         }
     }
     // What the Character elements' templates show besides character fields.
@@ -1014,7 +1022,7 @@ export function addPaletteElement(panel, kind, at = null) {
     const y = Math.max(0, Math.min(Math.round(at ? softSnap(at.y, grid) : 0), bodyHeight - height));
     const element = type === ELEMENT_TYPE_FREE_TEXT
         ? createVariableElement({ type, x, y, width, height, content: 'Text', showLabel: false })
-        : type === ELEMENT_TYPE_ANALOG_CLOCK
+        : type === ELEMENT_TYPE_ANALOG_CLOCK || type === ELEMENT_TYPE_TOGGLE
             ? createVariableElement({ type, x, y, width, height, showLabel: false })
             : createVariableElement({ type, x, y, width, height, shape: { kind } });
     saveWidgets(panel, [...panel.record.widgets, element]);
@@ -1024,7 +1032,7 @@ export function addPaletteElement(panel, kind, at = null) {
 
 // The element type a palette item adds.
 function paletteType(kind) {
-    if (kind === ELEMENT_TYPE_FREE_TEXT || kind === ELEMENT_TYPE_ANALOG_CLOCK) return kind;
+    if (kind === ELEMENT_TYPE_FREE_TEXT || kind === ELEMENT_TYPE_ANALOG_CLOCK || kind === ELEMENT_TYPE_TOGGLE) return kind;
     return ELEMENT_TYPE_SHAPE;
 }
 
@@ -1113,6 +1121,12 @@ function applyState() {
     const editing = enabled && isEditingMode();
     document.body.classList.toggle('pp-editing', editing);
     refreshElementTitles(); // tooltips: bindings while editing, values otherwise
+    // Drawers show their whole design while editing, compact otherwise; flag-
+    // hidden elements and toggles redraw too.
+    for (const panel of panels.values()) {
+        if (panel.record.compact) panel.applyPosition();
+        panel.renderValues();
+    }
     if (!editing) {
         for (const panel of panels.values()) panel.closeProperties();
         if (selection.length) setSelection([]);

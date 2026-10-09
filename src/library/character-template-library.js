@@ -157,6 +157,7 @@ export function templateBindings(id) {
     for (const widget of template.widgets) {
         const ref = isVariableElement(widget) ? bindingRef(widget.binding) : null;
         if (ref && !isCharRef(ref)) refs.add(ref);
+        if (widget.visibleWhen?.flag) refs.add(widget.visibleWhen.flag);
         for (const name of clockImageVariables(widget)) images.add(name);
     }
     const background = template.style?.backgroundImageVariable;

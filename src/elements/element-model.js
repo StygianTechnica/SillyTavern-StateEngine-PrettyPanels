@@ -38,6 +38,12 @@
 //                              (src/elements/clock.js); an analog clock
 //                              binds a datetime variable and also uses
 //                              opacity
+//     toggle,                  Drawer Toggle only: { icon, color, size } - opens
+//                              and closes its panel's drawer (src/panels/drawer.js)
+//     visibleWhen,             { flag, invert } or null: shown only while the
+//                              flag (a boolean variable or role ref) is on -
+//                              or, with invert, off. Pretty Panels never
+//                              evaluates conditions; State Engine sets flags
 //     character,               Character element only: { templateId, tiling,
 //                              gap } - a character variable (or a list of
 //                              them) drawn as cards of a character template
@@ -74,11 +80,12 @@ export const ELEMENT_TYPE_TEXT = 'text';
 export const ELEMENT_TYPE_SHAPE = 'shape';
 export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
 export const ELEMENT_TYPE_CHARACTER = 'character';
+export const ELEMENT_TYPE_TOGGLE = 'toggle';
 // How a Character element lays out a list of cards.
 export const CHARACTER_TILINGS = [['grid', 'Grid'], ['row', 'Row'], ['column', 'Column']];
 export const CHARACTER_GAP_LIMITS = [0, 64];
 // Types that show no variable.
-const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT]);
+const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TOGGLE]);
 export const MAX_FREE_TEXT_LENGTH = 2000;
 const LEGACY_TYPE_VARIABLE = 'variable';
 
@@ -93,6 +100,7 @@ export const ELEMENT_TYPES = [
     ['character', 'Character Cards'],
     ['free-text', 'Free Text'],
     ['shape', 'Shape'],
+    ['toggle', 'Drawer Toggle'],
 ];
 const TYPE_IDS = new Set(ELEMENT_TYPES.map(([id]) => id));
 
@@ -108,6 +116,7 @@ export const DEFAULT_TYPE_SIZES = {
     'free-text': [160, 32],
     'analogClock': [120, 120],
     'character': [240, 160],
+    'toggle': [28, 28],
 };
 
 // A new element's zIndex, per type. Image variable elements (text bound
@@ -124,6 +133,7 @@ export const DEFAULT_Z_INDEX = {
     'composite-bar': 3,
     'analogClock': 3,
     'character': 2,
+    'toggle': 5,
 };
 export const IMAGE_Z_INDEX = 1;
 export const TITLE_Z_INDEX = 4;
@@ -325,7 +335,37 @@ export function normalizeVariableElement(element) {
         shape: object(element.shape),
         clock: object(element.clock),
         ...(type === ELEMENT_TYPE_CHARACTER ? { character: normalizeCharacterOptions(element.character) } : {}),
+        ...(type === ELEMENT_TYPE_TOGGLE ? { toggle: normalizeToggleOptions(element.toggle) } : {}),
+        visibleWhen: normalizeVisibleWhen(element.visibleWhen),
     };
+}
+
+export const TOGGLE_SIZE_LIMITS = [8, 72];
+
+// A Drawer Toggle's look: a Font Awesome icon (turned over while the drawer
+// is open), its colour (blank: the theme's accent) and size (px).
+export function normalizeToggleOptions(raw) {
+    const options = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const size = Number.isFinite(options.size) ? Math.round(options.size) : 16;
+    return {
+        icon: typeof options.icon === 'string' && options.icon.trim() ? options.icon.trim() : 'chevron-down',
+        color: typeof options.color === 'string' ? options.color : '',
+        size: Math.min(TOGGLE_SIZE_LIMITS[1], Math.max(TOGGLE_SIZE_LIMITS[0], size)),
+    };
+}
+
+// { flag: <variable or role ref>, invert } or null (always visible).
+export function normalizeVisibleWhen(raw) {
+    const flag = typeof raw?.flag === 'string' ? raw.flag.trim() : '';
+    if (!flag || isCharRef(flag)) return null;
+    return { flag, invert: raw.invert === true };
+}
+
+// Whether an element shows, given its flag's current value (only a real
+// boolean true is on).
+export function isElementVisible(element, flagValue) {
+    if (!element?.visibleWhen) return true;
+    return (flagValue === true) !== element.visibleWhen.invert;
 }
 
 // A Character element's options: which template draws each card (null: the

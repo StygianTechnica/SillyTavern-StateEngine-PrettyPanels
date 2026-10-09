@@ -19,6 +19,8 @@ import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
 import { applyPanelTheme } from '../themes/theme-apply.js';
+import { fitCompact, collapsedBox, openBox, drawerKey, isDrawerOpen, toggleDrawer } from './drawer.js';
+import { currentChatId } from '../chat/variable-service.js';
 
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
 // imports this module).
@@ -27,6 +29,9 @@ const BASE_Z_INDEX = 100;
 // Keep at least this much of a panel on-screen so it can always be
 // grabbed again after a window resize.
 const VISIBLE_MARGIN = 40;
+
+// An open drawer is raised above the other panels by this much.
+const DRAWER_RAISE = 500;
 
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -50,6 +55,7 @@ export class Panel {
     //   onStyleChange(panel, stylePatch),
     //   onThemeChange(panel, { themeId?, themeVariant? }),
     //   onPanelClockChange(panel, { showSecondsHand? }),
+    //   onCompactChange(panel, { x, y, width, height, keepOnScreen } | null),
     //   onElementDelete(panel, elementId), onElementDuplicate(panel, elementId),
     //   onAddVariable(panel, variableName),
     //   onDropVariable(variableName, clientX, clientY),
@@ -128,12 +134,137 @@ export class Panel {
 
     // Places the panel: docked into SillyTavern's layout when it is
     // anchored and its anchor exists (the manager moves it there), else
-    // floating at its stored x/y.
+    // floating at its stored x/y. Then its drawer, if it has one.
     applyPosition() {
-        if (this.mounted && this.hooks.placePanel?.(this)) return;
-        const pos = this.#clampPosition(this.record.x, this.record.y, this.record.width);
-        this.el.style.left = `${pos.x}px`;
-        this.el.style.top = `${pos.y}px`;
+        this.#clearDrawerOverlay();
+        if (!(this.mounted && this.hooks.placePanel?.(this))) {
+            const pos = this.#clampPosition(this.record.x, this.record.y, this.record.width);
+            this.el.style.left = `${pos.x}px`;
+            this.el.style.top = `${pos.y}px`;
+        }
+        this.#applyDrawer();
+    }
+
+    // ---- drawer (src/panels/drawer.js) --------------------------------------
+
+    #drawerKey() {
+        return drawerKey(currentChatId(), 'panel', this.record.id);
+    }
+
+    isDrawerOpen() {
+        return !!this.record.compact && isDrawerOpen(this.#drawerKey());
+    }
+
+    // 'full' (no compact area, or Editing Mode: the whole design shows),
+    // 'collapsed' or 'open'.
+    drawerState() {
+        if (!this.record.compact || document.body.classList.contains('pp-editing')) return 'full';
+        return this.isDrawerOpen() ? 'open' : 'collapsed';
+    }
+
+    // A Drawer Toggle was clicked.
+    toggleDrawer() {
+        if (!this.record.compact) return;
+        toggleDrawer(this.#drawerKey());
+        this.applyPosition();
+        for (const view of this.elementViews.values()) view.render();
+    }
+
+    // The box's insets around its canvas (margin, border, padding).
+    #chrome() {
+        const box = this.el.getBoundingClientRect();
+        const canvas = this.body.getBoundingClientRect();
+        return {
+            left: Math.round(canvas.left - box.left),
+            top: Math.round(canvas.top - box.top),
+            right: Math.round(box.right - canvas.right),
+            bottom: Math.round(box.bottom - canvas.bottom),
+        };
+    }
+
+    // Sizes and places the panel for its drawer state. Collapsed: a box the
+    // size of the compact area, at the area's place on screen, its elements
+    // shifted so the area shows. Open: the whole design laid around that
+    // place (kept on screen), raised; a docked panel leaves a placeholder
+    // in SillyTavern's layout and floats over it. In Editing Mode the whole
+    // design shows, with the compact area outlined.
+    #applyDrawer() {
+        const { compact, width, height } = this.record;
+        const state = this.drawerState();
+        this.el.classList.toggle('pp-drawer-collapsed', state === 'collapsed');
+        this.el.classList.toggle('pp-drawer-open', state === 'open');
+        this.el.style.zIndex = String(BASE_Z_INDEX + this.record.zIndex + (state === 'open' ? DRAWER_RAISE : 0));
+        const row = this.el.classList.contains('pp-docked-row');
+        if (!row) this.el.style.width = `${width}px`;
+        this.el.style.height = `${height}px`;
+        this.#renderCompactOutline(compact && state === 'full' && document.body.classList.contains('pp-editing') ? compact : null);
+        if (state === 'full' || !this.el.isConnected) return;
+
+        const chrome = this.#chrome();
+        const fullWidth = row ? Math.round(this.el.getBoundingClientRect().width) : width;
+        const area = fitCompact(compact, fullWidth - chrome.left - chrome.right, height - chrome.top - chrome.bottom);
+        this.el.style.setProperty('--pp-compact-x', `${area.x}px`);
+        this.el.style.setProperty('--pp-compact-y', `${area.y}px`);
+        const small = collapsedBox({ x: 0, y: 0 }, chrome, area);
+
+        if (this.docked) {
+            // Collapsed in the layout. Open, it floats from <body> (inside
+            // SillyTavern's layout a fixed box can be placed against the
+            // wrong container) over a placeholder that keeps its place; the
+            // next placement (the manager's placePanel) docks it again.
+            if (!row) this.el.style.width = `${small.width}px`;
+            this.el.style.height = `${small.height}px`;
+            if (state === 'open') {
+                const rect = this.el.getBoundingClientRect();
+                const placeholder = document.createElement('div');
+                placeholder.className = 'pp-drawer-placeholder';
+                Object.assign(placeholder.style, { width: `${rect.width}px`, height: `${rect.height}px` });
+                this.el.before(placeholder);
+                this.drawerPlaceholder = placeholder;
+                const box = openBox({ x: rect.left, y: rect.top }, area, fullWidth, height, window.innerWidth, window.innerHeight);
+                this.el.classList.add('pp-drawer-floating');
+                this.el.style.setProperty('--pp-float-x', `${box.x}px`);
+                this.el.style.setProperty('--pp-float-y', `${box.y}px`);
+                this.el.style.setProperty('--pp-float-w', `${fullWidth}px`);
+                this.el.style.setProperty('--pp-float-z', String(BASE_Z_INDEX + this.record.zIndex + DRAWER_RAISE));
+                this.el.style.height = `${height}px`;
+                document.body.appendChild(this.el);
+            }
+            return;
+        }
+        const at = this.#clampPosition(this.record.x + area.x, this.record.y + area.y, small.width);
+        if (state === 'collapsed') {
+            Object.assign(this.el.style, { left: `${at.x}px`, top: `${at.y}px`, width: `${small.width}px`, height: `${small.height}px` });
+        } else {
+            const box = openBox(at, area, width, height, window.innerWidth, window.innerHeight);
+            Object.assign(this.el.style, { left: `${box.x}px`, top: `${box.y}px` });
+        }
+    }
+
+    #clearDrawerOverlay() {
+        // Back where it was docked (keeping its order among the anchor's panels).
+        if (this.drawerPlaceholder?.isConnected) this.drawerPlaceholder.replaceWith(this.el);
+        this.drawerPlaceholder = null;
+        if (this.el.classList.contains('pp-drawer-floating')) {
+            this.el.classList.remove('pp-drawer-floating');
+            for (const prop of ['--pp-float-x', '--pp-float-y', '--pp-float-w', '--pp-float-z']) this.el.style.removeProperty(prop);
+        }
+    }
+
+    // The compact area's dashed outline on the canvas (Editing Mode).
+    #renderCompactOutline(compact) {
+        let outline = this.body.querySelector(':scope > .pp-compact-outline');
+        if (!compact) {
+            outline?.remove();
+            return;
+        }
+        if (!outline) {
+            outline = document.createElement('div');
+            outline.className = 'pp-compact-outline';
+            outline.innerHTML = '<span>Compact area</span>';
+        }
+        this.body.appendChild(outline);
+        Object.assign(outline.style, { left: `${compact.x}px`, top: `${compact.y}px`, width: `${compact.width}px`, height: `${compact.height}px` });
     }
 
     // Replaces the working copy after the registry accepted a change.
@@ -161,6 +292,10 @@ export class Panel {
     // Re-renders variable-driven content only (after the variable service
     // updated): element values and a variable background image.
     renderValues() {
+        // The open / closed state is per chat: a chat switch may change it.
+        const key = this.#drawerKey();
+        if (this.record.compact && key !== this.lastDrawerKey) this.applyPosition();
+        this.lastDrawerKey = key;
         this.#applyStyle();
         for (const view of this.elementViews.values()) view.render();
         this.popup?.refreshElementPreview();
@@ -216,6 +351,7 @@ export class Panel {
                 onPanelStyleChange: (patch) => this.hooks.onStyleChange(this, patch),
                 onThemeChange: (patch) => this.hooks.onThemeChange(this, patch),
                 onPanelClockChange: (clock) => this.hooks.onPanelClockChange(this, clock),
+                onCompactChange: (compact) => this.hooks.onCompactChange(this, compact),
                 onElementDelete: (elementId) => this.hooks.onElementDelete(this, elementId),
                 onElementDuplicate: (elementId) => this.hooks.onElementDuplicate(this, elementId),
                 onAddVariable: (name) => this.hooks.onAddVariable(this, name),

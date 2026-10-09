@@ -92,10 +92,29 @@ selecting a panel or element expands its section.
   Text Formatting for the value they print (Text Case, Value Formatting);
   for **shapes**: **Shape Properties** (below); for **analog clocks**: **Clock Properties** (below);
   then a live Preview, and delete. Only the fields that apply to the element's type are shown.
-- **Add, Variables & Roles** - **Text** (free text), a **Clock**, a **Rectangle**, an **Ellipse** and a **Line** to drag onto
+- **Add, Variables & Roles** - **Text** (free text), a **Clock**, a **Toggle** (drawer), a **Rectangle**, an **Ellipse** and a **Line** to drag onto
   a panel (or click to add here), then every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag a variable onto a panel to add an element, onto an element to rebind it, or
   click it to add it to this panel.
+
+### Drawers and visibility by flag
+
+- **Drawers** - any panel (character card templates too) can have a **compact area**: Panel
+  Properties > Drawer > *Compact area*, with X / Y / W / H on the panel's canvas, or **Use selected
+  element** (place a shape around the part that should stay visible, then use it). Outside Editing
+  Mode the panel shows only that area; a **Toggle** element opens the whole design **over** its
+  neighbours. The compact area stays where it is and the rest unfolds around it, so its place in
+  the design decides the direction: at the bottom, the drawer opens upward. *Keep on screen*
+  moves an open drawer back inside the window. In Editing Mode the whole design shows, with the
+  compact area outlined. Open / closed is per chat and resets when the page reloads.
+  - A docked (anchored) panel stays collapsed in SillyTavern's layout; open, it floats over it.
+  - Character cards of a template with a compact area tile at their compact size; a card's
+    Toggle opens that card over the list (Escape closes open cards).
+- **Visible by flag** - every element: *Visible: Always / While a flag is on / While a flag is
+  off*, with the flag a State Engine boolean variable (or a role assigned one). Pretty Panels never
+  evaluates conditions - make the flag in State Engine (a calculated boolean such as
+  `weather.contains("Rainy")`, a prompted or flag-mode boolean). Outside Editing Mode a hidden
+  element is gone; in Editing Mode it shows faded, with an eye badge.
 
 ### Text Formatting
 
@@ -138,6 +157,7 @@ carried over.
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
 | Analog Clock | a clock face with hour, minute and second hands, for a datetime variable | (Clock Properties, below) |
 | Free Text | text you type, no variable | (Element Styling) |
+| Drawer Toggle | an icon that opens and closes the panel's drawer (below), no variable | icon (Font Awesome name; turned over while open), colour, size |
 | Shape | a filled rectangle or ellipse, or a line (a rule or divider), no variable | shape, fill colour/opacity, border colour/thickness, corners; a line: direction (horizontal / vertical - switching turns its box), colour (default: the theme's border colour), opacity, thickness 1-20 px, solid / dashed / dotted, fade out at the ends. The line is drawn through the middle of its box, so it stays easy to grab |
 
 - Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max

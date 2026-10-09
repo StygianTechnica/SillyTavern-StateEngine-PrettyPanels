@@ -2969,3 +2969,112 @@ body.pp-editing .pp-panel.pp-template-editor {
 .pp-properties.pp-properties-template [data-template-hide] {
     display: none !important;
 }
+
+/* ---------- Drawers (src/panels/drawer.js, panel.js) ---------- */
+
+/* Collapsed: the box is the compact area's size; the elements shift so the
+   area shows. */
+.pp-panel.pp-drawer-collapsed .pp-panel-canvas {
+    overflow: hidden;
+}
+.pp-panel.pp-drawer-collapsed .pp-panel-canvas > .pp-element {
+    translate: calc(-1 * var(--pp-compact-x, 0px)) calc(-1 * var(--pp-compact-y, 0px));
+}
+
+/* An open docked drawer floats from <body> over its placeholder. */
+.pp-panel.pp-docked.pp-drawer-floating {
+    position: fixed !important;
+    left: var(--pp-float-x) !important;
+    top: var(--pp-float-y) !important;
+    width: var(--pp-float-w) !important;
+    z-index: var(--pp-float-z) !important;
+}
+.pp-drawer-placeholder {
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+
+/* Editing Mode: the compact area outlined on the full design. */
+.pp-compact-outline {
+    position: absolute;
+    box-sizing: border-box;
+    z-index: 10000;
+    pointer-events: none;
+    border: 1px dashed var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 6%, transparent);
+}
+.pp-compact-outline > span {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 14px;
+    white-space: nowrap;
+    color: var(--SmartThemeBodyColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent);
+    border-radius: 3px 3px 0 0;
+}
+
+/* A Drawer Toggle: an icon, turned over while its drawer is open. */
+.pp-element.pp-kind-toggle {
+    justify-content: center;
+    padding: 0;
+}
+.pp-element.pp-kind-toggle > .pp-element-label,
+.pp-element.pp-kind-toggle > .pp-element-icon,
+.pp-element.pp-kind-toggle > .pp-widget,
+.pp-element.pp-kind-toggle > .pp-shape {
+    display: none;
+}
+.pp-element.pp-kind-toggle > .pp-element-value {
+    flex: 1 1 auto;
+    justify-content: center;
+    text-align: center;
+}
+.pp-toggle-icon {
+    font-size: var(--pp-toggle-size, 16px);
+    color: var(--pp-toggle-color, var(--ppt-accent, var(--SmartThemeQuoteColor)));
+    transition: rotate 0.2s ease;
+}
+.pp-element.pp-toggle-open .pp-toggle-icon {
+    rotate: 180deg;
+}
+body:not(.pp-editing) .pp-element.pp-kind-toggle {
+    cursor: pointer;
+}
+body:not(.pp-editing) .pp-element.pp-kind-toggle:hover .pp-toggle-icon {
+    filter: brightness(1.25);
+}
+/* Template card elements take no clicks - except a toggle. */
+.pp-template-card .pp-element.pp-kind-toggle {
+    pointer-events: auto;
+}
+
+/* Visible by flag: hidden outside Editing Mode; faded with a badge in it. */
+body:not(.pp-editing) .pp-element.pp-element-flag-hidden {
+    display: none !important;
+}
+body.pp-editing .pp-element.pp-element-flag-hidden {
+    opacity: 0.35;
+}
+body.pp-editing .pp-element[data-flag-badge]::after {
+    content: "\f070";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    font-size: 9px;
+    opacity: 0.8;
+    pointer-events: none;
+}
+body.pp-editing .pp-element[data-flag-badge]:not(.pp-element-flag-hidden)::after {
+    content: "\f06e";
+}
+
+/* An open card drawer: the whole card, floating over the list. */
+.pp-panel.pp-template-card.pp-card-drawer {
+    position: fixed;
+    z-index: 700;
+}

@@ -1,7 +1,7 @@
 # Plan: Flag-Driven Display - Drawers, Conditional Panels, Banners, Atmosphere
 
-Status: phase 0 built (2026-10-09): `src/chat/flag-watch.js`, `flag-watch-core.js`, tests in
-`tests/`. Phases 1-4 are not built yet.
+Status (2026-10-09): phase 0 built (`src/chat/flag-watch.js`, `flag-watch-core.js`); phases 1
+and 2 built (`src/panels/drawer.js`, the Toggle element, `visibleWhen`). Phases 3-4 not built.
 
 ## Principle: Pretty Panels reads flags, State Engine decides them
 

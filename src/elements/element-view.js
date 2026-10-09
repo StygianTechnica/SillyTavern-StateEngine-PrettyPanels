@@ -9,7 +9,8 @@
 // rather than writing anything itself.
 
 import {
-    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, elementLabel, bindingRef, rolePublicName,
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, ELEMENT_TYPE_TOGGLE,
+    elementLabel, bindingRef, rolePublicName, isElementVisible, normalizeToggleOptions,
 } from './element-model.js';
 import { renderCharacterTiles } from './character-tiles.js';
 import { getValue as liveValue, getImage as liveImage } from '../chat/variable-service.js';
@@ -20,7 +21,7 @@ import { formatText, formatPlainText, normalizeFormat, valueKind, applyTextCase 
 import { renderCharacters } from './character-card.js';
 import { getCharacter } from '../chat/variable-service.js';
 import { openCharacterManager } from '../ui/character-manager.js';
-import { applyElementStyle } from './element-style.js';
+import { applyElementStyle, iconClass } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 import { isColor } from '../panels/panel-style.js';
 import { themedElement, clockDefaultsFor } from '../themes/theme-apply.js';
@@ -102,11 +103,29 @@ function clamp(value, min, max) {
 // the properties-pane preview and the Theme Editor preview. `context` is
 // where it is drawn - { variant, panelClock, componentClock } - which an
 // analog clock inherits its seconds hand from (theme-apply.js).
+//
+// Two more context fields: `flagValue`, the current value of the element's
+// visibleWhen flag (an element whose flag says hide is hidden outside
+// Editing Mode, faded with a badge in it), and `drawerOpen`, whether the
+// drawer a Drawer Toggle belongs to is open (its icon turns over).
 export function renderElementContent(container, stored, entry, theme = null, context = {}) {
     const element = themedElement(stored, theme);
     const labelEl = container.querySelector('.pp-element-label');
     const valueEl = container.querySelector('.pp-element-value');
     const def = entry?.def ?? null;
+
+    const hidden = !isElementVisible(stored, context.flagValue);
+    container.classList.toggle('pp-element-flag-hidden', hidden);
+    if (stored.visibleWhen) {
+        container.dataset.flagBadge = `${stored.visibleWhen.invert ? 'Hidden' : 'Shown'} while ${stored.visibleWhen.flag} is on`;
+    } else {
+        delete container.dataset.flagBadge;
+    }
+    container.classList.toggle('pp-kind-toggle', element.type === ELEMENT_TYPE_TOGGLE);
+    if (element.type === ELEMENT_TYPE_TOGGLE) {
+        renderToggle(container, element, context.drawerOpen === true);
+        return;
+    }
 
     container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
@@ -197,6 +216,23 @@ export function renderElementContent(container, stored, entry, theme = null, con
     }
 }
 
+// A Drawer Toggle: its icon, turned over while the drawer is open.
+function renderToggle(container, element, open) {
+    container.classList.remove('pp-kind-widget', 'pp-kind-free-text', 'pp-kind-shape', 'pp-element-unbound', 'pp-element-missing');
+    applyElementStyle(container, {});
+    container.querySelector('.pp-element-label').hidden = true;
+    const options = normalizeToggleOptions(element.toggle);
+    const icon = document.createElement('i');
+    icon.className = `pp-toggle-icon ${iconClass(options.icon) ?? 'fa-solid fa-chevron-down'}`;
+    const valueEl = container.querySelector('.pp-element-value');
+    valueEl.replaceChildren(icon);
+    container.classList.toggle('pp-toggle-open', open);
+    container.style.setProperty('--pp-toggle-size', `${options.size}px`);
+    if (options.color) container.style.setProperty('--pp-toggle-color', options.color);
+    else container.style.removeProperty('--pp-toggle-color');
+    setTitles(container, 'Drawer toggle - opens and closes the drawer (outside Editing Mode). Set the compact area in Panel Properties.', open ? 'Close' : 'Open');
+}
+
 // A Character element: its variable's character(s) as cards of its
 // template (character-tiles.js), or the built-in card.
 function renderCharacterElement(container, element, entry) {
@@ -269,6 +305,13 @@ export class ElementView {
         this.el.insertAdjacentHTML('beforeend', '<div class="pp-element-resize" title="Drag to resize"></div>');
         this.#bindMove();
         this.#bindResize();
+        // A Drawer Toggle opens and closes the panel's drawer - outside
+        // Editing Mode (in it, a click selects the element like any other).
+        this.el.addEventListener('click', (e) => {
+            if (this.element.type !== ELEMENT_TYPE_TOGGLE || document.body.classList.contains('pp-editing')) return;
+            e.stopPropagation();
+            this.panel.toggleDrawer?.();
+        });
         this.update(element);
     }
 
@@ -292,7 +335,12 @@ export class ElementView {
     render() {
         const ref = bindingRef(this.element.binding);
         const entry = ref ? this.panel.hooks.getValue(ref) : undefined;
-        renderElementContent(this.el, this.element, entry, this.panel.theme, this.panel.clockContext());
+        const flag = this.element.visibleWhen?.flag;
+        renderElementContent(this.el, this.element, entry, this.panel.theme, {
+            ...this.panel.clockContext(),
+            flagValue: flag ? this.panel.hooks.getValue(flag)?.value : undefined,
+            drawerOpen: this.panel.isDrawerOpen?.() === true,
+        });
     }
 
     setSelected(selected) {

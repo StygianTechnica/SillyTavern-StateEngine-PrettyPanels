@@ -13,6 +13,7 @@ import { clone } from './store.js';
 import { normalizeWidgets } from '../elements/element-model.js';
 import { normalizeAnchorId } from '../panels/anchors.js';
 import { CLOCK_IMAGE_KEYS, clockImageSource } from '../elements/clock.js';
+import { normalizeCompact } from '../panels/drawer.js';
 
 export const DEFAULT_PANEL_WIDTH = 280;
 export const DEFAULT_PANEL_HEIGHT = 180;
@@ -43,6 +44,8 @@ export function pickDesign(source = {}) {
         ...anchorFields(source),
         ...themeFields(source),
         clock: panelClockFields(source.clock),
+        // The drawer's compact area (src/panels/drawer.js), or null.
+        compact: normalizeCompact(source.compact),
     };
 }
 

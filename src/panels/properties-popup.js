@@ -45,7 +45,9 @@ import {
     bindingRef, bindingFromRef, rolePublicName, roleTypeForElement, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
     CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isCharacterDefinition,
+    TOGGLE_SIZE_LIMITS,
 } from '../elements/element-model.js';
+import { normalizeCompact } from './drawer.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import {
     TEXT_CASES, THEME_STYLES, VALUE_FORMATS, DECIMAL_LIMITS, DECIMAL_FORMATS, DATETIME_PATTERN_HINT, NUMBER_PATTERN_HINT,
@@ -219,6 +221,7 @@ export class PanelPropertiesPopup {
     //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
     //          onThemeChange({ themeId?, themeVariant? }), onPanelClockChange(clock),
     //          onElementChange(elementId, patch), onElementDelete(elementId), onElementDuplicate(elementId),
+    //          onCompactChange(compact | null),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
     //          getValue(name), onClose() }
@@ -337,11 +340,35 @@ export class PanelPropertiesPopup {
                     : `${anchorLabel(record.anchorTarget)} isn't on screen right now (e.g. the sidebar is closed) - shown floating until it is.`;
         this.#fillTheme();
         this.#fillPanelStyle();
+        this.#fillDrawer();
 
         this.#applySections();
         this.#refreshElement();
         this.#applyLock(record.locked);
         this.#position(geometry);
+    }
+
+    // The Drawer fields from the panel's compact area.
+    #fillDrawer() {
+        const compact = this.panel.record.compact;
+        this.el.querySelector('[data-drawer="enabled"]').checked = !!compact;
+        for (const node of this.el.querySelectorAll('[data-drawer-fields]')) node.hidden = !compact;
+        if (!compact) return;
+        for (const key of ['x', 'y', 'width', 'height']) {
+            const input = this.el.querySelector(`[data-drawer="${key}"]`);
+            if (input !== document.activeElement) input.value = String(compact[key]);
+        }
+        this.el.querySelector('[data-drawer="keepOnScreen"]').checked = compact.keepOnScreen;
+        this.el.querySelector('[data-action="compact-from-element"]').disabled = !this.#selected();
+    }
+
+    // A Drawer field changed: the compact area from every field.
+    #commitDrawer() {
+        const read = (key) => this.el.querySelector(`[data-drawer="${key}"]`).valueAsNumber;
+        this.hooks.onCompactChange(normalizeCompact({
+            x: read('x'), y: read('y'), width: read('width'), height: read('height'),
+            keepOnScreen: this.el.querySelector('[data-drawer="keepOnScreen"]').checked,
+        }));
     }
 
     // A locked panel can't be edited: every control except Unlock, Close,
@@ -499,8 +526,27 @@ export class PanelPropertiesPopup {
         this.#fillElementStyle(element);
         this.#fillWidget(element);
         this.#fillShape(element);
+        this.#fillToggle(element);
+        this.#fillVisible(element);
         this.#fillClock(element);
         this.#fillCharacter(element, def);
+    }
+
+    #fillVisible(element) {
+        const mode = !element.visibleWhen ? '' : (element.visibleWhen.invert ? 'off' : 'on');
+        const select = this.el.querySelector('[data-el="visibleMode"]');
+        if (select !== document.activeElement) select.value = mode;
+        this.el.querySelector('[data-el="visibleFlagRow"]').hidden = !mode && this.visibleModeDraft !== element.id;
+        const flag = this.el.querySelector('[data-el="visibleFlag"]');
+        if (flag !== document.activeElement) flag.value = element.visibleWhen?.flag ?? '';
+    }
+
+    #fillToggle(element) {
+        if (element.type !== 'toggle') return;
+        this.#fillValue('toggle', 'icon', element.toggle?.icon ?? '');
+        this.#fillValue('toggle', 'size', element.toggle?.size);
+        const icon = this.preview.querySelector('.pp-toggle-icon');
+        this.#fillColor('toggle', 'color', element.toggle?.color, icon ? getComputedStyle(icon).color : '#888888');
     }
 
     // Character Cards rows (a Character element): the template list (the
@@ -953,7 +999,7 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
-        if (scope === 'widget' || scope === 'shape' || scope === 'clock') {
+        if (scope === 'widget' || scope === 'shape' || scope === 'clock' || scope === 'toggle') {
             const settings = { ...element[scope] };
             if (value === null || value === '' || value === undefined) delete settings[key];
             else settings[key] = value;
@@ -983,6 +1029,7 @@ export class PanelPropertiesPopup {
         if (scope === 'widget') return WIDGET_LIMITS[key] ?? null;
         if (scope === 'shape') return SHAPE_LIMITS[key] ?? null;
         if (scope === 'clock') return CLOCK_LIMITS[key] ?? null;
+        if (scope === 'toggle') return key === 'size' ? TOGGLE_SIZE_LIMITS : null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
@@ -1155,6 +1202,27 @@ export class PanelPropertiesPopup {
                     <option value="false">Hide</option>
                 </select>
             </label>
+            <div class="pp-properties-section-label">Drawer</div>
+            <label class="checkbox_label pp-field-check" title="Collapsed, the panel shows only its compact area; a Toggle element opens the whole design over its neighbours. Where the area sits decides which way it opens (at the bottom: upward).">
+                <input type="checkbox" data-drawer="enabled" /><span>Compact area (fold-out drawer)</span>
+            </label>
+            <div class="pp-geometry" data-drawer-fields>
+                <span class="pp-geometry-caption">Area</span>
+                <label><span>X</span><input type="number" class="text_pole" data-drawer="x" min="0" step="1" /></label>
+                <label><span>Y</span><input type="number" class="text_pole" data-drawer="y" min="0" step="1" /></label>
+                <span class="pp-geometry-caption">Size</span>
+                <label><span>W</span><input type="number" class="text_pole" data-drawer="width" min="24" step="1" /></label>
+                <label><span>H</span><input type="number" class="text_pole" data-drawer="height" min="16" step="1" /></label>
+            </div>
+            <div class="pp-properties-actions" data-drawer-fields>
+                <button type="button" class="menu_button pp-properties-button" data-action="compact-from-element" title="Make the compact area the selected element's area - e.g. place a shape around the part that should stay visible, then use it">
+                    <i class="fa-solid fa-crop-simple"></i><span>Use selected element</span>
+                </button>
+            </div>
+            <label class="checkbox_label pp-field-check" data-drawer-fields title="If the open drawer would run past a window edge, move it back inside">
+                <input type="checkbox" data-drawer="keepOnScreen" /><span>Keep on screen when open</span>
+            </label>
+            <small class="pp-field-info" data-drawer-fields>The dashed outline shows the area while editing. Add a Toggle (Add palette) to open and close it; outside Editing Mode the panel starts collapsed.</small>
             <div class="pp-properties-section-label"><span data-template-hide>Panel Library</span><span data-template-only>Character Template</span></div>
             <div class="pp-properties-actions">
                 <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library" data-template-hide>
@@ -1216,6 +1284,16 @@ export class PanelPropertiesPopup {
                     </label>
                 </div>
                 <small class="pp-field-info" data-el="binding-info" data-for-types="${BOUND_TYPES}"></small>
+                <label class="pp-field" title="Show this element only while a State Engine boolean (a flag) is on - or off. The logic that sets the flag lives in State Engine (a calculated boolean, a prompted one...)."><span>Visible</span>
+                    <select class="text_pole" data-el="visibleMode">
+                        <option value="">Always</option>
+                        <option value="on">While a flag is on</option>
+                        <option value="off">While a flag is off</option>
+                    </select>
+                </label>
+                <label class="pp-field" data-el="visibleFlagRow"><span>Flag</span>
+                    <input type="text" class="text_pole" data-el="visibleFlag" placeholder="a boolean variable, e.g. se__is_raining, or role:..." autocomplete="off" />
+                </label>
                 <div class="pp-geometry">
                     <span class="pp-geometry-caption">Position</span>
                     <label><span>X</span><input type="number" class="text_pole" data-geo="x" min="0" step="1" /></label>
@@ -1289,6 +1367,17 @@ export class PanelPropertiesPopup {
                         <input type="number" class="text_pole" data-el="charGap" min="${CHARACTER_GAP_LIMITS[0]}" max="${CHARACTER_GAP_LIMITS[1]}" step="1" title="Space between cards, px" />
                     </label>
                     <small class="pp-field-info" data-el="charInfo"></small>
+                </div>
+                <div data-for-types="toggle">
+                ${sectionMarkup('toggle', 'Toggle Properties', '', `
+                    <div class="pp-style-row"><span>Icon</span>
+                        <div class="pp-style-controls">
+                            <input type="text" class="text_pole" data-style="toggle:icon" placeholder="chevron-down" autocomplete="off" title="A Font Awesome icon name - turned over while the drawer is open" />
+                        </div>
+                    </div>
+                    ${colorRow('Color', 'toggle', 'color')}
+                    ${numberRow('Size', 'toggle', 'size', TOGGLE_SIZE_LIMITS)}
+                `, 'pp-subsection')}
                 </div>
                 <div data-for-types="shape">
                 ${sectionMarkup('shape', 'Shape Properties', '', `
@@ -1512,11 +1601,13 @@ export class PanelPropertiesPopup {
         const bindingList = el.querySelector('.pp-binding-options');
         bindingList.id = `pp-binding-options-${this.panel.id}`;
         el.querySelector('[data-el="binding"]').setAttribute('list', bindingList.id);
+        el.querySelector('[data-el="visibleFlag"]').setAttribute('list', bindingList.id);
         const iconList = el.querySelector('.pp-icon-options');
         iconList.id = `pp-icon-options-${this.panel.id}`;
         iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));
         el.querySelector('[data-style="element:icon"]').setAttribute('list', iconList.id);
         el.querySelector('[data-style="widget:icon"]').setAttribute('list', iconList.id);
+        el.querySelector('[data-style="toggle:icon"]').setAttribute('list', iconList.id);
 
         el.querySelector('.pp-properties-shapes').appendChild(this.shapes.el);
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
@@ -1579,6 +1670,20 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-field="clockSeconds"]').addEventListener('change', (e) => {
             this.hooks.onPanelClockChange(e.target.value === '' ? {} : { showSecondsHand: e.target.value === 'true' });
         });
+        // Drawer: turning it on starts from the top strip of the panel's canvas.
+        el.querySelector('[data-drawer="enabled"]').addEventListener('change', (e) => {
+            const width = Math.max(24, this.panel.body.clientWidth || this.panel.record.width);
+            this.hooks.onCompactChange(e.target.checked ? normalizeCompact({ x: 0, y: 0, width, height: Math.min(64, this.panel.body.clientHeight || 64) }) : null);
+        });
+        for (const input of el.querySelectorAll('[data-drawer]:not([data-drawer="enabled"])')) {
+            input.addEventListener('change', () => this.#commitDrawer());
+        }
+        el.querySelector('[data-action="compact-from-element"]').addEventListener('click', () => {
+            const element = this.#selected();
+            if (!element) return;
+            const { x, y, width, height } = element;
+            this.hooks.onCompactChange(normalizeCompact({ x, y, width, height, keepOnScreen: this.panel.record.compact?.keepOnScreen }));
+        });
         const setClockSeconds = (value) => {
             const element = this.#selected();
             if (!element) return;
@@ -1615,6 +1720,25 @@ export class PanelPropertiesPopup {
                 ));
             }
             this.hooks.onElementChange(element.id, patch);
+        });
+        // Visible: a mode without a flag yet waits for one (the Flag row shows).
+        field('visibleMode').addEventListener('change', (e) => {
+            const element = this.#selected();
+            if (!element) return;
+            const mode = e.target.value;
+            const flag = field('visibleFlag').value.trim() || element.visibleWhen?.flag || '';
+            this.visibleModeDraft = mode ? element.id : null;
+            if (!mode) this.#change({ visibleWhen: null });
+            else if (flag) this.#change({ visibleWhen: { flag, invert: mode === 'off' } });
+            else {
+                field('visibleFlagRow').hidden = false;
+                field('visibleFlag').focus();
+            }
+        });
+        field('visibleFlag').addEventListener('change', (e) => {
+            const flag = e.target.value.trim();
+            const mode = field('visibleMode').value || 'on';
+            this.#change({ visibleWhen: flag ? { flag, invert: mode === 'off' } : null });
         });
         field('binding').addEventListener('change', (e) => {
             const ref = e.target.value.trim();
