@@ -283,6 +283,9 @@ const hooks = {
     onElementDelete(panel, elementId) {
         deleteElement(panel, elementId);
     },
+    onElementDuplicate(panel, elementId) {
+        duplicateElement(panel, elementId);
+    },
     onAddVariable(panel, name) {
         addVariableElement(panel, name);
     },
@@ -924,6 +927,27 @@ export function deleteElement(panel, elementId) {
     saveWidgets(panel, panel.record.widgets.filter((w) => w.id !== elementId));
     if (current.binding) emitBindingsChange();
     return true;
+}
+
+// A copy of an element - binding, type, format, styling, size and layer all
+// the same - one grid step (at least 8px) below and to the right, kept inside
+// the panel. The copy is selected, so it can be moved or rebound at once.
+export function duplicateElement(panel, elementId) {
+    const current = panel.getElement(elementId);
+    if (!current || !panel.canEdit()) return null;
+    const step = Math.max(8, panel.gridSize() || 0);
+    const bodyWidth = panel.body.clientWidth || panel.record.width;
+    const bodyHeight = panel.body.clientHeight || panel.record.height;
+    const { id, ...rest } = structuredClone(current);
+    const copy = createVariableElement({
+        ...rest,
+        x: Math.max(0, Math.min(current.x + step, bodyWidth - current.width)),
+        y: Math.max(0, Math.min(current.y + step, bodyHeight - current.height)),
+    });
+    if (!saveWidgets(panel, [...panel.record.widgets, copy])) return null;
+    if (copy.binding) emitBindingsChange();
+    panel.selectElement(copy.id);
+    return copy;
 }
 
 // Adds a VariableElement bound to `name`. `at` ({ x, y } in body

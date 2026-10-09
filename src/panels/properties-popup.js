@@ -218,7 +218,7 @@ export class PanelPropertiesPopup {
     // hooks: { onLockToggle(locked), onDelete(), onSaveTemplate(), onExportTemplate(),
     //          onZIndexChange(zIndex), onRestack(action), onAnchorChange(patch), onPanelStyleChange(patch),
     //          onThemeChange({ themeId?, themeVariant? }), onPanelClockChange(clock),
-    //          onElementChange(elementId, patch), onElementDelete(elementId),
+    //          onElementChange(elementId, patch), onElementDelete(elementId), onElementDuplicate(elementId),
     //          onAddVariable(name), onDropVariable(name, x, y), dropTargetAt(x, y),
     //          onAddPaletteItem(kind), onDropPaletteItem(kind, x, y), onArrangeElement(elementId, action),
     //          getValue(name), onClose() }
@@ -469,6 +469,7 @@ export class PanelPropertiesPopup {
         section.querySelector('.pp-element-fields').hidden = !element;
         section.querySelector('.pp-element-none').hidden = !!element;
         section.querySelector('[data-action="delete-element"]').hidden = !element;
+        section.querySelector('[data-action="duplicate-element"]').hidden = !element;
         if (!element) return;
 
         const set = (key, apply) => {
@@ -1186,6 +1187,9 @@ export class PanelPropertiesPopup {
         `);
 
         const elementSection = sectionMarkup('element', 'Element Properties', `
+            <button type="button" class="pp-properties-close" data-action="duplicate-element" title="Copy this element - a copy with the same binding, font, colours and styling, just below and to the right">
+                <i class="fa-solid fa-clone"></i>
+            </button>
             <button type="button" class="pp-properties-close pp-danger" data-action="delete-element" title="Delete this element">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
@@ -1553,6 +1557,10 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-action="delete-element"]').addEventListener('click', () => {
             const element = this.#selected();
             if (element) this.hooks.onElementDelete(element.id);
+        });
+        el.querySelector('[data-action="duplicate-element"]').addEventListener('click', () => {
+            const element = this.#selected();
+            if (element) this.hooks.onElementDuplicate(element.id);
         });
 
         const zField = el.querySelector('[data-field="zIndex"]');
