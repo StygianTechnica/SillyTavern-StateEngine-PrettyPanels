@@ -143,6 +143,13 @@ export const VARIABLES_CHANGED_EVENT = 'state_engine_variables_changed';
 
 let values = new Map();
 let watched = [];
+// Refs read for the flag watcher (src/chat/flag-watch.js) on top of the
+// layout's own, so a flag is followed even when no element shows it.
+let watcherRefs = [];
+// The chat the current values were read for (they can briefly lag a chat
+// switch while the next refresh runs), and the refs that refresh read.
+let valuesChat = null;
+let readRefs = new Set();
 let images = new Map();
 let watchedImages = [];
 let catalog = [];
@@ -193,6 +200,23 @@ export function getImage(name) {
     return images.get(target) ?? null;
 }
 
+// The chat the current values belong to.
+export function valuesChatId() {
+    return valuesChat;
+}
+
+// Whether the last completed refresh read `ref` (a ref watched since then
+// has no value yet - it is not "missing").
+export function wasRead(ref) {
+    return readRefs.has(ref);
+}
+
+// Sets the refs the flag watcher needs read, then refreshes.
+export function setWatcherRefs(refs) {
+    watcherRefs = [...new Set(refs)];
+    return refreshValues();
+}
+
 // Sets which names to keep values (and, for `imageNames`, resolved
 // images) for, then refreshes them.
 export function watchNames(names, imageNames = []) {
@@ -204,6 +228,7 @@ export function watchNames(names, imageNames = []) {
 export async function refreshValues() {
     const token = ++refreshToken;
     const chatId = currentChatId();
+    const refsRead = new Set([...watched, ...watcherRefs]);
     const next = new Map();
     const nextImages = new Map();
     // Roles first: an assignment may have changed (State Engine reports role
@@ -215,7 +240,7 @@ export async function refreshValues() {
         .map((ref) => (isRoleRef(ref) ? nextRoles.get(roleOfRef(ref))?.variable : ref))
         .filter(Boolean))];
     // Pretty Panels' own variables are answered locally (getValue/getImage).
-    const engineNames = resolve(watched).filter((name) => !getPPVariable(name));
+    const engineNames = resolve([...watched, ...watcherRefs]).filter((name) => !getPPVariable(name));
     const imageNames = resolve(watchedImages);
     if (chatId && engineNames.length > 0) {
         try {
@@ -241,6 +266,8 @@ export async function refreshValues() {
     roles = nextRoles;
     characters = nextCharacters;
     values = next;
+    valuesChat = chatId;
+    readRefs = refsRead;
     images = nextImages;
     if (rolesChanged) for (const listener of roleListeners) listener(getRoleList());
     for (const listener of valueListeners) listener();

@@ -445,6 +445,7 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
 | `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
+| `src/chat/flag-watch.js` + `flag-watch-core.js` | Flag and change watcher: `onFlag`, `onChange`, `isFlagOn` for flag-driven features (baseline on chat load) |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
 | `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |
 | `src/elements/character-card.js` | CharacterCard / CharacterList and the generated fallback icons |
@@ -464,3 +465,6 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/ui/library-drawer.js` | Layout Library and Panel Library drawer sections |
 | `src/ui/dialogs.js`, `src/ui/files.js` | Confirm/prompt/list-picker dialogs; JSON download/upload |
 | `src/api/*` | Thin State Engine API wrappers, one call per file |
+
+**Tests:** `npm test` (vitest; `npm run test:run` runs once). Tests live in `tests/` and cover
+logic kept free of SillyTavern and the DOM.
