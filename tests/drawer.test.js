@@ -3,7 +3,7 @@
 // (src/elements/element-model.js).
 
 import {
-    normalizeCompact, fitCompact, collapsedBox, openBox, keepInside,
+    normalizeCompact, fitCompact, collapsedBox, openBox, keepInside, dragCompact,
     drawerKey, isDrawerOpen, setDrawerOpen, toggleDrawer, onDrawerChange, closeAllDrawers,
 } from '../src/panels/drawer.js';
 import { normalizeVariableElement, isElementVisible, normalizeToggleOptions } from '../src/elements/element-model.js';
@@ -48,6 +48,35 @@ describe('collapsedBox and openBox', () => {
 
     it('a box larger than the window keeps its top-left corner on screen', () => {
         expect(keepInside({ x: -50, y: -20, width: 3000, height: 2000 }, 1920, 1080)).toMatchObject({ x: 0, y: 0 });
+    });
+});
+
+describe('dragCompact (the outline in Editing Mode)', () => {
+    const area = { x: 20, y: 20, width: 100, height: 60, keepOnScreen: true };
+
+    it('move keeps the size and stays inside the canvas', () => {
+        expect(dragCompact(area, 'move', 30, 10, 300, 200)).toEqual({ ...area, x: 50, y: 30 });
+        expect(dragCompact(area, 'move', 500, -500, 300, 200)).toMatchObject({ x: 200, y: 0, width: 100, height: 60 });
+    });
+
+    it('a corner moves while the opposite one stays', () => {
+        expect(dragCompact(area, 'se', 40, 20, 300, 200)).toMatchObject({ x: 20, y: 20, width: 140, height: 80 });
+        expect(dragCompact(area, 'nw', -10, -10, 300, 200)).toMatchObject({ x: 10, y: 10, width: 110, height: 70 });
+        expect(dragCompact(area, 'ne', 10, 5, 300, 200)).toMatchObject({ x: 20, y: 25, width: 110, height: 55 });
+        expect(dragCompact(area, 'sw', 5, 10, 300, 200)).toMatchObject({ x: 25, y: 20, width: 95, height: 70 });
+    });
+
+    it('never smaller than an element, never past the canvas, keepOnScreen untouched', () => {
+        expect(dragCompact(area, 'se', -500, -500, 300, 200)).toMatchObject({ width: 24, height: 16 });
+        expect(dragCompact(area, 'nw', 500, 500, 300, 200)).toMatchObject({ x: 96, y: 64, width: 24, height: 16 });
+        expect(dragCompact(area, 'se', 999, 999, 300, 200)).toMatchObject({ width: 280, height: 180, keepOnScreen: true });
+        expect(dragCompact(area, 'nw', -999, -999, 300, 200)).toMatchObject({ x: 0, y: 0, width: 120, height: 80 });
+    });
+
+    it('moved edges snap', () => {
+        const snap = (v) => Math.round(v / 10) * 10;
+        expect(dragCompact(area, 'move', 13, 7, 300, 200, snap)).toMatchObject({ x: 30, y: 30 });
+        expect(dragCompact(area, 'se', 13, 7, 300, 200, snap)).toMatchObject({ width: 110, height: 70 });
     });
 });
 

@@ -100,8 +100,10 @@ selecting a panel or element expands its section.
 ### Drawers and visibility by flag
 
 - **Drawers** - any panel (character card templates too) can have a **compact area**: Panel
-  Properties > Drawer > *Compact area*, with X / Y / W / H on the panel's canvas, or **Use selected
-  element** (place a shape around the part that should stay visible, then use it). Outside Editing
+  Properties > Drawer > *Compact area*. In Editing Mode it shows as a dashed outline on the panel:
+  drag its **Compact area** tab to move it and its corners to resize it (snapping to the grid);
+  or type X / Y / W / H, or use **Use selected element** (place a shape around the part that should
+  stay visible, then use it). Outside Editing
   Mode the panel shows only that area; a **Toggle** element opens the whole design **over** its
   neighbours. The compact area stays where it is and the rest unfolds around it, so its place in
   the design decides the direction: at the bottom, the drawer opens upward. *Keep on screen*

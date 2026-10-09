@@ -3003,17 +3003,47 @@ body.pp-editing .pp-panel.pp-template-editor {
     border: 1px dashed var(--SmartThemeQuoteColor);
     background: color-mix(in srgb, var(--SmartThemeQuoteColor) 6%, transparent);
 }
-.pp-compact-outline > span {
+/* Its label tab moves it, its corners resize it - both inside the outline,
+   so the canvas edge never clips them; the rest lets clicks through. */
+.pp-compact-outline > .pp-compact-grip {
     position: absolute;
-    left: 0;
-    bottom: 100%;
-    padding: 0 4px;
+    left: 12px;
+    top: 0;
+    padding: 0 5px;
     font-size: 10px;
-    line-height: 14px;
+    line-height: 16px;
     white-space: nowrap;
     color: var(--SmartThemeBodyColor);
-    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 70%, transparent);
-    border-radius: 3px 3px 0 0;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 75%, transparent);
+    border-radius: 0 0 4px 4px;
+    pointer-events: auto;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+.pp-compact-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    background: var(--SmartThemeQuoteColor);
+    border: 1px solid var(--SmartThemeBodyColor);
+    pointer-events: auto;
+    touch-action: none;
+}
+.pp-compact-handle.pp-compact-nw { left: -1px; top: -1px; cursor: nwse-resize; }
+.pp-compact-handle.pp-compact-ne { right: -1px; top: -1px; cursor: nesw-resize; }
+.pp-compact-handle.pp-compact-sw { left: -1px; bottom: -1px; cursor: nesw-resize; }
+.pp-compact-handle.pp-compact-se { right: -1px; bottom: -1px; cursor: nwse-resize; }
+.pp-compact-outline.pp-compact-dragging {
+    border-style: solid;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent);
+}
+/* A locked panel's area can't be changed. */
+.pp-panel.pp-locked .pp-compact-grip,
+.pp-panel.pp-locked .pp-compact-handle {
+    pointer-events: none;
+    opacity: 0.4;
 }
 
 /* A Drawer Toggle: an icon, turned over while its drawer is open. */

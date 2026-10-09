@@ -42,6 +42,38 @@ export function fitCompact(compact, canvasWidth, canvasHeight) {
     };
 }
 
+// The compact area after dragging its outline in Editing Mode by (dx, dy):
+// `mode` 'move' (the label tab) or a corner - 'nw' | 'ne' | 'sw' | 'se' -
+// which moves that corner while the opposite one stays. Kept inside the
+// canvasWidth x canvasHeight canvas and at least the minimum element size;
+// `snap(value)` snaps a moved edge to the panel grid.
+export function dragCompact(origin, mode, dx, dy, canvasWidth, canvasHeight, snap = (v) => v) {
+    const clamp = (value, min, max) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
+    if (mode === 'move') {
+        return {
+            ...origin,
+            x: clamp(snap(origin.x + dx), 0, canvasWidth - origin.width),
+            y: clamp(snap(origin.y + dy), 0, canvasHeight - origin.height),
+        };
+    }
+    const right = origin.x + origin.width;
+    const bottom = origin.y + origin.height;
+    let { x, y, width, height } = origin;
+    if (mode.includes('w')) {
+        x = clamp(snap(origin.x + dx), 0, right - MIN_ELEMENT_WIDTH);
+        width = right - x;
+    } else if (mode.includes('e')) {
+        width = clamp(snap(right + dx) - x, MIN_ELEMENT_WIDTH, canvasWidth - x);
+    }
+    if (mode.includes('n')) {
+        y = clamp(snap(origin.y + dy), 0, bottom - MIN_ELEMENT_HEIGHT);
+        height = bottom - y;
+    } else if (mode.includes('s')) {
+        height = clamp(snap(bottom + dy) - y, MIN_ELEMENT_HEIGHT, canvasHeight - y);
+    }
+    return { ...origin, x, y, width, height };
+}
+
 // The collapsed box on screen for a panel whose full box is `full`
 // ({ x, y }), with `chrome` (the box's insets around its canvas:
 // { left, top, right, bottom }): the compact area keeps its place.

@@ -19,7 +19,7 @@ import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
 import { softSnap, softSnapSpan } from './snap.js';
 import { applyPanelTheme } from '../themes/theme-apply.js';
-import { fitCompact, collapsedBox, openBox, drawerKey, isDrawerOpen, toggleDrawer } from './drawer.js';
+import { fitCompact, collapsedBox, openBox, dragCompact, drawerKey, isDrawerOpen, toggleDrawer } from './drawer.js';
 import { currentChatId } from '../chat/variable-service.js';
 
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
@@ -251,7 +251,10 @@ export class Panel {
         }
     }
 
-    // The compact area's dashed outline on the canvas (Editing Mode).
+    // The compact area's dashed outline on the canvas (Editing Mode). Its
+    // label tab moves the area and its corners resize it (snapping to the
+    // grid, kept inside the canvas); the rest of it lets clicks through to
+    // the elements underneath.
     #renderCompactOutline(compact) {
         let outline = this.body.querySelector(':scope > .pp-compact-outline');
         if (!compact) {
@@ -261,10 +264,42 @@ export class Panel {
         if (!outline) {
             outline = document.createElement('div');
             outline.className = 'pp-compact-outline';
-            outline.innerHTML = '<span>Compact area</span>';
+            outline.innerHTML = `<span class="pp-compact-grip" data-compact-drag="move" title="Drag to move the compact area"><i class="fa-solid fa-up-down-left-right"></i> Compact area</span>
+                ${['nw', 'ne', 'sw', 'se'].map((corner) => `<i class="pp-compact-handle pp-compact-${corner}" data-compact-drag="${corner}" title="Drag to resize the compact area"></i>`).join('')}`;
+            for (const handle of outline.querySelectorAll('[data-compact-drag]')) this.#bindCompactDrag(outline, handle);
         }
         this.body.appendChild(outline);
         Object.assign(outline.style, { left: `${compact.x}px`, top: `${compact.y}px`, width: `${compact.width}px`, height: `${compact.height}px` });
+    }
+
+    #bindCompactDrag(outline, handle) {
+        handle.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 || !this.canEdit() || !this.record.compact) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const origin = { ...this.record.compact };
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const grid = this.gridSize();
+            const mode = handle.dataset.compactDrag;
+            let area = origin;
+            handle.setPointerCapture(e.pointerId);
+            outline.classList.add('pp-compact-dragging');
+            const move = (ev) => {
+                area = dragCompact(origin, mode, ev.clientX - startX, ev.clientY - startY, this.body.clientWidth, this.body.clientHeight, (v) => softSnap(v, grid));
+                Object.assign(outline.style, { left: `${area.x}px`, top: `${area.y}px`, width: `${area.width}px`, height: `${area.height}px` });
+            };
+            const end = () => {
+                handle.removeEventListener('pointermove', move);
+                handle.removeEventListener('pointerup', end);
+                handle.removeEventListener('pointercancel', end);
+                outline.classList.remove('pp-compact-dragging');
+                if (['x', 'y', 'width', 'height'].some((key) => area[key] !== origin[key])) this.hooks.onCompactChange(this, area);
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', end);
+            handle.addEventListener('pointercancel', end);
+        });
     }
 
     // Replaces the working copy after the registry accepted a change.

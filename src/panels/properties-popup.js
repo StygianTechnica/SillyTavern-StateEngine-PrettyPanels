@@ -1222,7 +1222,7 @@ export class PanelPropertiesPopup {
             <label class="checkbox_label pp-field-check" data-drawer-fields title="If the open drawer would run past a window edge, move it back inside">
                 <input type="checkbox" data-drawer="keepOnScreen" /><span>Keep on screen when open</span>
             </label>
-            <small class="pp-field-info" data-drawer-fields>The dashed outline shows the area while editing. Add a Toggle (Add palette) to open and close it; outside Editing Mode the panel starts collapsed.</small>
+            <small class="pp-field-info" data-drawer-fields>Drag the dashed outline's tab to move the area and its corners to resize it. Add a Toggle (Add palette) to open and close it; outside Editing Mode the panel starts collapsed.</small>
             <div class="pp-properties-section-label"><span data-template-hide>Panel Library</span><span data-template-only>Character Template</span></div>
             <div class="pp-properties-actions">
                 <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library" data-template-hide>
