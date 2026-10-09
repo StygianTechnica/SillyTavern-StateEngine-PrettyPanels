@@ -61,7 +61,7 @@ import { resolvePanelTheme, clockDefaultsFor, themeVars, applyVars } from '../th
 import { buildElementContent, renderElementContent } from '../elements/element-view.js';
 import { PANEL_STYLE_LIMITS, IMAGE_MODES, clampStyleNumber } from './panel-style.js';
 import {
-    FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, ALIGNMENTS, ICON_SUGGESTIONS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
+    FONT_SIZE_LIMITS, ICON_SIZE_LIMITS, ALIGNMENTS, VERTICAL_ALIGNMENTS, LABEL_WIDTH_LIMITS, ICON_SUGGESTIONS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS,
     LETTER_SPACING_LIMITS, LINE_HEIGHT_LIMITS, TEXT_DECORATIONS, TEXT_SHADOWS, numericWeight,
 } from '../elements/element-style.js';
 
@@ -869,6 +869,8 @@ export class PanelPropertiesPopup {
         this.#fillValue('element', 'textShadow', style.textShadow ?? '');
         this.#fillColor('element', 'shadowColor', style.shadowColor, 'rgba(0, 0, 0, 0.85)');
         this.#fillValue('element', 'align', style.align ?? '');
+        this.#fillValue('element', 'verticalAlign', style.verticalAlign ?? '');
+        this.#fillValue('element', 'labelWidth', style.labelWidth);
         this.#fillColor('element', 'textColor', style.textColor, inherited);
         this.#fillColor('element', 'labelColor', style.labelColor, inherited);
         this.#fillValue('element', 'icon', style.icon ?? '');
@@ -974,6 +976,7 @@ export class PanelPropertiesPopup {
         if (key === 'backgroundRadius') return BACKGROUND_RADIUS_LIMITS;
         if (key === 'letterSpacing') return LETTER_SPACING_LIMITS;
         if (key === 'lineHeight') return LINE_HEIGHT_LIMITS;
+        if (key === 'labelWidth') return LABEL_WIDTH_LIMITS;
         return null; // conditionThreshold: any number
     }
 
@@ -1424,6 +1427,8 @@ export class PanelPropertiesPopup {
                     ${selectRow('Shadow', 'element', 'textShadow', TEXT_SHADOWS)}
                     ${colorRow('Shadow color', 'element', 'shadowColor')}
                     ${selectRow('Align', 'element', 'align', [['', 'Default'], ...ALIGNMENTS])}
+                    ${selectRow('Vertical', 'element', 'verticalAlign', [['', 'Default (middle)'], ...VERTICAL_ALIGNMENTS])}
+                    <div data-for-types="text">${numberRow('Label width', 'element', 'labelWidth', LABEL_WIDTH_LIMITS)}</div>
                     ${colorRow('Text', 'element', 'textColor')}
                     <div data-for-types="text">${colorRow('Label', 'element', 'labelColor')}</div>
                     ${colorRow('Background', 'element', 'backgroundColor')}

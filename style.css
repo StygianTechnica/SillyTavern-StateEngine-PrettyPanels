@@ -451,7 +451,10 @@ body.pp-editing .pp-panel.pp-locked .pp-panel-edit {
 }
 
 .pp-element-label {
-    flex: 0 1 auto;
+    /* Its own width, up to half the element: a long value no longer squeezes
+       it down to "Th…". A set Label width overrides (.pp-label-fixed). */
+    flex: 0 0 auto;
+    max-width: 50%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -951,6 +954,20 @@ body.pp-editing .pp-element.pp-kind-free-text.pp-element-empty .pp-element-value
 .pp-element-icon[hidden] {
     display: none;
 }
+
+/* Label width set in Element Styling. */
+.pp-element.pp-label-fixed > .pp-element-label {
+    flex: 0 0 var(--pp-el-label-width);
+    width: var(--pp-el-label-width);
+    max-width: var(--pp-el-label-width);
+}
+
+/* Vertical align: where label, icon and value sit in a taller element. Top
+   lines the label up with the value's first line. */
+.pp-element.pp-valign-top { align-items: flex-start; }
+.pp-element.pp-valign-top > .pp-element-value { align-items: flex-start; }
+.pp-element.pp-valign-bottom { align-items: flex-end; }
+.pp-element.pp-valign-bottom > .pp-element-value { align-items: flex-end; }
 
 /* Explicit alignment: label, icon and value sit together as one group. */
 .pp-element.pp-align-left,

@@ -81,7 +81,9 @@ selecting a panel or element expands its section.
   for **Text** elements: Show Label, Label override, **Text Formatting** (below) and
   **Element Styling** (a **Font** button opening the Font Picker - font, weight, italic and
   variable-font axes - plus a separate label font, font size, letter spacing, line height,
-  decoration, text shadow, text/label colour, alignment, a
+  decoration, text shadow, text/label colour, alignment, **vertical alignment** (top / middle /
+  bottom - top lines the label up with a wrapped value's first line), **label width** (unset:
+  the label's own width, up to half the element; set: a fixed width, longer labels end in "…"), a
   **background colour** with its own opacity and corner rounding - for keeping text readable
   over a background image - a Font
   Awesome icon left of the value with its colour and size, and one conditional colour rule:

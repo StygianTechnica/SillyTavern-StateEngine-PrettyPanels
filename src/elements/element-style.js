@@ -22,6 +22,12 @@
 //   textColor    CSS color of the value text
 //   labelColor   CSS color of the label text
 //   align        'left' | 'center' | 'right' (unset: label left, value right)
+//   verticalAlign 'top' | 'middle' | 'bottom' (unset: middle) - where the
+//                label and value sit when the element is taller than them;
+//                'top' lines the label up with the value's first line
+//   labelWidth   px, 20-400: the label's width (longer labels end in "…");
+//                unset = the label's own width, up to half the element -
+//                it no longer shrinks away beside a long value
 //   icon         Font Awesome icon name ("heart", "shield", "bolt"),
 //                shown left of the value
 //   iconColor    CSS color
@@ -52,6 +58,7 @@ export const BACKGROUND_OPACITY_LIMITS = [0, 100];
 export const BACKGROUND_RADIUS_LIMITS = [0, 100];
 export const LETTER_SPACING_LIMITS = [-0.1, 0.5];
 export const LINE_HEIGHT_LIMITS = [0.8, 3];
+export const LABEL_WIDTH_LIMITS = [20, 400];
 
 // Legacy named weights (still accepted in stored styles).
 export const FONT_WEIGHTS = [
@@ -65,6 +72,12 @@ export const ALIGNMENTS = [
     ['left', 'Left'],
     ['center', 'Center'],
     ['right', 'Right'],
+];
+
+export const VERTICAL_ALIGNMENTS = [
+    ['top', 'Top'],
+    ['middle', 'Middle'],
+    ['bottom', 'Bottom'],
 ];
 
 export const TEXT_DECORATIONS = [
@@ -165,6 +178,10 @@ export function applyElementStyle(container, style = {}, value = undefined) {
     container.classList.toggle('pp-element-condition-met', !!conditionMet);
 
     for (const [id] of ALIGNMENTS) container.classList.toggle(`pp-align-${id}`, style.align === id);
+    for (const [id] of VERTICAL_ALIGNMENTS) container.classList.toggle(`pp-valign-${id}`, style.verticalAlign === id);
+    const labelWidth = clampNumber(style.labelWidth, LABEL_WIDTH_LIMITS);
+    set('--pp-el-label-width', labelWidth === null ? null : `${labelWidth}px`);
+    container.classList.toggle('pp-label-fixed', labelWidth !== null);
 
     const icon = container.querySelector('.pp-element-icon');
     const cls = iconClass(style.icon);

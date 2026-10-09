@@ -94,6 +94,15 @@ export function characterFieldValue(character, field) {
 // The variable service's { value, def } shape for a character field, or
 // undefined when the character has no value for it.
 export function characterEntry(character, field) {
+    // An icon with no image for the current value (none set for it, no value
+    // yet) shows the value as text rather than nothing.
+    if (field.startsWith(ICON_PREFIX) && character) {
+        const src = characterFieldValue(character, field);
+        if (src !== undefined) return { value: src, def: characterFieldDef(field) };
+        const name = field.slice(ICON_PREFIX.length);
+        const word = characterFieldValue(character, BUILT_IN_RUNTIME.includes(name) ? name : `${CUSTOM_PREFIX}${name}`);
+        return word === undefined ? undefined : { value: word, def: { ...characterFieldDef(field), type: 'string' } };
+    }
     const value = characterFieldValue(character, field);
     return value === undefined ? undefined : { value, def: characterFieldDef(field) };
 }

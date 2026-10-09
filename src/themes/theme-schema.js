@@ -38,7 +38,7 @@
 //   border      panel border
 //   glow        glow text shadows, the Glow panel shadow
 
-import { ALIGNMENTS, TEXT_SHADOWS, FONT_SIZE_LIMITS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS } from '../elements/element-style.js';
+import { ALIGNMENTS, VERTICAL_ALIGNMENTS, LABEL_WIDTH_LIMITS, TEXT_SHADOWS, FONT_SIZE_LIMITS, BACKGROUND_OPACITY_LIMITS, BACKGROUND_RADIUS_LIMITS } from '../elements/element-style.js';
 import { THEME_NUMBER_FORMATS } from '../elements/text-format.js';
 import { SHAPE_KINDS, SHAPE_LIMITS } from '../elements/shapes.js';
 import { WIDGET_LIMITS } from '../elements/widgets.js';
@@ -175,6 +175,8 @@ export const ELEMENT_DEFAULT_FIELDS = {
         { key: 'textColor', type: 'color', label: 'Value colour' },
         { key: 'labelColor', type: 'color', label: 'Label colour' },
         { key: 'align', type: 'select', label: 'Align', options: opt(ALIGNMENTS) },
+        { key: 'verticalAlign', type: 'select', label: 'Vertical align', options: opt(VERTICAL_ALIGNMENTS) },
+        { key: 'labelWidth', type: 'number', label: 'Label width', limits: LABEL_WIDTH_LIMITS, unit: 'px' },
         { key: 'textShadow', type: 'select', label: 'Shadow', options: opt(TEXT_SHADOWS) },
         { key: 'shadowColor', type: 'color', label: 'Shadow colour' },
         { key: 'backgroundColor', type: 'color', label: 'Background' },
