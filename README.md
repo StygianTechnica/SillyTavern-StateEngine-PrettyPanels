@@ -92,7 +92,7 @@ selecting a panel or element expands its section.
   Text Formatting for the value they print (Text Case, Value Formatting);
   for **shapes**: **Shape Properties** (below); for **analog clocks**: **Clock Properties** (below);
   then a live Preview, and delete. Only the fields that apply to the element's type are shown.
-- **Add, Variables & Roles** - **Text** (free text), a **Clock**, a **Rectangle** and an **Ellipse** to drag onto
+- **Add, Variables & Roles** - **Text** (free text), a **Clock**, a **Rectangle**, an **Ellipse** and a **Line** to drag onto
   a panel (or click to add here), then every State Engine variable, grouped by preset, searchable and filterable
   by preset. Drag a variable onto a panel to add an element, onto an element to rebind it, or
   click it to add it to this panel.
@@ -138,7 +138,7 @@ carried over.
 | Composite Bar | icon and/or label, then a horizontal bar | label text/colour, icon/colour/size, bar properties |
 | Analog Clock | a clock face with hour, minute and second hands, for a datetime variable | (Clock Properties, below) |
 | Free Text | text you type, no variable | (Element Styling) |
-| Shape | a filled rectangle or ellipse, no variable | shape, fill colour/opacity, border colour/thickness, corners |
+| Shape | a filled rectangle or ellipse, or a line (a rule or divider), no variable | shape, fill colour/opacity, border colour/thickness, corners; a line: direction (horizontal / vertical - switching turns its box), colour (default: the theme's border colour), opacity, thickness 1-20 px, solid / dashed / dotted, fade out at the ends. The line is drawn through the middle of its box, so it stays easy to grab |
 
 - Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max
   Value left blank uses the variable's own range: its max if it defines one (12 of max 20 =

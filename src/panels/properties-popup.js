@@ -51,7 +51,7 @@ import {
     TEXT_CASES, THEME_STYLES, VALUE_FORMATS, DECIMAL_LIMITS, DECIMAL_FORMATS, DATETIME_PATTERN_HINT, NUMBER_PATTERN_HINT,
     normalizeFormat, valueKind,
 } from '../elements/text-format.js';
-import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS } from '../elements/shapes.js';
+import { SHAPE_KINDS, SHAPE_LIMITS, SHAPE_DEFAULTS, LINE_DIRECTIONS, LINE_STYLES } from '../elements/shapes.js';
 import {
     ELEMENT_TYPE_ANALOG_CLOCK, CLOCK_HANDS, CLOCK_IMAGE_KEYS, CLOCK_LIMITS, CLOCK_STYLES, CLOCK_NUMERALS, CLOCK_TICKS,
     clockImageSource, clockGeometry, effectiveClock,
@@ -624,7 +624,15 @@ export class PanelPropertiesPopup {
         this.#fillColor('shape', 'fillColor', shape.fillColor, body ? getComputedStyle(body).backgroundColor : '#000000');
         this.#fillColor('shape', 'borderColor', shape.borderColor, body ? getComputedStyle(body).borderTopColor : '#888888');
         for (const key of Object.keys(SHAPE_LIMITS)) this.#fillValue('shape', key, shape[key]);
-        this.#styleField('shape', 'cornerRadius').closest('.pp-style-row').hidden = kind === 'ellipse';
+        const line = kind === 'line';
+        this.#fillValue('shape', 'direction', shape.direction ?? 'horizontal');
+        this.#fillValue('shape', 'lineStyle', shape.lineStyle ?? 'solid');
+        this.#fillValue('shape', 'fadeEnds', shape.fadeEnds === true);
+        this.#fillColor('shape', 'lineColor', shape.lineColor, body ? (getComputedStyle(body).borderTopColor || getComputedStyle(body).borderLeftColor) : '#888888');
+        // A line has its own rows; a rectangle or ellipse its fill and border.
+        for (const el of this.el.querySelectorAll('[data-shape-rows="box"]')) el.hidden = line;
+        for (const el of this.el.querySelectorAll('[data-shape-rows="line"]')) el.hidden = !line;
+        this.#styleField('shape', 'cornerRadius').closest('.pp-style-row').hidden = kind !== 'rectangle';
     }
 
     #fillClock(element) {
@@ -948,7 +956,11 @@ export class PanelPropertiesPopup {
             const settings = { ...element[scope] };
             if (value === null || value === '' || value === undefined) delete settings[key];
             else settings[key] = value;
-            this.hooks.onElementChange(element.id, { [scope]: settings });
+            // Turning a line the other way turns its box too: a long, thin
+            // horizontal box becomes a tall, narrow one.
+            const turned = scope === 'shape' && key === 'direction' && settings.kind === 'line'
+                && ((value === 'vertical' && element.width > element.height) || (value === 'horizontal' && element.height > element.width));
+            this.hooks.onElementChange(element.id, turned ? { [scope]: settings, width: element.height, height: element.width } : { [scope]: settings });
             return;
         }
         const style = { ...element.style };
@@ -1277,11 +1289,21 @@ export class PanelPropertiesPopup {
                 <div data-for-types="shape">
                 ${sectionMarkup('shape', 'Shape Properties', '', `
                     ${selectRow('Shape', 'shape', 'kind', SHAPE_KINDS)}
-                    ${colorRow('Fill', 'shape', 'fillColor')}
-                    ${numberRow('Fill opacity', 'shape', 'fillOpacity', SHAPE_LIMITS.fillOpacity, '%')}
-                    ${colorRow('Border', 'shape', 'borderColor')}
-                    ${numberRow('Thickness', 'shape', 'borderWidth', SHAPE_LIMITS.borderWidth)}
-                    ${numberRow('Corners', 'shape', 'cornerRadius', SHAPE_LIMITS.cornerRadius)}
+                    <div data-shape-rows="box">
+                        ${colorRow('Fill', 'shape', 'fillColor')}
+                        ${numberRow('Fill opacity', 'shape', 'fillOpacity', SHAPE_LIMITS.fillOpacity, '%')}
+                        ${colorRow('Border', 'shape', 'borderColor')}
+                        ${numberRow('Thickness', 'shape', 'borderWidth', SHAPE_LIMITS.borderWidth)}
+                        ${numberRow('Corners', 'shape', 'cornerRadius', SHAPE_LIMITS.cornerRadius)}
+                    </div>
+                    <div data-shape-rows="line" hidden>
+                        ${selectRow('Direction', 'shape', 'direction', LINE_DIRECTIONS)}
+                        ${colorRow('Color', 'shape', 'lineColor')}
+                        ${numberRow('Opacity', 'shape', 'lineOpacity', SHAPE_LIMITS.lineOpacity, '%')}
+                        ${numberRow('Thickness', 'shape', 'lineWidth', SHAPE_LIMITS.lineWidth)}
+                        ${selectRow('Style', 'shape', 'lineStyle', LINE_STYLES)}
+                        ${checkRow('Fade out at the ends', 'shape', 'fadeEnds')}
+                    </div>
                 `, 'pp-subsection')}
                 </div>
                 <div data-for-types="${WIDGET_TYPES}">

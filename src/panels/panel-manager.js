@@ -73,6 +73,7 @@ import {
 import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
 import { addLayoutRole } from '../library/role-library.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
+import { LINE_DEFAULT_SIZE } from '../elements/shapes.js';
 import { refreshElementTitles } from '../elements/element-view.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
@@ -982,7 +983,7 @@ export function addPaletteElement(panel, kind, at = null) {
     const bodyWidth = panel.body.clientWidth || panel.record.width;
     const bodyHeight = panel.body.clientHeight || panel.record.height;
     const type = paletteType(kind);
-    const [defaultW, defaultH] = DEFAULT_TYPE_SIZES[type];
+    const [defaultW, defaultH] = kind === 'line' ? LINE_DEFAULT_SIZE : DEFAULT_TYPE_SIZES[type];
     const width = Math.max(24, Math.min(defaultW, bodyWidth));
     const height = Math.max(16, Math.min(defaultH, bodyHeight));
     const x = Math.max(0, Math.min(Math.round(at ? softSnap(at.x, grid) : 0), bodyWidth - width));

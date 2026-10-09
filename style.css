@@ -1608,6 +1608,36 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
     pointer-events: none;
 }
 
+/* A line: a rule through the middle of its element (the element stays
+   large enough to grab). */
+.pp-element.pp-kind-shape[data-shape="line"] > .pp-shape {
+    inset: auto 0;
+    top: 50%;
+    height: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    border-top: var(--pp-line-width, 1px) var(--pp-line-style, solid) var(--pp-line-color, var(--SmartThemeBorderColor));
+    transform: translateY(-50%);
+}
+.pp-element.pp-kind-shape.pp-shape-vertical[data-shape="line"] > .pp-shape {
+    inset: 0 auto;
+    left: 50%;
+    width: 0;
+    height: auto;
+    border-top: 0;
+    border-left: var(--pp-line-width, 1px) var(--pp-line-style, solid) var(--pp-line-color, var(--SmartThemeBorderColor));
+    transform: translateX(-50%);
+}
+.pp-element.pp-kind-shape.pp-shape-fade[data-shape="line"] > .pp-shape {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 15%, #000 85%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 15%, #000 85%, transparent);
+}
+.pp-element.pp-kind-shape.pp-shape-fade.pp-shape-vertical[data-shape="line"] > .pp-shape {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent);
+}
+
 /* ---------- Properties: shape palette, element order ---------- */
 
 .pp-shape-palette {

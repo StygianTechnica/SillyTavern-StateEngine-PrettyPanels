@@ -191,6 +191,9 @@ export const ELEMENT_DEFAULT_FIELDS = {
         { key: 'borderColor', type: 'color', label: 'Border' },
         { key: 'borderWidth', type: 'number', label: 'Border width', limits: SHAPE_LIMITS.borderWidth, unit: 'px' },
         { key: 'cornerRadius', type: 'number', label: 'Corners', limits: SHAPE_LIMITS.cornerRadius, unit: 'px' },
+        { key: 'lineColor', type: 'color', label: 'Line colour', hint: 'For line shapes' },
+        { key: 'lineOpacity', type: 'number', label: 'Line opacity', limits: SHAPE_LIMITS.lineOpacity, unit: '%' },
+        { key: 'lineWidth', type: 'number', label: 'Line thickness', limits: SHAPE_LIMITS.lineWidth, unit: 'px' },
     ],
     images: [
         { key: 'opacity', type: 'number', label: 'Opacity', limits: [0, 1], step: 0.05, unit: '0-1' },

@@ -72,7 +72,7 @@ const PALETTE_ITEMS = [
 // a panel, or click it to add it to this panel.
 export class ElementPalette {
     // hooks: { onPick(kind), onDrop(kind, clientX, clientY), dropTargetAt(clientX, clientY) }
-    // kind: 'free-text' | 'analogClock' | a shape kind ('rectangle', 'ellipse')
+    // kind: 'free-text' | 'analogClock' | a shape kind ('rectangle', 'ellipse', 'line')
     constructor(hooks) {
         this.el = document.createElement('div');
         this.el.className = 'pp-shape-palette';
