@@ -19,22 +19,32 @@
 //   - Add, Variables & Roles: the palette (free text, shapes) and, behind a
 //     Variables | Roles toggle, the variable picker or the role picker
 //     (src/ui/variable-picker.js)
+// A Character element (character cards) has Character Cards rows: its
+// character template, tiling for a list, and the gap between cards.
+// In the character template editor (src/panels/template-editor.js) the
+// same pane edits the template: layout-only controls (lock, delete,
+// layering, anchor, Panel Library save) are hidden, and the palette gains a
+// Character tab - the card's character fields.
 // Which sections are open lives on the Panel (panel.openSections), so it
 // survives closing and reopening the popup. Every change is reported
 // through `hooks`; nothing is written here.
 
-import { VariablePicker, ElementPalette, RolePicker } from '../ui/variable-picker.js';
+import { VariablePicker, ElementPalette, RolePicker, CharacterFieldPicker } from '../ui/variable-picker.js';
+import { listCharacterTemplates, getCharacterTemplate, createCharacterTemplate, onCharacterTemplatesChange } from '../library/character-template-library.js';
+import { openTemplateEditor } from './template-editor.js';
+import { promptText, notify } from '../ui/dialogs.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
 import {
-    loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles,
+    loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles, loadCharacterFieldList,
 } from '../chat/variable-service.js';
 import { listLayoutRoles } from '../library/role-library.js';
 import { getActiveLayoutId } from '../library/layout-library.js';
 import {
     bindingRef, bindingFromRef, rolePublicName, roleTypeForElement, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
+    CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isCharacterDefinition,
 } from '../elements/element-model.js';
 import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
 import {
@@ -116,7 +126,7 @@ function checkRow(label, scope, key) {
         </label>`;
 }
 
-const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== ELEMENT_TYPE_ANALOG_CLOCK && !isUnboundType(id)).join(' ');
+const WIDGET_TYPES = ELEMENT_TYPES.map(([id]) => id).filter((id) => id !== 'text' && id !== ELEMENT_TYPE_ANALOG_CLOCK && id !== 'character' && !isUnboundType(id)).join(' ');
 // A clock image selector's "Image URL" choice (the URL field shows), and
 // the prefix of its theme-asset choices.
 const CLOCK_URL_CHOICE = '__url';
@@ -153,7 +163,7 @@ function fontRow(label, key, title) {
 // Elements that show text, and so have Text Formatting: text (free, or a
 // variable's or role's value) and the gauges that print their value. Theme
 // Style is for text elements only (gauges have no text styling).
-const FORMAT_TYPES = ['text', 'free-text', 'gauge-circle', 'gauge-semicircle'];
+const FORMAT_TYPES = ['text', 'free-text', 'gauge-circle', 'gauge-semicircle', 'character'];
 const THEME_STYLE_TYPES = ['text', 'free-text'];
 
 function widgetField(key, markup) {
@@ -225,9 +235,15 @@ export class PanelPropertiesPopup {
             onDrop: (ref, x, y) => hooks.onDropVariable(ref, x, y),
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
-        // Which list the Variables | Roles toggle shows, and the Binding type
-        // chosen for an element that has no binding yet.
-        this.paletteMode = 'variables';
+        this.characterPicker = new CharacterFieldPicker({
+            onPick: (ref) => hooks.onAddVariable(ref),
+            onDrop: (ref, x, y) => hooks.onDropVariable(ref, x, y),
+            dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
+        });
+        this.templateMode = panel.isTemplateEditor === true;
+        // Which list the Variables | Roles (| Character) toggle shows, and the
+        // Binding type chosen for an element that has no binding yet.
+        this.paletteMode = this.templateMode ? 'character' : 'variables';
         this.bindingMode = null;
         this.shapes = new ElementPalette({
             onPick: (kind) => hooks.onAddPaletteItem(kind),
@@ -235,6 +251,7 @@ export class PanelPropertiesPopup {
             dropTargetAt: (x, y) => hooks.dropTargetAt(x, y),
         });
         this.el = this.#build();
+        this.el.classList.toggle('pp-properties-template', this.templateMode);
         this.onKeyDown = (e) => {
             if (e.key === 'Escape') this.close();
         };
@@ -249,6 +266,8 @@ export class PanelPropertiesPopup {
             void refreshRoles().then(() => this.#applyRoles());
             this.stopFontWatch = fontRegistry.onChange(() => this.#refreshElement());
             this.stopThemeWatch = onThemesChange(() => this.refresh());
+            this.stopTemplatesWatch = onCharacterTemplatesChange(() => this.#refreshElement());
+            if (this.templateMode) void loadCharacterFieldList().then((fields) => this.characterPicker.setFields(fields));
             void fontRegistry.load().then(() => this.#refreshElement());
             void loadCatalog();
         }
@@ -262,6 +281,7 @@ export class PanelPropertiesPopup {
         this.stopRolesWatch?.();
         this.stopFontWatch?.();
         this.stopThemeWatch?.();
+        this.stopTemplatesWatch?.();
         closeFontPicker();
         this.el.remove();
         this.hooks.onClose();
@@ -293,7 +313,7 @@ export class PanelPropertiesPopup {
     refresh(geometry = this.panel.getRenderedGeometry()) {
         if (!this.el.isConnected) return;
         const { record } = this.panel;
-        this.el.querySelector('.pp-properties-title').textContent = record.name;
+        this.el.querySelector('.pp-properties-title').textContent = this.templateMode ? `Character template: ${record.name}` : record.name;
         this.el.querySelector('[data-field="name"]').textContent = record.name;
         this.el.querySelector('[data-field="position"]').textContent = `${geometry.x}, ${geometry.y}`;
         this.el.querySelector('[data-field="size"]').textContent = `${geometry.width} × ${geometry.height}`;
@@ -408,6 +428,13 @@ export class PanelPropertiesPopup {
             info.textContent = 'Not bound. Drag a variable or role here, or type or pick a name (a role as role:scene.title).';
             return;
         }
+        if (element.binding.char) {
+            info.title = '';
+            info.textContent = this.templateMode
+                ? `Character field · each card shows its own character's ${elementLabel({ ...element, labelOverride: '' }, null)} (the editor previews one)`
+                : 'Character field · only a character template\'s cards have a character - here it shows nothing';
+            return;
+        }
         if (element.binding.role) {
             // Which variable the chat assigned to the role, from State Engine.
             const role = getRole(element.binding.role);
@@ -451,7 +478,7 @@ export class PanelPropertiesPopup {
         const def = this.#def(element);
         set('type', (f) => { f.value = element.type; });
         this.#applyTypeVisibility(element.type);
-        set('binding', (f) => { f.value = element.binding?.name ?? ''; });
+        set('binding', (f) => { f.value = element.binding?.name ?? (element.binding?.char ? `char:${element.binding.char}` : ''); });
         this.#refreshBindingMode(element);
         set('showLabel', (f) => { f.checked = element.showLabel; });
         set('labelOverride', (f) => {
@@ -472,6 +499,49 @@ export class PanelPropertiesPopup {
         this.#fillWidget(element);
         this.#fillShape(element);
         this.#fillClock(element);
+        this.#fillCharacter(element, def);
+    }
+
+    // Character Cards rows (a Character element): the template list (the
+    // built-in card first), tiling (a list only) and gap.
+    #fillCharacter(element, def) {
+        if (element.type !== ELEMENT_TYPE_CHARACTER) return;
+        const options = normalizeCharacterOptions(element.character);
+        const select = this.el.querySelector('[data-el="charTemplate"]');
+        if (select !== document.activeElement) {
+            const templates = listCharacterTemplates();
+            select.replaceChildren(new Option('Built-in card', ''), ...templates.map((t) => new Option(`${t.name} (${t.width} × ${t.height})`, t.id)));
+            if (options.templateId && !templates.some((t) => t.id === options.templateId)) select.add(new Option('(deleted template)', options.templateId));
+            select.value = options.templateId ?? '';
+        }
+        this.el.querySelector('[data-action="char-template-edit"]').disabled = !options.templateId || !getCharacterTemplate(options.templateId);
+        const list = def?.type === 'array' || !def;
+        this.el.querySelector('[data-el="charTilingRow"]').hidden = !list;
+        const tiling = this.el.querySelector('[data-el="charTiling"]');
+        if (tiling !== document.activeElement) tiling.value = options.tiling;
+        const gap = this.el.querySelector('[data-el="charGap"]');
+        if (gap !== document.activeElement) gap.value = String(options.gap);
+        const info = this.el.querySelector('[data-el="charInfo"]');
+        info.textContent = def && !isCharacterDefinition(def)
+            ? 'Bind a character variable, or a list of characters (an array of item type character).'
+            : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Character Manager.';
+    }
+
+    // Sets a Character element's options. Choosing a template for a single
+    // character sizes the element to one card.
+    #changeCharacter(patch) {
+        const element = this.#selected();
+        if (!element) return;
+        const character = { ...normalizeCharacterOptions(element.character), ...patch };
+        const change = { character };
+        const template = patch.templateId ? getCharacterTemplate(patch.templateId) : null;
+        if (template && this.#def(element)?.type === 'character') {
+            Object.assign(change, clampElementGeometry(
+                { x: element.x, y: element.y, width: template.width, height: template.height },
+                this.panel.body.clientWidth, this.panel.body.clientHeight, 'width',
+            ));
+        }
+        this.hooks.onElementChange(element.id, change);
     }
 
     // What Value Formatting offers for an element: the kind of value it
@@ -659,6 +729,7 @@ export class PanelPropertiesPopup {
         }
         root.querySelector('.pp-properties-picker').hidden = this.paletteMode !== 'variables';
         root.querySelector('.pp-properties-role-picker').hidden = this.paletteMode !== 'roles';
+        root.querySelector('.pp-properties-char-picker').hidden = this.paletteMode !== 'character';
     }
 
     // The Binding type (an element bound to a role shows Role) and the Role
@@ -1015,7 +1086,8 @@ export class PanelPropertiesPopup {
                 <dt>Size</dt><dd data-field="size"></dd>
             </dl>
             <div class="pp-locked-note"><i class="fa-solid fa-lock"></i> Locked - unlock to move, resize or edit.</div>
-            <div class="pp-properties-actions">
+            <small class="pp-field-info" data-template-only>A character template: drawn once per character in a Character element. Bind elements to the card's character (the Character tab below), to variables or to roles. Changes save as you go; Done (above the template) closes the editor.</small>
+            <div class="pp-properties-actions" data-template-hide>
                 <button type="button" class="menu_button pp-properties-button" data-action="lock" title="Lock Panel: no moving, resizing or editing">
                     <i class="fa-solid fa-lock-open"></i><span>Unlocked</span>
                 </button>
@@ -1023,8 +1095,8 @@ export class PanelPropertiesPopup {
                     <i class="fa-solid fa-trash-can"></i><span>Delete</span>
                 </button>
             </div>
-            <div class="pp-properties-section-label">Layering</div>
-            <div class="pp-layering">
+            <div class="pp-properties-section-label" data-template-hide>Layering</div>
+            <div class="pp-layering" data-template-hide>
                 <label class="pp-layering-z" title="Stacking order among your panels: higher draws on top. Any value (0-99) keeps the panel behind SillyTavern's own windows and drawers (Author's Note, settings, popups) and behind the State Engine tracker."><span>Z-Index</span>
                     <input type="number" class="text_pole" data-field="zIndex" min="0" max="99" step="1" />
                 </label>
@@ -1035,8 +1107,8 @@ export class PanelPropertiesPopup {
                     <button type="button" class="menu_button" data-restack="front" title="Bring to Front"><i class="fa-solid fa-angles-up"></i></button>
                 </div>
             </div>
-            <div class="pp-properties-section-label">Layout Anchor</div>
-            <div class="pp-anchor-row">
+            <div class="pp-properties-section-label" data-template-hide>Layout Anchor</div>
+            <div class="pp-anchor-row" data-template-hide>
                 <label class="pp-layering-z"><span>Anchor mode</span>
                     <select class="text_pole" data-field="anchorMode" title="Free: floats over SillyTavern. Anchored: becomes part of SillyTavern's layout at the chosen place, which moves out of its way.">
                         ${ANCHOR_MODES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
@@ -1049,7 +1121,7 @@ export class PanelPropertiesPopup {
                     </select>
                 </label>
             </div>
-            <small class="pp-field-info" data-field="anchorStatus"></small>
+            <small class="pp-field-info" data-field="anchorStatus" data-template-hide></small>
             <div class="pp-properties-section-label">Theme</div>
             <div class="pp-anchor-row">
                 <label class="pp-layering-z"><span>Theme</span>
@@ -1067,9 +1139,9 @@ export class PanelPropertiesPopup {
                     <option value="false">Hide</option>
                 </select>
             </label>
-            <div class="pp-properties-section-label">Panel Library</div>
+            <div class="pp-properties-section-label"><span data-template-hide>Panel Library</span><span data-template-only>Character Template</span></div>
             <div class="pp-properties-actions">
-                <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library">
+                <button type="button" class="menu_button pp-properties-button" data-action="save-template" title="Save this panel to the Panel Library" data-template-hide>
                     <i class="fa-solid fa-floppy-disk"></i><span>Save</span>
                 </button>
                 <button type="button" class="menu_button pp-properties-button" data-action="export-template" title="Export this panel as a template file">
@@ -1179,6 +1251,25 @@ export class PanelPropertiesPopup {
                             ${IMAGE_FITS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
                         </select>
                     </label>
+                </div>
+                <div data-for-types="character">
+                    <div class="pp-field-caption">Character Cards</div>
+                    <label class="pp-field"><span>Template</span>
+                        <select class="text_pole" data-el="charTemplate" title="The character template each card is drawn with (Pretty Panels drawer → Character Templates)"></select>
+                    </label>
+                    <div class="pp-properties-actions">
+                        <button type="button" class="menu_button pp-properties-button" data-action="char-template-edit" title="Edit this template in the template editor"><i class="fa-solid fa-pen"></i><span>Edit template</span></button>
+                        <button type="button" class="menu_button pp-properties-button" data-action="char-template-new" title="Create a new character template for this element and edit it"><i class="fa-solid fa-plus"></i><span>New template</span></button>
+                    </div>
+                    <label class="pp-field" data-el="charTilingRow"><span>Tiling</span>
+                        <select class="text_pole" data-el="charTiling" title="How the cards of a list are laid out">
+                            ${CHARACTER_TILINGS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="pp-field"><span>Gap</span>
+                        <input type="number" class="text_pole" data-el="charGap" min="${CHARACTER_GAP_LIMITS[0]}" max="${CHARACTER_GAP_LIMITS[1]}" step="1" title="Space between cards, px" />
+                    </label>
+                    <small class="pp-field-info" data-el="charInfo"></small>
                 </div>
                 <div data-for-types="shape">
                 ${sectionMarkup('shape', 'Shape Properties', '', `
@@ -1366,9 +1457,11 @@ export class PanelPropertiesPopup {
             <div class="pp-palette-toggle" role="tablist">
                 <button type="button" class="menu_button pp-palette-tab" data-palette="variables" role="tab">Variables</button>
                 <button type="button" class="menu_button pp-palette-tab" data-palette="roles" role="tab">Roles</button>
+                <button type="button" class="menu_button pp-palette-tab" data-palette="character" role="tab" data-template-only>Character</button>
             </div>
             <div class="pp-properties-picker"></div>
-            <div class="pp-properties-role-picker"></div>`);
+            <div class="pp-properties-role-picker"></div>
+            <div class="pp-properties-char-picker"></div>`);
 
         el.innerHTML = `
             <div class="pp-properties-header">
@@ -1397,6 +1490,7 @@ export class PanelPropertiesPopup {
         el.querySelector('.pp-properties-shapes').appendChild(this.shapes.el);
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
         el.querySelector('.pp-properties-role-picker').appendChild(this.rolePicker.el);
+        el.querySelector('.pp-properties-char-picker').appendChild(this.characterPicker.el);
         for (const tab of el.querySelectorAll('[data-palette]')) {
             tab.addEventListener('click', () => {
                 this.paletteMode = tab.dataset.palette;
@@ -1502,6 +1596,23 @@ export class PanelPropertiesPopup {
         // type the element can show are offered).
         field('bindingRole').addEventListener('change', (e) => {
             this.#change({ binding: e.target.value ? { role: e.target.value } : null });
+        });
+        field('charTemplate').addEventListener('change', (e) => this.#changeCharacter({ templateId: e.target.value || null }));
+        field('charTiling').addEventListener('change', (e) => this.#changeCharacter({ tiling: e.target.value }));
+        field('charGap').addEventListener('input', (e) => {
+            if (Number.isFinite(e.target.valueAsNumber)) this.#changeCharacter({ gap: Math.round(e.target.valueAsNumber) });
+        });
+        el.querySelector('[data-action="char-template-edit"]').addEventListener('click', () => {
+            const id = normalizeCharacterOptions(this.#selected()?.character).templateId;
+            if (id) openTemplateEditor(id);
+        });
+        el.querySelector('[data-action="char-template-new"]').addEventListener('click', async () => {
+            const name = await promptText('Name for the new character template:', 'Character Card');
+            if (!name) return;
+            const created = createCharacterTemplate(name);
+            this.#changeCharacter({ templateId: created.id });
+            notify('success', `Created "${created.name}". Edit it in the template editor - changes show on the cards as you go.`);
+            openTemplateEditor(created.id);
         });
         field('showLabel').addEventListener('change', (e) => this.#change({ showLabel: e.target.checked }));
         field('labelOverride').addEventListener('change', (e) => this.#change({ labelOverride: e.target.value.trim() }));

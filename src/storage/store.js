@@ -23,6 +23,10 @@
 //                State Engine roles ("prettyPanels__<publicName>"), shared by
 //                every layout that carries them
 //     templates: { [id]: { id, name, createdAt, updatedAt, ...design } },
+//     characterTemplates: { [id]: { id, name, createdAt, updatedAt, ...design, roles } } -
+//                character templates (src/library/character-template-library.js):
+//                panels drawn once per character inside a Character element;
+//                they KEEP their bindings (character fields, variables, roles)
 //     userFonts: { [font_id]: sanitized user font record } - see
 //                src/fonts/font-registry.js; never a raw font file
 //   }
@@ -234,6 +238,10 @@ export function getStore() {
     }
     if (!isObject(store.templates)) {
         store.templates = {};
+        changed = true;
+    }
+    if (!isObject(store.characterTemplates)) {
+        store.characterTemplates = {};
         changed = true;
     }
     if (!isObject(store.roles)) {

@@ -31,6 +31,13 @@
 // here: align, distribute, group/ungroup/select group, Show Grid. Grouped
 // panels move together when one of them is dragged; alignment guides are
 // drawn while dragging (src/ui/guides.js).
+//
+// The character template editor (src/panels/template-editor.js) is an
+// ordinary Panel that is NOT in the layout: it writes its record through
+// its own panel.writeRecord (to the character template) instead of the
+// registry, and is registered here as an "extra" panel only so variables
+// can be dropped on it and its properties pane follows the others. The
+// element functions below work on it unchanged.
 
 import { Panel } from './panel.js';
 import {
@@ -61,8 +68,10 @@ import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storag
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
     ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
-    bindingRef, bindingFromRef,
+    bindingRef, bindingFromRef, isCharacterDefinition, ELEMENT_TYPE_CHARACTER, isCharRef,
 } from '../elements/element-model.js';
+import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
+import { addLayoutRole } from '../library/role-library.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
@@ -86,6 +95,10 @@ const CASCADE_STEP = 24;
 const CASCADE_SLOTS = 8;
 
 const panels = new Map();
+// Panels outside the layout (the template editor), by id.
+const extraPanels = new Map();
+// The character template the editor has open (its variables are watched).
+let editorTemplateId = null;
 const stateListeners = new Set();
 // Whether the active layout is on screen (see the header). Off until the
 // chat session shows one.
@@ -104,6 +117,12 @@ let pendingAnchor = null;
 // The panel being dragged (kept undocked until the drag ends).
 let draggingPanel = null;
 
+// Writes a panel's record: the registry for a layout panel, the panel's
+// own writer for the template editor. Returns the stored record, or null.
+function writeRecord(panel, patch) {
+    return panel.writeRecord ? panel.writeRecord(patch) : updatePanelRecord(panel.id, patch);
+}
+
 function anchoredTarget(record) {
     return record.anchorMode === 'anchored' && record.anchorTarget ? record.anchorTarget : null;
 }
@@ -117,7 +136,7 @@ const hooks = {
             ? { height: geometry.height, ...(isMarginAnchor(panel.record.anchorTarget) ? { width: geometry.width } : {}) }
             : geometry;
         if (Object.entries(patch).every(([key, value]) => ({ x, y, width, height })[key] === value)) return;
-        const updated = updatePanelRecord(panel.id, patch);
+        const updated = writeRecord(panel, patch);
         if (updated) panel.update(updated);
     },
     // Docks the panel into SillyTavern's layout at its anchor, or takes it
@@ -156,7 +175,7 @@ const hooks = {
         moveRecord(panel, { ...place, ...patch });
     },
     onLockChange(panel, locked) {
-        const updated = updatePanelRecord(panel.id, { locked });
+        const updated = writeRecord(panel, { locked });
         if (updated) panel.update(updated);
     },
     onDeleteRequest(panel) {
@@ -202,7 +221,7 @@ const hooks = {
     },
     // The panel's clock overrides ({ showSecondsHand } or {} to inherit).
     onPanelClockChange(panel, clock) {
-        const updated = updatePanelRecord(panel.id, { clock });
+        const updated = writeRecord(panel, { clock });
         if (updated) panel.update(updated);
     },
     // Pressing a panel (its top strip or empty area): Ctrl/Shift/Cmd
@@ -288,6 +307,49 @@ function emitBindingsChange(added = []) {
     for (const listener of bindingListeners) listener(added);
 }
 
+export function announceBindingsChange(added = []) {
+    emitBindingsChange(added);
+}
+
+// The standard panel hooks, for a panel built elsewhere (the template
+// editor overrides what does not apply to it).
+export function basePanelHooks() {
+    return { ...hooks };
+}
+
+// Closes every properties pane but `panel`'s (the template editor opening).
+export function closePropertiesExcept(panel) {
+    return closeOtherProperties(panel);
+}
+
+// The template editor's panel joins drops and the properties-pane hand-off.
+export function registerExtraPanel(panel) {
+    extraPanels.set(panel.id, panel);
+}
+
+export function unregisterExtraPanel(panel) {
+    extraPanels.delete(panel.id);
+}
+
+// The character template the editor is showing (null: none) - its
+// variables and roles are watched like the layout's.
+export function setEditorTemplate(id) {
+    editorTemplateId = id ?? null;
+    emitBindingsChange(id ? templateBindings(id).refs : []);
+}
+
+// The character templates the active layout's Character elements draw with,
+// plus the one being edited.
+function usedTemplateIds() {
+    const ids = new Set(editorTemplateId ? [editorTemplateId] : []);
+    for (const record of listPanels()) {
+        for (const widget of record.widgets) {
+            if (widget.type === ELEMENT_TYPE_CHARACTER && widget.character?.templateId) ids.add(widget.character.templateId);
+        }
+    }
+    return [...ids];
+}
+
 export function onBindingsChange(listener) {
     bindingListeners.add(listener);
     return () => bindingListeners.delete(listener);
@@ -302,9 +364,11 @@ export function getBoundVariableNames() {
     for (const record of listPanels()) {
         for (const widget of record.widgets) {
             const ref = isVariableElement(widget) ? bindingRef(widget.binding) : null;
-            if (ref) names.add(ref);
+            if (ref && !isCharRef(ref)) names.add(ref);
         }
     }
+    // What the Character elements' templates show besides character fields.
+    for (const id of usedTemplateIds()) for (const ref of templateBindings(id).refs) names.add(ref);
     return [...names];
 }
 
@@ -336,6 +400,7 @@ export function getBoundImageNames() {
         if (typeof name === 'string' && name) names.add(name);
         for (const widget of record.widgets) for (const clockImage of clockImageVariables(widget)) names.add(clockImage);
     }
+    for (const id of usedTemplateIds()) for (const image of templateBindings(id).images) names.add(image);
     return [...names];
 }
 
@@ -365,7 +430,7 @@ function applyPanelMarkers() {
 // panel being worked on. Returns whether any was open.
 function closeOtherProperties(panel) {
     let closed = false;
-    for (const other of panels.values()) {
+    for (const other of [...panels.values(), ...extraPanels.values()]) {
         if (other !== panel && other.popup) {
             other.closeProperties();
             closed = true;
@@ -406,7 +471,7 @@ export function onSelectionChange(listener) {
 // Distribute) takes it out of its layout anchor unless the patch sets one.
 function moveRecord(panel, patch) {
     const detach = ('x' in patch || 'y' in patch) && !('anchorMode' in patch) && anchoredTarget(panel.record);
-    const updated = updatePanelRecord(panel.id, detach ? { ...patch, anchorMode: 'free', anchorTarget: null } : patch);
+    const updated = writeRecord(panel, detach ? { ...patch, anchorMode: 'free', anchorTarget: null } : patch);
     if (updated) panel.update(updated);
 }
 
@@ -530,7 +595,7 @@ export function getShowGrid() {
 export function setPanelZIndex(panel, zIndex) {
     const next = clampZIndex(zIndex);
     if (next === panel.record.zIndex) return;
-    const updated = updatePanelRecord(panel.id, { zIndex: next });
+    const updated = writeRecord(panel, { zIndex: next });
     if (updated) panel.update(updated);
 }
 
@@ -545,7 +610,7 @@ export function updatePanelStyle(panel, patch) {
         if (value === null || value === undefined) delete style[key];
         else style[key] = value;
     }
-    const updated = updatePanelRecord(panel.id, { style });
+    const updated = writeRecord(panel, { style });
     if (updated) panel.update(updated);
     const after = style.backgroundImageVariable ?? null;
     if (before !== after) emitBindingsChange(after ? [after] : []);
@@ -558,7 +623,7 @@ export function setPanelTheme(panel, { themeId, themeVariant } = {}) {
     if (themeId) next.themeId = themeId;
     if (themeVariant) next.themeVariant = themeVariant;
     else if (themeId && themeId !== panel.record.themeId) next.themeVariant = resolvePanelTheme({ themeId }).variantName;
-    const updated = updatePanelRecord(panel.id, next);
+    const updated = writeRecord(panel, next);
     if (updated) panel.update(updated);
 }
 
@@ -664,6 +729,17 @@ export function initPanels() {
 
     onValuesChange(() => {
         for (const panel of panels.values()) panel.renderValues();
+    });
+    // A character template edited (or deleted): Character elements redraw,
+    // and what its elements show is watched.
+    // (Only a change in WHAT is shown re-watches - not every edit.)
+    let shownRefs = getBoundVariableNames().join('|');
+    onCharacterTemplatesChange(() => {
+        for (const panel of panels.values()) panel.renderValues();
+        const next = getBoundVariableNames().join('|');
+        if (next === shownRefs) return;
+        shownRefs = next;
+        emitBindingsChange();
     });
     // Fonts arriving (the curated manifest, an upload, an import) change
     // what an element's font id resolves to.
@@ -776,7 +852,7 @@ export function deletePanel(id) {
 // ---------------------------------------------------------------------
 
 function saveWidgets(panel, widgets) {
-    const updated = updatePanelRecord(panel.id, { widgets });
+    const updated = writeRecord(panel, { widgets });
     if (updated) panel.update(updated);
     return updated;
 }
@@ -795,7 +871,16 @@ export function updateElement(panel, elementId, patch) {
     // A clock's image variables are watched like a panel background's.
     const imagesBefore = clockImageVariables(current);
     const imagesAfter = clockImageVariables(saved);
-    if (before !== after || imagesBefore.join('|') !== imagesAfter.join('|')) {
+    // A Character element's new template: what it shows is watched, and a
+    // layout panel's layout carries the template's roles.
+    const templateBefore = current.character?.templateId ?? null;
+    const templateAfter = saved?.character?.templateId ?? null;
+    if (templateAfter !== templateBefore && templateAfter) {
+        if (!panel.writeRecord) {
+            for (const publicName of getCharacterTemplate(templateAfter)?.roles ?? []) addLayoutRole(getActiveLayoutId(), { publicName });
+        }
+        emitBindingsChange(templateBindings(templateAfter).refs);
+    } else if (before !== after || imagesBefore.join('|') !== imagesAfter.join('|')) {
         const added = imagesAfter.filter((name) => !imagesBefore.includes(name));
         if (after && before !== after) added.push(after);
         emitBindingsChange(added);
@@ -862,10 +947,19 @@ export function addVariableElement(panel, name, at = null) {
     }
     x = Math.max(0, Math.min(Math.round(x), bodyWidth - width));
     y = Math.max(0, Math.round(y));
-    const image = isImageDefinition(variableDef(name));
+    const def = variableDef(name);
+    const image = isImageDefinition(def);
+    // A character variable (or a list of characters) becomes a Character
+    // element: built-in cards until a template is chosen in its properties.
+    const character = isCharacterDefinition(def);
+    const bodyHeight = panel.body.clientHeight || panel.record.height;
+    const size = character
+        ? { width: Math.min(bodyWidth - x, def.type === 'array' ? 320 : 200), height: Math.max(48, Math.min(bodyHeight - y, def.type === 'array' ? 180 : 56)) }
+        : { width, height: DEFAULT_ELEMENT_HEIGHT };
     const element = createVariableElement({
-        x, y, width, height: DEFAULT_ELEMENT_HEIGHT, binding: name ? bindingFromRef(name) : null,
+        x, y, ...size, binding: name ? bindingFromRef(name) : null,
         ...(image ? { ...imageDefaultsFor(panel), showLabel: false, zIndex: IMAGE_Z_INDEX } : {}),
+        ...(character ? { type: ELEMENT_TYPE_CHARACTER, showLabel: false, character: { templateId: null, tiling: 'grid' } } : {}),
     });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);
@@ -948,8 +1042,8 @@ export function arrangeElement(panel, elementId, action) {
 // A shape is never a rebind target - dropping on one adds an element.
 export function dropTargetAt(clientX, clientY) {
     const hit = document.elementFromPoint(clientX, clientY);
-    const panelEl = hit?.closest?.('.pp-panel');
-    const panel = panelEl ? panels.get(panelEl.dataset.panelId) : null;
+    const panelEl = hit?.closest?.('.pp-panel[data-panel-id]');
+    const panel = panelEl ? (panels.get(panelEl.dataset.panelId) ?? extraPanels.get(panelEl.dataset.panelId)) : null;
     if (!panel) return null;
     const elementEl = hit.closest('.pp-element');
     if (!elementEl || !panel.el.contains(elementEl) || elementEl.classList.contains('pp-kind-shape')) return { panel };

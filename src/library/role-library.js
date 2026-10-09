@@ -47,6 +47,12 @@ export function registrySpecs() {
         .sort((a, b) => a.publicName.localeCompare(b.publicName));
 }
 
+// Roles character templates use (their `roles`, character-template-library.js)
+// stay in the registry even when no layout carries them.
+function usedByCharacterTemplates(publicName) {
+    return Object.values(getStore().characterTemplates ?? {}).some((t) => Array.isArray(t?.roles) && t.roles.includes(publicName));
+}
+
 // The layouts (names) carrying role `publicName`.
 export function layoutsUsingRole(publicName) {
     return Object.values(getStore().layouts).filter((l) => l.roles.includes(publicName)).map((l) => l.name);
@@ -96,7 +102,7 @@ export function removeLayoutRole(layoutId, publicName) {
     const layout = store.layouts[layoutId];
     if (!layout || !layout.roles.includes(publicName)) return false;
     layout.roles = layout.roles.filter((n) => n !== publicName);
-    if (layoutsUsingRole(publicName).length === 0) delete store.roles[publicName];
+    if (layoutsUsingRole(publicName).length === 0 && !usedByCharacterTemplates(publicName)) delete store.roles[publicName];
     emitRolesChange();
     return true;
 }
@@ -124,6 +130,12 @@ export function renameLayoutRole(from, to) {
                 if (widget?.binding?.role === fromId) widget.binding = { role: toId };
             }
         }
+    }
+    for (const template of Object.values(store.characterTemplates ?? {})) {
+        for (const widget of template?.widgets ?? []) {
+            if (widget?.binding?.role === fromId) widget.binding = { role: toId };
+        }
+        if (Array.isArray(template?.roles)) template.roles = template.roles.map((n) => (n === from ? to : n));
     }
     emitRolesChange({ renamed: { from: fromId, to } });
     return { ok: true };
@@ -180,7 +192,7 @@ export function announceRolesChange() {
 export function pruneUnusedRoles() {
     const store = getStore();
     const used = new Set(Object.values(store.layouts).flatMap((l) => l.roles));
-    const unused = Object.keys(store.roles).filter((name) => !used.has(name));
+    const unused = Object.keys(store.roles).filter((name) => !used.has(name) && !usedByCharacterTemplates(name));
     for (const name of unused) delete store.roles[name];
     if (unused.length) emitRolesChange();
     return unused.length > 0;

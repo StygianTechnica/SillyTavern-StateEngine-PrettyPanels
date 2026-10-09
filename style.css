@@ -2773,6 +2773,20 @@ body.pp-editing .pp-character-card {
 .pp-cm-aliases { font-size: 0.9em; opacity: 0.85; }
 .pp-cm-id { font-family: monospace; font-size: 0.75em; opacity: 0.6; }
 .pp-cm-snippet { font-style: italic; font-size: 0.85em; opacity: 0.8; }
+/* Runtime state in This chat rows, and the Runtime fields tab (spec 1.43). */
+.pp-cm-runtime { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 10px; margin-top: 4px; padding-top: 4px; border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent); font-size: 0.85em; }
+.pp-cm-runtime-head { flex-basis: 100%; opacity: 0.7; font-size: 0.9em; }
+.pp-cm-runtime-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; max-width: 100%; }
+.pp-cm-runtime-cell > span { opacity: 0.65; font-size: 0.85em; }
+.pp-cm-runtime-cell .text_pole { margin: 0; padding: 1px 4px; min-width: 6em; max-width: 14em; }
+.pp-cm-runtime-value { overflow-wrap: anywhere; }
+.pp-cm-runtime-empty { opacity: 0.5; }
+.pp-cm-rf { display: flex; flex-direction: column; gap: 6px; }
+.pp-cm-rf-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 10px; padding: 6px; border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent); border-radius: 8px; }
+.pp-cm-rf-row .pp-cm-field { flex: 0 1 9em; }
+.pp-cm-rf-row .pp-cm-rf-wide { flex: 1 1 16em; }
+.pp-cm-rf-row .menu_button { margin: 0; }
+.pp-cm-rf-row input[readonly] { opacity: 0.7; }
 .pp-cm-actions { display: flex; gap: 4px; }
 .pp-cm-actions .menu_button { margin: 0; }
 .pp-cm-editor { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent); }
@@ -2798,4 +2812,97 @@ body.pp-editing .pp-character-card {
    (icon-only buttons carry the icon class on the button itself). */
 .pp-cm-window .menu_button > i.fa-solid {
     margin-right: 0.4em;
+}
+
+/* Character templates (src/library/character-template-library.js):
+   Character elements tile template cards (src/elements/character-tiles.js);
+   the template editor is a temporary, clearly marked panel
+   (src/panels/template-editor.js). */
+.pp-element.pp-kind-character {
+    padding: 0;
+    align-items: stretch;
+}
+.pp-element.pp-kind-character > .pp-element-label,
+.pp-element.pp-kind-character > .pp-element-icon {
+    display: none;
+}
+.pp-element-value.pp-character-tiles {
+    display: flex;
+    align-items: flex-start;
+    align-content: flex-start;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    text-align: left;
+    white-space: normal;
+    font-weight: normal;
+}
+.pp-character-tiles.pp-tiling-grid { flex-wrap: wrap; }
+.pp-character-tiles.pp-tiling-row { flex-wrap: nowrap; }
+.pp-character-tiles.pp-tiling-column,
+.pp-character-tiles.pp-character-builtin.pp-tiling-single { flex-direction: column; flex-wrap: nowrap; }
+.pp-character-tiles > * { flex: 0 0 auto; }
+.pp-character-tiles.pp-character-builtin.pp-tiling-column > .pp-character-card { width: 100%; }
+
+/* A template card: the real panel structure, in the flow, at the template's size. */
+.pp-panel.pp-template-card {
+    position: relative;
+    z-index: auto;
+    pointer-events: auto;
+    cursor: pointer;
+}
+body.pp-editing .pp-panel.pp-template-card {
+    outline: none;
+    cursor: inherit;
+}
+.pp-template-card .pp-element {
+    pointer-events: none;
+}
+/* A portrait with no image: the character's generated icon, filling the element. */
+.pp-element.pp-character-portrait > .pp-element-value {
+    justify-content: center;
+}
+.pp-element.pp-character-portrait .pp-character-fallback {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--pp-img-radius, 8px);
+    font-size: 2em;
+}
+
+/* The template editor: never mistaken for a layout panel. */
+body.pp-editing .pp-panel.pp-template-editor {
+    outline: 2px dashed var(--SmartThemeQuoteColor);
+    outline-offset: 3px;
+}
+.pp-template-editor-bar {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    font-size: 0.85em;
+    pointer-events: auto;
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px dashed var(--SmartThemeQuoteColor);
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.pp-template-editor-bar > i { color: var(--SmartThemeQuoteColor); }
+.pp-template-editor-label { opacity: 0.75; }
+.pp-template-editor-preview { display: flex; align-items: center; gap: 4px; margin: 0 0 0 6px; }
+.pp-template-editor-preview .text_pole { margin: 0; padding: 1px 4px; max-width: 12em; }
+.pp-template-editor-done { margin: 0; display: flex; align-items: center; gap: 4px; }
+
+/* Properties pane: layout-only controls are hidden in the template editor,
+   template-only ones everywhere else. */
+.pp-properties:not(.pp-properties-template) [data-template-only],
+.pp-properties.pp-properties-template [data-template-hide] {
+    display: none !important;
 }

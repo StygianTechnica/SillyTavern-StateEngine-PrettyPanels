@@ -23,6 +23,18 @@ import { pickDesign } from '../storage/design.js';
 import { exportLayoutRoles, importLayoutRoles, announceRolesChange, pruneUnusedRoles } from './role-library.js';
 import { notify } from '../ui/dialogs.js';
 import { KIND, makePayload } from './format.js';
+import { exportCharacterTemplate, importCharacterTemplate } from './character-template-library.js';
+
+// The character templates a layout's Character elements draw with.
+function usedCharacterTemplateIds(panels) {
+    const ids = new Set();
+    for (const panel of panels) {
+        for (const widget of Array.isArray(panel?.widgets) ? panel.widgets : []) {
+            if (widget?.type === 'character' && typeof widget.character?.templateId === 'string') ids.add(widget.character.templateId);
+        }
+    }
+    return [...ids];
+}
 
 function layoutNames(store) {
     return Object.values(store.layouts).map((l) => l.name);
@@ -167,6 +179,12 @@ export function exportLayout(id) {
         // The layout's roles travel with it (an element bound to a role
         // needs its definition in the importing install).
         roles: exportLayoutRoles(layout),
+        // So do the character templates its Character elements draw with
+        // (each with its bindings and roles), keyed by their id here.
+        characterTemplates: usedCharacterTemplateIds(instances)
+            .map((templateId) => ({ templateId, payload: exportCharacterTemplate(templateId) }))
+            .filter((t) => t.payload)
+            .map(({ templateId, payload }) => ({ ...payload.data, templateId })),
     });
 }
 
@@ -178,9 +196,23 @@ export function importLayout(data) {
     const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Imported Layout';
     const { names, conflicts } = importLayoutRoles(data.roles);
     if (conflicts.length) notify('info', `Roles already defined here keep their own type: ${conflicts.join(', ')}.`);
+    // Its character templates join Character Templates (new ids); its
+    // Character elements follow them.
+    const templateIds = new Map();
+    for (const template of Array.isArray(data.characterTemplates) ? data.characterTemplates : []) {
+        if (template && typeof template === 'object' && typeof template.templateId === 'string') {
+            templateIds.set(template.templateId, importCharacterTemplate(template).summary.id);
+        }
+    }
+    const instances = (Array.isArray(data.panels) ? data.panels.filter((p) => p && typeof p === 'object') : []).map((panel) => ({
+        ...panel,
+        widgets: Array.isArray(panel.widgets) ? panel.widgets.map((w) => (w?.type === 'character' && templateIds.has(w.character?.templateId)
+            ? { ...w, character: { ...w.character, templateId: templateIds.get(w.character.templateId) } }
+            : w)) : panel.widgets,
+    }));
     const id = addLayout(name, {
         backgrounds: data.backgrounds,
-        instances: Array.isArray(data.panels) ? data.panels.filter((p) => p && typeof p === 'object') : [],
+        instances,
         groups: data.groups,
         roles: names,
     });

@@ -269,3 +269,57 @@ export class RolePicker {
         return item;
     }
 }
+
+// The "Character" list in a CHARACTER TEMPLATE's properties (a third tab,
+// shown only in the template editor): the fields of the card's character -
+// identity, then runtime state (src/elements/character-fields.js). Drag one
+// onto the template to add an element showing it, or onto an element to
+// bind it; click to add it. Refs are "char:<field>".
+export class CharacterFieldPicker {
+    // hooks: { onPick(ref), onDrop(ref, clientX, clientY), dropTargetAt(clientX, clientY) }
+    constructor(hooks) {
+        this.hooks = hooks;
+        this.fields = [];
+        this.el = document.createElement('div');
+        this.el.className = 'pp-picker pp-character-field-picker';
+        this.el.innerHTML = `
+            <div class="pp-picker-list"></div>
+            <small class="pp-picker-hint">Each card shows its own character's value. Drag onto the template to add it, or onto an element to bind it. Click to add it here. Runtime fields are the chat's setting's (Character Manager → Runtime fields).</small>
+        `;
+        this.list = this.el.querySelector('.pp-picker-list');
+    }
+
+    // `fields`: [{ field, label, type, group, description? }]
+    setFields(fields) {
+        this.fields = fields;
+        this.render();
+    }
+
+    render() {
+        this.list.replaceChildren();
+        for (const group of [...new Set(this.fields.map((f) => f.group))]) {
+            const heading = document.createElement('div');
+            heading.className = 'pp-picker-group';
+            heading.textContent = group;
+            this.list.appendChild(heading);
+            for (const field of this.fields.filter((f) => f.group === group)) this.list.appendChild(this.#item(field));
+        }
+    }
+
+    #item(field) {
+        const ref = `char:${field.field}`;
+        const item = document.createElement('div');
+        item.className = 'pp-picker-item';
+        item.dataset.name = ref;
+        item.title = `${ref}${field.description ? `\n${field.description}` : ''}\nDrag onto the template or an element, or click to add here.`;
+        item.innerHTML = '<span class="pp-picker-label"></span><span class="pp-picker-type"></span>';
+        item.querySelector('.pp-picker-label').textContent = field.label;
+        item.querySelector('.pp-picker-type').textContent = field.type;
+        bindPaletteDrag(item, field.label, {
+            onClick: () => this.hooks.onPick(ref),
+            onDrop: (x, y) => this.hooks.onDrop(ref, x, y),
+            dropTargetAt: (x, y) => this.hooks.dropTargetAt(x, y),
+        });
+        return item;
+    }
+}

@@ -11,7 +11,7 @@
 // Character Manager on that character.
 
 // A stable hue for a character id.
-function hueFor(id) {
+export function hueFor(id) {
     let hash = 0;
     for (const ch of String(id)) hash = ((hash << 5) - hash + ch.codePointAt(0)) | 0;
     return Math.abs(hash) % 360;

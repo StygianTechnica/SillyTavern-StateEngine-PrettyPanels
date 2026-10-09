@@ -332,11 +332,30 @@ its id. A namespace never has two roles with the same name.
 Pretty Panels provides State Engine's **Character Manager** window and draws character
 variables. The characters themselves - and every rule about them - are State Engine's.
 
-- **Cards** - an element bound to a character variable draws a **CharacterCard**: the image
-  (or a generated icon: initials on a colour of its own), the name (Text Case applies), a
-  confirmed ✓ / unconfirmed ? badge, and - in Value Formatting - an optional presence dot and
-  alias list. A list of characters (an Array of item type Character) draws a **CharacterList**
-  of cards. Clicking a card (outside Editing Mode) opens the Character Manager on it.
+- **Character elements** - dragging a character variable, or a list of characters (an Array
+  of item type Character), onto a panel adds a **Character Cards** element. Its properties
+  choose the **character template** each card is drawn with and, for a list, the **tiling**
+  (grid, row or column - grid by default) and the gap. Cards keep the template's size; what
+  doesn't fit scrolls. Clicking a card (outside Editing Mode) opens the Character Manager on
+  that character.
+- **Built-in card** - with no template (and for a text element bound to a character variable):
+  the image (or a generated icon: initials on a colour of its own), the name (Text Case
+  applies), a confirmed ✓ / unconfirmed ? badge, and - in Value Formatting - an optional
+  presence dot and alias list.
+- **Character templates** - panels of their own class, drawn once per character: a framed
+  portrait, a name plate, a mood badge, a whole status sheet. They live in the drawer's
+  **Character Templates** library (new, edit, rename, duplicate, export, import, delete) and
+  are edited in the **template editor**: a temporary floating panel, marked with a dashed
+  outline and a bar reading "Character template: <name>", with a **Preview** character (one of
+  this chat's, or a sample) and **Done**. Everything else is the ordinary panel tools - the
+  same elements, properties pane, themes, styling and drag-and-drop - minus what only a layout
+  panel has (lock, layering, anchor, Panel Library). The properties pane's palette gains a
+  **Character** tab: the card's character fields - name, image, aliases, in the scene, faction,
+  role, biography, personality, introduction, and the runtime state (thought, mood, intent and
+  the setting's own runtime fields). Template elements can show variables and roles too, and
+  images. Unlike panel templates, character templates **keep their bindings**; an export
+  carries them with the definitions of the roles they use, and a layout export carries the
+  character templates its Character elements use. Edits show on the cards as you make them.
 - **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat
   until it is reviewed: confirmed as it is, edited and saved, or resolved to an existing
   character. Confirming adds it to the setting - there is no separate "add to setting".
@@ -347,8 +366,16 @@ variables. The characters themselves - and every rule about them - are State Eng
     only in this chat) and its setting's - with presence, the introduction snippet (read-only),
     id, confirmed status; the chat's **setting** is chosen here. Filter to the unconfirmed ones
     to review them.
+    Each character also shows its **runtime state** (State Engine requirements 1.43): the
+    prompted fields (thought, mood, intent, ...) read-only - the prompted update writes them
+    each turn - and the non-prompted ones as inputs you set by hand. Runtime state is cleared
+    when a character leaves the scene.
   - **Settings**: any setting's canonical characters (the chat's by default); create, rename
     and delete settings, and switch a setting to always auto-confirm.
+  - **Runtime fields**: a setting's runtime field definitions - the built-in thought, mood
+    (an enum - edit its values) and intent, plus your own string, number (with min/max) or enum
+    fields, each with a description (what the model is asked for) and **Prompted** on (the
+    prompted update fills it) or off (you set it in This chat). Edit, then **Save fields**.
   Actions: edit (name, aliases, image - a URL or an upload - faction, role, biography,
   personality; saving confirms the character), confirm, **resolve** an unconfirmed character to
   one you already have (its detected name becomes their alias, and they are confirmed), merge
@@ -413,6 +440,10 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
 | `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |
 | `src/elements/character-card.js` | CharacterCard / CharacterList and the generated fallback icons |
+| `src/elements/character-fields.js` | Character fields a template binds (`char:<field>`), their values and the sample character |
+| `src/elements/character-tiles.js` | Character elements: template cards, tiled as a grid, row or column |
+| `src/library/character-template-library.js` | Character Templates: designs with their bindings, export/import |
+| `src/panels/template-editor.js` | The temporary character template editor (an ordinary Panel outside the layout) |
 | `src/library/role-library.js` | Layout roles: the role registry and each layout's roles |
 | `src/chat/role-sync.js` | Sends the layout roles to State Engine |
 | `src/ui/layout-roles-drawer.js` | The drawer's Layout Roles section (roles, types, this chat's variables) |

@@ -25,7 +25,10 @@ import { listRoles } from '../api/list-roles.js';
 import { listCharacters } from '../api/list-characters.js';
 import { notify } from '../ui/dialogs.js';
 import { listPPVariables, getPPVariable, ppVariableLabel, onPPVariablesChange } from '../storage/pp-variables.js';
-import { isRoleRef, roleOfRef, roleRef } from '../elements/element-model.js';
+import { isRoleRef, roleOfRef, roleRef, isCharRef, charFieldOfRef } from '../elements/element-model.js';
+import { getChatCharacterSetting } from '../api/get-chat-character-setting.js';
+import { getCharacterRuntimeFields } from '../api/get-character-runtime-fields.js';
+import { characterFieldList, characterFieldDef } from '../elements/character-fields.js';
 
 // The catalog group holding Pretty Panels' own variables. Always "active"
 // (there is no preset to activate for it).
@@ -89,6 +92,20 @@ export function getCharacter(id) {
 
 export function getCharacterList() {
     return [...characters.values()];
+}
+
+// The character fields a template can bind (the Character palette):
+// identity, then the runtime fields of the open chat's setting (Default
+// without a chat). Never throws.
+export async function loadCharacterFieldList() {
+    try {
+        const chatId = currentChatId();
+        const settingId = (chatId ? await getChatCharacterSetting(EXTENSION_ID, chatId) : null) ?? 'default';
+        return characterFieldList((await getCharacterRuntimeFields(EXTENSION_ID, settingId)) ?? []);
+    } catch (err) {
+        console.warn('[PrettyPanels] could not read character runtime fields (update State Engine)', err);
+        return characterFieldList([]);
+    }
 }
 
 async function loadCharacters(chatId) {
@@ -278,6 +295,8 @@ export function getCatalog() {
 // The catalog entry (preset + display def) for a qualified name, or null.
 // A role ref answers with the role as a display definition.
 export function findVariable(name) {
+    // A character field (character templates): its display definition.
+    if (isCharRef(name)) return { preset: { id: '__character__', name: 'Character', namespace: '', active: true }, def: characterFieldDef(charFieldOfRef(name)) };
     if (isRoleRef(name)) {
         const role = getRole(name);
         return role ? { preset: { id: '__roles__', name: 'Roles', namespace: role.namespace, active: true }, def: roleDefinition(role) } : null;

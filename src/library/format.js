@@ -10,12 +10,14 @@ export const KIND = {
     LAYOUT: 'layout',
     PANEL_TEMPLATE: 'panel-template',
     THEME: 'theme',
+    CHARACTER_TEMPLATE: 'character-template',
 };
 
 const KIND_LABELS = {
     [KIND.LAYOUT]: 'layout',
     [KIND.PANEL_TEMPLATE]: 'panel template',
     [KIND.THEME]: 'theme',
+    [KIND.CHARACTER_TEMPLATE]: 'character template',
 };
 
 export function makePayload(kind, data) {

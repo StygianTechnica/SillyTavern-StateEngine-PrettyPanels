@@ -8,12 +8,15 @@
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
 //                              'gauge-circle' | 'gauge-semicircle' |
 //                              'composite-bar' | 'shape' | 'free-text' |
-//                              'analogClock'
+//                              'analogClock' | 'character'
 //     x, y, width, height,     position/size inside the panel body, px
 //     binding: { name }        a fully-qualified State Engine variable name,
 //            | { role }        or a State Engine role ("scene.title") - shows
-//            | null            whichever variable the chat assigned to it
-//                              (always null for a shape or free text)
+//                              whichever variable the chat assigned to it
+//            | { char }        or, inside a character template only, a
+//                              character field ("name", "mood") - the card's
+//                              character's value (character-fields.js)
+//            | null            (always null for a shape or free text)
 //     content,                 free text only: the text it shows
 //     zIndex,                  stacking order inside the panel, any integer:
 //                              elements draw in ascending zIndex, ties in
@@ -35,6 +38,11 @@
 //                              (src/elements/clock.js); an analog clock
 //                              binds a datetime variable and also uses
 //                              opacity
+//     character,               Character element only: { templateId, tiling,
+//                              gap } - a character variable (or a list of
+//                              them) drawn as cards of a character template
+//                              (src/elements/character-tiles.js); no
+//                              templateId draws the built-in card
 //   }
 //
 // With the default zIndex values shapes sit behind images, images behind
@@ -46,7 +54,8 @@
 //
 // Bindings live in the layout's panel instances (a chat chooses a layout
 // for what it shows) and are stripped from panel templates
-// (src/storage/design.js stripBindings()).
+// (src/storage/design.js stripBindings()) - but kept in character
+// templates, which are drawn inside a layout's Character elements.
 
 import { NAMESPACE } from '../constants.js';
 import { normalizeFormat } from './text-format.js';
@@ -64,6 +73,10 @@ function elementStyle(style) {
 export const ELEMENT_TYPE_TEXT = 'text';
 export const ELEMENT_TYPE_SHAPE = 'shape';
 export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
+export const ELEMENT_TYPE_CHARACTER = 'character';
+// How a Character element lays out a list of cards.
+export const CHARACTER_TILINGS = [['grid', 'Grid'], ['row', 'Row'], ['column', 'Column']];
+export const CHARACTER_GAP_LIMITS = [0, 64];
 // Types that show no variable.
 const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT]);
 export const MAX_FREE_TEXT_LENGTH = 2000;
@@ -77,6 +90,7 @@ export const ELEMENT_TYPES = [
     ['gauge-semicircle', 'Semi-Circular Gauge'],
     ['composite-bar', 'Composite Bar'],
     ['analogClock', 'Analog Clock'],
+    ['character', 'Character Cards'],
     ['free-text', 'Free Text'],
     ['shape', 'Shape'],
 ];
@@ -93,6 +107,7 @@ export const DEFAULT_TYPE_SIZES = {
     'shape': [120, 64],
     'free-text': [160, 32],
     'analogClock': [120, 120],
+    'character': [240, 160],
 };
 
 // A new element's zIndex, per type. Image variable elements (text bound
@@ -108,6 +123,7 @@ export const DEFAULT_Z_INDEX = {
     'gauge-semicircle': 3,
     'composite-bar': 3,
     'analogClock': 3,
+    'character': 2,
 };
 export const IMAGE_Z_INDEX = 1;
 export const TITLE_Z_INDEX = 4;
@@ -124,6 +140,11 @@ const IMAGE_VARIABLE_TYPES = new Set(['image', 'imageList', 'imageMap']);
 
 export function isImageDefinition(def) {
     return IMAGE_VARIABLE_TYPES.has(def?.type);
+}
+
+// A character variable, or a list of characters (State Engine spec 1.42).
+export function isCharacterDefinition(def) {
+    return def?.type === 'character' || (def?.type === 'array' && def?.itemType === 'character');
 }
 
 // zIndex for a new element of `type` bound to a variable defined as `def`.
@@ -176,6 +197,18 @@ export function rolePublicName(id) {
     return parseRoleId(id)?.publicName ?? id;
 }
 
+// A character field ref ("char:name") - character templates only.
+export const CHAR_REF_PREFIX = 'char:';
+const CHAR_FIELD = /^(?:[a-z_]+|custom\.[a-z][a-z0-9_]{0,39})$/;
+
+export function isCharRef(ref) {
+    return typeof ref === 'string' && ref.startsWith(CHAR_REF_PREFIX);
+}
+
+export function charFieldOfRef(ref) {
+    return isCharRef(ref) ? ref.slice(CHAR_REF_PREFIX.length) : null;
+}
+
 export function isRoleRef(ref) {
     return typeof ref === 'string' && ref.startsWith(ROLE_REF_PREFIX);
 }
@@ -189,14 +222,17 @@ export function roleRef(role) {
     return `${ROLE_REF_PREFIX}${role}`;
 }
 
-// { name } -> name, { role } -> "role:<role>", anything else -> null.
+// { name } -> name, { role } -> "role:<role>", { char } -> "char:<field>",
+// anything else -> null.
 export function bindingRef(binding) {
     if (binding?.role) return roleRef(binding.role);
+    if (binding?.char) return `${CHAR_REF_PREFIX}${binding.char}`;
     return binding?.name || null;
 }
 
 // The binding a ref stands for (null for an empty or invalid one).
 export function bindingFromRef(ref) {
+    if (isCharRef(ref)) return normalizeBinding({ char: charFieldOfRef(ref) });
     return normalizeBinding(isRoleRef(ref) ? { role: roleOfRef(ref) } : { name: ref });
 }
 
@@ -204,7 +240,7 @@ export function bindingFromRef(ref) {
 // gauges show a number, an analog clock a datetime; text shows anything.
 export function roleTypeForElement(type) {
     if (type === 'analogClock') return 'date';
-    if (type === ELEMENT_TYPE_TEXT) return 'any';
+    if (type === ELEMENT_TYPE_TEXT || type === ELEMENT_TYPE_CHARACTER) return 'any';
     return 'number';
 }
 
@@ -227,6 +263,9 @@ function newElementId() {
 function normalizeBinding(binding) {
     const name = typeof binding?.name === 'string' ? binding.name.trim() : '';
     if (isRoleRef(name)) return normalizeBinding({ role: roleOfRef(name) });
+    if (isCharRef(name)) return normalizeBinding({ char: charFieldOfRef(name) });
+    const char = typeof binding?.char === 'string' ? binding.char.trim() : '';
+    if (char) return CHAR_FIELD.test(char) ? { char } : null;
     if (name) return { name };
     const role = typeof binding?.role === 'string' ? binding.role.trim() : '';
     if (parseRoleId(role)) return { role };
@@ -284,6 +323,19 @@ export function normalizeVariableElement(element) {
         widget: object(element.widget),
         shape: object(element.shape),
         clock: object(element.clock),
+        ...(type === ELEMENT_TYPE_CHARACTER ? { character: normalizeCharacterOptions(element.character) } : {}),
+    };
+}
+
+// A Character element's options: which template draws each card (null: the
+// built-in card), how a list tiles, and the gap between cards (px).
+export function normalizeCharacterOptions(raw) {
+    const options = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const gap = Number.isFinite(options.gap) ? Math.round(options.gap) : 6;
+    return {
+        templateId: typeof options.templateId === 'string' && options.templateId ? options.templateId : null,
+        tiling: CHARACTER_TILINGS.some(([id]) => id === options.tiling) ? options.tiling : 'grid',
+        gap: Math.min(CHARACTER_GAP_LIMITS[1], Math.max(CHARACTER_GAP_LIMITS[0], gap)),
     };
 }
 
@@ -317,6 +369,7 @@ export function elementLabel(element, def) {
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
     if (element.binding?.role) return rolePublicName(element.binding.role);
+    if (element.binding?.char) return element.binding.char.replace(/^custom\./, '');
     return element.binding ? localName(element.binding.name) : 'Unbound';
 }
 

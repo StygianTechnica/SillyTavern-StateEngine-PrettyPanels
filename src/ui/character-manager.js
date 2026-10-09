@@ -19,9 +19,14 @@
 //   Settings - any setting's canonical characters (default: the chat's
 //     setting): create, edit, merge, delete; settings themselves are created,
 //     renamed, deleted and set to auto-confirm here.
+//   Runtime fields - a setting's runtime field definitions (spec 1.43): the
+//     built-in thought, mood and intent, and the user's own (string, number
+//     or enum; prompted or not). Edited as a draft, then saved.
 // Editing a character edits its baseline (for a canonical one, in every chat
 // on its setting) and confirms it. Each character has variants (alternate
-// versions overriding baseline fields) and one active variant.
+// versions overriding baseline fields) and one active variant. In This chat,
+// each character also shows its runtime state: prompted values read-only
+// (the prompted update writes them each turn), non-prompted ones editable.
 
 import { EXTENSION_ID } from '../constants.js';
 import { listCharacterSettings } from '../api/list-character-settings.js';
@@ -43,6 +48,9 @@ import { updateCharacterVariant } from '../api/update-character-variant.js';
 import { deleteCharacterVariant } from '../api/delete-character-variant.js';
 import { setCharacterActiveVariant } from '../api/set-character-active-variant.js';
 import { registerCharacterManager } from '../api/register-character-manager.js';
+import { getCharacterRuntimeFields } from '../api/get-character-runtime-fields.js';
+import { setCharacterRuntimeFields } from '../api/set-character-runtime-fields.js';
+import { setCharacterRuntimeValue } from '../api/set-character-runtime-value.js';
 import { importImageFile } from '../api/import-image-file.js';
 import { VARIABLES_CHANGED_EVENT, currentChatId, refreshValues } from '../chat/variable-service.js';
 import { fallbackIcon } from '../elements/character-card.js';
@@ -60,7 +68,9 @@ const IMAGE_FOLDER = 'characters';
 
 const state = {
     open: false,
-    view: 'chat', // 'chat' | 'setting'
+    view: 'chat', // 'chat' | 'setting' | 'runtime'
+    runtimeFields: [], // the shown setting's runtime fields (This chat: the chat's setting)
+    runtimeDraft: null, // the Runtime fields tab's unsaved copy: { settingId, fields }
     settingId: null, // the Settings view's setting
     filter: 'all', // 'all' | 'unconfirmed'
     search: '',
@@ -105,11 +115,18 @@ async function load() {
     ]);
     if (!chatId && state.view === 'chat') state.view = 'setting';
     if (!state.settingId || !settings.some((s) => s.id === state.settingId)) state.settingId = chatSetting ?? settings[0]?.id ?? 'default';
-    const characters = state.view === 'chat'
-        ? await listCharacters(EXTENSION_ID, chatId, {})
-        : await listCharacters(EXTENSION_ID, null, { settingId: state.settingId });
+    const characters = state.view === 'runtime' ? []
+        : state.view === 'chat'
+            ? await listCharacters(EXTENSION_ID, chatId, {})
+            : await listCharacters(EXTENSION_ID, null, { settingId: state.settingId });
+    const fieldsSetting = state.view === 'chat' ? (chatSetting ?? 'default') : state.settingId;
+    const runtimeFields = (await getCharacterRuntimeFields(EXTENSION_ID, fieldsSetting)) ?? [];
     if (token !== renderToken) return false;
-    Object.assign(state, { settings: settings ?? [], chatSetting, characters: characters ?? [] });
+    Object.assign(state, { settings: settings ?? [], chatSetting, characters: characters ?? [], runtimeFields });
+    // A fresh draft for the Runtime fields tab when it opens on a setting.
+    if (state.view === 'runtime' && state.runtimeDraft?.settingId !== state.settingId) {
+        state.runtimeDraft = { settingId: state.settingId, fields: draftFrom(runtimeFields) };
+    }
     return true;
 }
 
@@ -139,6 +156,13 @@ function toolbarHtml() {
                 </select>
             </label>
             <input type="search" class="text_pole pp-cm-search" data-cm="search" placeholder="Search names and aliases…" value="${escapeHtml(state.search)}" />`;
+    }
+    if (state.view === 'runtime') {
+        return `
+            <label class="pp-cm-field"><span>Setting</span>
+                <select class="text_pole" data-cm="setting">${settingOptions(state.settingId)}</select>
+            </label>
+            <small class="pp-cm-note">Runtime fields are what each character's state holds in a chat - written by the prompted update each turn (prompted fields) or set by hand in This chat (the others). They are cleared when a character leaves the scene.</small>`;
     }
     const setting = state.settings.find((s) => s.id === state.settingId);
     return `
@@ -182,6 +206,7 @@ function characterRow(c) {
                 ${c.aliases.length ? `<div class="pp-cm-aliases">Also: ${escapeHtml(c.aliases.join(', '))}</div>` : ''}
                 <div class="pp-cm-id" title="Identity key">${escapeHtml(c.id)}${chatView && c.matches ? ` · matched ${c.matches}×` : ''}</div>
                 ${c.introduction_snippet ? `<div class="pp-cm-snippet" title="Introduction - the sentence it was first met in (read-only)">“${escapeHtml(c.introduction_snippet)}”</div>` : ''}
+                ${chatView ? runtimeHtml(c) : ''}
             </div>
             <div class="pp-cm-actions">
                 <div class="menu_button fa-solid fa-pen" data-cm-action="edit" title="Edit (saving confirms it)"></div>
@@ -251,13 +276,82 @@ function editorHtml(c) {
         </div>`;
 }
 
+// ------------------------------------------------------------ runtime state
+
+function runtimeValueOf(c, field) {
+    return field.builtIn ? c.runtime?.[field.name] : c.runtime?.custom?.[field.name];
+}
+
+// A character's runtime state in This chat: prompted values read-only,
+// non-prompted ones as inputs.
+function runtimeHtml(c) {
+    if (!c.runtime) return '';
+    const cells = state.runtimeFields.map((field) => {
+        const value = runtimeValueOf(c, field);
+        let control;
+        if (field.prompted) {
+            control = `<span class="pp-cm-runtime-value${value === null || value === undefined ? ' pp-cm-runtime-empty' : ''}" title="Written by the prompted update each turn">${value === null || value === undefined ? '—' : escapeHtml(value)}</span>`;
+        } else if (field.type === 'enum') {
+            control = `<select class="text_pole" data-cm="runtimeValue" data-field="${escapeHtml(field.name)}"><option value="">—</option>${field.values.map((v) => `<option value="${escapeHtml(v)}"${v === value ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>`;
+        } else {
+            control = `<input type="${field.type === 'number' ? 'number' : 'text'}" class="text_pole" data-cm="runtimeValue" data-field="${escapeHtml(field.name)}" value="${escapeHtml(value ?? '')}"${field.min !== null && field.min !== undefined ? ` min="${field.min}"` : ''}${field.max !== null && field.max !== undefined ? ` max="${field.max}"` : ''} />`;
+        }
+        return `<label class="pp-cm-runtime-cell${field.prompted ? '' : ' pp-cm-runtime-manual'}" title="${escapeHtml(field.description || field.name)}${field.prompted ? '' : ' (set by hand)'}"><span>${escapeHtml(field.name)}</span>${control}</label>`;
+    }).join('');
+    return `<div class="pp-cm-runtime"><span class="pp-cm-runtime-head">Runtime${c.runtime.present ? '' : ' (not in the scene - cleared)'}</span>${cells}</div>`;
+}
+
+// The Runtime fields tab's editable copy: enum values as one comma list.
+function draftFrom(fields) {
+    return fields.map((f) => ({
+        name: f.name, type: f.type, prompted: f.prompted, description: f.description ?? '', builtIn: f.builtIn === true,
+        values: (f.values ?? []).join(', '), min: f.min ?? '', max: f.max ?? '',
+    }));
+}
+
+function draftToFields(draft) {
+    return draft.map((f) => ({
+        name: f.name.trim(), type: f.type, prompted: f.prompted, description: f.description,
+        ...(f.type === 'enum' ? { values: f.values.split(',').map((v) => v.trim()).filter(Boolean) } : {}),
+        ...(f.type === 'number' ? { min: f.min === '' ? null : Number(f.min), max: f.max === '' ? null : Number(f.max) } : {}),
+    }));
+}
+
+function runtimeEditorHtml() {
+    const draft = state.runtimeDraft?.fields ?? [];
+    const rows = draft.map((f, i) => `
+        <div class="pp-cm-rf-row" data-index="${i}">
+            <label class="pp-cm-field"><span>Name</span><input type="text" class="text_pole" data-rf="name" value="${escapeHtml(f.name)}"${f.builtIn ? ' readonly title="A built-in field - it cannot be renamed or removed"' : ' placeholder="e.g. amorousness"'} /></label>
+            <label class="pp-cm-field"><span>Type</span><select class="text_pole" data-rf="type">${['string', 'number', 'enum'].map((t) => `<option value="${t}"${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+            ${f.type === 'enum' ? `<label class="pp-cm-field pp-cm-rf-wide"><span>Values</span><input type="text" class="text_pole" data-rf="values" value="${escapeHtml(f.values)}" placeholder="comma separated: Low, Medium, High" /></label>` : ''}
+            ${f.type === 'number' ? `<label class="pp-cm-field"><span>Min</span><input type="number" class="text_pole" data-rf="min" value="${escapeHtml(f.min)}" /></label><label class="pp-cm-field"><span>Max</span><input type="number" class="text_pole" data-rf="max" value="${escapeHtml(f.max)}" /></label>` : ''}
+            <label class="pp-cm-field pp-cm-rf-wide"><span>Description (what the model is asked for)</span><input type="text" class="text_pole" data-rf="description" value="${escapeHtml(f.description)}" /></label>
+            <label class="checkbox_label pp-cm-check" title="Prompted: the prompted update writes it each turn. Off: you set it by hand in This chat."><input type="checkbox" data-rf="prompted"${f.prompted ? ' checked' : ''} /><span>Prompted</span></label>
+            ${f.builtIn ? '<span class="pp-cm-badge" title="Built-in">built-in</span>' : '<div class="menu_button fa-solid fa-trash-can" data-cm-action="removeRuntimeField" title="Remove this field"></div>'}
+        </div>`).join('');
+    return `
+        <div class="pp-cm-rf">
+            ${rows}
+            <div class="pp-cm-buttons">
+                <div class="menu_button" data-cm-action="addRuntimeField"><i class="fa-solid fa-plus"></i> Add field</div>
+                <div class="menu_button" data-cm-action="saveRuntimeFields"><i class="fa-solid fa-floppy-disk"></i> Save fields</div>
+                <div class="menu_button" data-cm-action="discardRuntimeFields">Discard changes</div>
+            </div>
+        </div>`;
+}
+
 function render() {
     if (!overlay) return;
     const chatId = currentChatId();
     overlay.querySelector('[data-cm="tabs"]').innerHTML = `
         <div class="menu_button pp-cm-tab${state.view === 'chat' ? ' pp-cm-tab-active' : ''}" data-cm-view="chat"${chatId ? '' : ' data-disabled="true" title="Open a chat"'}>This chat</div>
-        <div class="menu_button pp-cm-tab${state.view === 'setting' ? ' pp-cm-tab-active' : ''}" data-cm-view="setting">Settings</div>`;
+        <div class="menu_button pp-cm-tab${state.view === 'setting' ? ' pp-cm-tab-active' : ''}" data-cm-view="setting">Settings</div>
+        <div class="menu_button pp-cm-tab${state.view === 'runtime' ? ' pp-cm-tab-active' : ''}" data-cm-view="runtime">Runtime fields</div>`;
     overlay.querySelector('[data-cm="toolbar"]').innerHTML = toolbarHtml();
+    if (state.view === 'runtime') {
+        overlay.querySelector('[data-cm="list"]').innerHTML = runtimeEditorHtml();
+        return;
+    }
     const shown = visibleCharacters();
     const list = overlay.querySelector('[data-cm="list"]');
     const creating = state.editingId === 'new' ? `<div class="pp-cm-row pp-cm-new"><div class="pp-cm-main"><b>New character in ${escapeHtml(state.settings.find((s) => s.id === state.settingId)?.name ?? '')}</b></div>${editorHtml(null)}</div>` : '';
@@ -388,6 +482,24 @@ async function act(action, row, target) {
             if (refused(await deleteCharacterVariant(EXTENSION_ID, chatId, id, box.dataset.variant, options), 'Deleting the variant')) return;
             break;
         }
+        case 'addRuntimeField':
+            state.runtimeDraft.fields.push({ name: '', type: 'string', prompted: true, description: '', builtIn: false, values: '', min: '', max: '' });
+            render();
+            return;
+        case 'removeRuntimeField':
+            state.runtimeDraft.fields.splice(Number(target.closest('[data-index]').dataset.index), 1);
+            render();
+            return;
+        case 'discardRuntimeFields':
+            state.runtimeDraft = null;
+            break;
+        case 'saveRuntimeFields': {
+            const saved = await setCharacterRuntimeFields(EXTENSION_ID, state.runtimeDraft.settingId, draftToFields(state.runtimeDraft.fields));
+            if (refused(saved, 'Saving the runtime fields')) return;
+            state.runtimeDraft = { settingId: state.runtimeDraft.settingId, fields: draftFrom(saved) };
+            notify('success', 'Runtime fields saved.');
+            break;
+        }
         case 'newCharacter':
             state.editingId = 'new';
             render();
@@ -431,7 +543,19 @@ async function onChange(e) {
     } else if (key === 'setting') {
         state.settingId = e.target.value;
         state.editingId = null;
+        state.runtimeDraft = null;
         await reload();
+    } else if (key === 'runtimeValue') {
+        const row = e.target.closest('.pp-cm-row');
+        const value = e.target.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : (e.target.value || null);
+        if (refused(await setCharacterRuntimeValue(EXTENSION_ID, chatId, row.dataset.id, e.target.dataset.field, value), 'Setting the value')) return;
+        await refreshValues();
+        await reload();
+    } else if (e.target.dataset.rf) {
+        // A Runtime fields draft edit; a type change redraws (its options differ).
+        const field = state.runtimeDraft.fields[Number(e.target.closest('[data-index]').dataset.index)];
+        field[e.target.dataset.rf] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+        if (e.target.dataset.rf === 'type') render();
     } else if (key === 'chatSetting' && chatId && e.target.value) {
         if (refused(await setChatCharacterSetting(EXTENSION_ID, chatId, e.target.value), 'Choosing the setting')) return;
         await refreshValues();
@@ -497,6 +621,11 @@ function build() {
     });
     overlay.addEventListener('change', (e) => void onChange(e));
     overlay.addEventListener('input', (e) => {
+        if (e.target.dataset.rf && e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') {
+            const field = state.runtimeDraft?.fields[Number(e.target.closest('[data-index]').dataset.index)];
+            if (field) field[e.target.dataset.rf] = e.target.value;
+            return;
+        }
         if (e.target.dataset.cm === 'search') {
             state.search = e.target.value;
             const caret = e.target.selectionStart;
@@ -518,6 +647,7 @@ export async function openCharacterManager(options = {}) {
     if (!overlay) build();
     const chatId = currentChatId();
     state.view = options.view ?? (chatId ? 'chat' : 'setting');
+    state.runtimeDraft = null;
     state.filter = options.filter ?? 'all';
     state.focusId = options.characterId ?? null;
     state.editingId = null;

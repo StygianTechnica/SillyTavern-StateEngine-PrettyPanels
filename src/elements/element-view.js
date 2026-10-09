@@ -9,8 +9,10 @@
 // rather than writing anything itself.
 
 import {
-    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, elementLabel, bindingRef, rolePublicName,
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, elementLabel, bindingRef, rolePublicName,
 } from './element-model.js';
+import { renderCharacterTiles } from './character-tiles.js';
+import { getValue as liveValue, getImage as liveImage } from '../chat/variable-service.js';
 import { renderWidget } from './widgets.js';
 import { renderShape } from './shapes.js';
 import { renderClock, ELEMENT_TYPE_ANALOG_CLOCK } from './clock.js';
@@ -41,6 +43,7 @@ export function releasePaneFocus() {
 // What a bound element's tooltip names: the variable, or the role (its
 // public name, and its id - namespace included).
 function bindingTitle(binding) {
+    if (binding.char) return `Character field "${binding.char}" - each card's character`;
     return binding.role ? `Role "${rolePublicName(binding.role)}" (${binding.role})` : binding.name;
 }
 
@@ -48,6 +51,7 @@ function bindingTitle(binding) {
 // role this chat has not assigned (the variable's own value is rarely
 // missing once it is assigned).
 function missingTitle(binding) {
+    if (binding.char) return `${bindingTitle(binding)}: no value for this character`;
     return binding.role
         ? `${bindingTitle(binding)}: not assigned in this chat (Pretty Panels drawer → Layout Roles), or its variable has no value`
         : `${binding.name}: no value in this chat (is its preset active?)`;
@@ -76,6 +80,16 @@ export function renderElementContent(container, stored, entry, theme = null, con
 
     container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
+    container.classList.toggle('pp-kind-character', element.type === ELEMENT_TYPE_CHARACTER);
+    if (element.type === ELEMENT_TYPE_CHARACTER) {
+        renderCharacterElement(container, element, entry);
+        return;
+    }
+    // Back from a Character element: a plain value area again.
+    if (valueEl.classList.contains('pp-character-tiles')) {
+        valueEl.className = 'pp-element-value';
+        valueEl.style.removeProperty('gap');
+    }
     container.classList.toggle('pp-kind-clock', element.type === ELEMENT_TYPE_ANALOG_CLOCK);
     if (element.type === ELEMENT_TYPE_SHAPE) {
         container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
@@ -150,6 +164,35 @@ export function renderElementContent(container, stored, entry, theme = null, con
     } else {
         valueEl.textContent = shown.text;
     }
+}
+
+// A Character element: its variable's character(s) as cards of its
+// template (character-tiles.js), or the built-in card.
+function renderCharacterElement(container, element, entry) {
+    container.classList.remove('pp-kind-widget', 'pp-kind-free-text', 'pp-element-unbound', 'pp-element-missing');
+    applyElementStyle(container, {});
+    container.querySelector('.pp-element-label').hidden = true;
+    const valueEl = container.querySelector('.pp-element-value');
+    if (!element.binding || entry === undefined) {
+        container.classList.add(element.binding ? 'pp-element-missing' : 'pp-element-unbound');
+        valueEl.className = 'pp-element-value';
+        valueEl.textContent = '—';
+        container.title = !element.binding ? 'Unbound - drag a character variable (or a list of characters) onto this element' : missingTitle(element.binding);
+        return;
+    }
+    container.title = bindingTitle(element.binding);
+    const def = entry.def;
+    const { textCase, value: options } = normalizeFormat(element.format);
+    renderCharacterTiles(valueEl, element, entry.value, def?.type === 'array' || Array.isArray(entry.value), {
+        getCharacter, getValue: liveValue, getImage: liveImage,
+        onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+        cardOptions: {
+            showPresence: options.characterPresence,
+            showAliases: options.characterAliases,
+            caseText: (text) => applyTextCase(text, textCase),
+            onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+        },
+    });
 }
 
 // Image variable elements: opacity, fit and clipping of the <img>, as CSS

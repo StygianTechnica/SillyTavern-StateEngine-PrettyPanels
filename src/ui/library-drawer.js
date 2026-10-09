@@ -1,10 +1,12 @@
-// The Layout Library and Panel Library sections of the Pretty Panels
+// The Layout Library, Panel Library and Character Templates sections of the Pretty Panels
 // drawer (markup in settings.html). Layout actions: choose this chat's
 // layout (src/chat/chat-session.js), new, duplicate, rename, delete,
 // export, import - all but new and import act on the layout on screen, so
 // they need one shown. Panel Library management:
 // view, rename, delete, export, import - none of which touch the active
-// layout or create instances. Both lists re-render on any library change.
+// layout or create instances. Character Templates: new, edit (the
+// template editor), rename, duplicate, export, delete, import. Every list
+// re-renders on any library change.
 
 import {
     listLayouts,
@@ -23,6 +25,16 @@ import {
     exportTemplate,
     importTemplate,
 } from '../library/panel-library.js';
+import {
+    listCharacterTemplates,
+    createCharacterTemplate,
+    renameCharacterTemplate,
+    duplicateCharacterTemplate,
+    deleteCharacterTemplate,
+    exportCharacterTemplate,
+    importCharacterTemplate,
+} from '../library/character-template-library.js';
+import { openTemplateEditor } from '../panels/template-editor.js';
 import { KIND, readPayload } from '../library/format.js';
 import { onLibraryChange } from '../storage/store.js';
 import { removeLayout } from '../panels/panel-manager.js';
@@ -89,9 +101,41 @@ function renderTemplates() {
     }));
 }
 
+function renderCharacterTemplates() {
+    const list = document.getElementById('pp_char_template_list');
+    if (!list) return;
+    const templates = listCharacterTemplates();
+    if (templates.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'pp-template-empty';
+        empty.textContent = 'No character templates yet.';
+        list.replaceChildren(empty);
+        return;
+    }
+    list.replaceChildren(...templates.map((t) => {
+        const row = document.createElement('div');
+        row.className = 'pp-template-row';
+        row.dataset.id = t.id;
+        row.innerHTML = `
+            <span class="pp-template-name"></span>
+            <span class="pp-template-size"></span>
+            <div class="menu_button fa-solid fa-pen-ruler" data-action="edit" title="Edit in the template editor"></div>
+            <div class="menu_button fa-solid fa-pen" data-action="rename" title="Rename template"></div>
+            <div class="menu_button fa-solid fa-clone" data-action="duplicate" title="Duplicate template"></div>
+            <div class="menu_button fa-solid fa-file-export" data-action="export" title="Export template (with its bindings and roles)"></div>
+            <div class="menu_button fa-solid fa-trash-can" data-action="delete" title="Delete template"></div>
+        `;
+        row.querySelector('.pp-template-name').textContent = t.name;
+        row.querySelector('.pp-template-name').title = t.name;
+        row.querySelector('.pp-template-size').textContent = `${t.width} × ${t.height}`;
+        return row;
+    }));
+}
+
 function render() {
     renderLayouts();
     renderTemplates();
+    renderCharacterTemplates();
 }
 
 async function importFile(kind, apply) {
@@ -167,6 +211,43 @@ const templateActions = {
     },
 };
 
+const characterTemplateActions = {
+    async new() {
+        const name = await promptText('Name for the new character template:', 'Character Card');
+        if (!name) return;
+        openTemplateEditor(createCharacterTemplate(name).id);
+    },
+    edit(id) {
+        openTemplateEditor(id);
+    },
+    async rename(id) {
+        const current = listCharacterTemplates().find((t) => t.id === id);
+        const name = current && await promptText('Rename character template:', current.name);
+        if (name) renameCharacterTemplate(id, name);
+    },
+    duplicate(id) {
+        const copy = duplicateCharacterTemplate(id);
+        if (copy) notify('success', `Created "${copy.name}".`);
+    },
+    async export(id) {
+        const payload = exportCharacterTemplate(id) && await attachFonts(exportCharacterTemplate(id));
+        if (payload) downloadJson(`${safeFilename(payload.data.name)}.character.json`, payload);
+    },
+    async delete(id) {
+        const current = listCharacterTemplates().find((t) => t.id === id);
+        if (!current) return;
+        const ok = await confirmYesNo(`Delete the character template "${current.name}"? Character elements using it go back to the built-in card.`);
+        if (ok) deleteCharacterTemplate(id);
+    },
+    import() {
+        return importFile(KIND.CHARACTER_TEMPLATE, (data) => {
+            const { summary, conflicts } = importCharacterTemplate(data);
+            notify('success', `Imported "${summary.name}" into Character Templates.`);
+            if (conflicts.length) notify('warning', `These roles already existed with another type and kept it: ${conflicts.join(', ')}.`);
+        });
+    },
+};
+
 export function initLibraryDrawer() {
     const root = document.getElementById('pretty_panels_settings');
     if (!root) return;
@@ -193,6 +274,14 @@ export function initLibraryDrawer() {
         const button = e.target.closest('[data-action]');
         const row = button?.closest('.pp-template-row');
         if (row) void templateActions[button.dataset.action](row.dataset.id);
+    });
+
+    document.getElementById('pp_char_template_new')?.addEventListener('click', () => void characterTemplateActions.new());
+    document.getElementById('pp_char_template_import')?.addEventListener('click', () => void characterTemplateActions.import());
+    document.getElementById('pp_char_template_list')?.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-action]');
+        const row = button?.closest('.pp-template-row');
+        if (row) void characterTemplateActions[button.dataset.action](row.dataset.id);
     });
 
     render();
