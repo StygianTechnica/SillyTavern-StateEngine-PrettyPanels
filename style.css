@@ -890,9 +890,12 @@ body.pp-editing .pp-panel.pp-locked .pp-element-resize {
 
 /* ---------- Element outlines while another element is dragged ---------- */
 
+/* Drawn just inside each element's box, so elements touching the panel's
+   edge (common in small character templates) aren't clipped by the canvas. */
 body.pp-editing .pp-element.pp-element-outline {
-    outline: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 22%, transparent);
-    outline-offset: 0;
+    outline: 1px dashed color-mix(in srgb, var(--SmartThemeQuoteColor) 75%, transparent);
+    outline-offset: -1px;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, var(--pp-el-bg, transparent));
 }
 
 /* ---------- Element Styling (src/elements/element-style.js) ---------- */
