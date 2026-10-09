@@ -2870,7 +2870,13 @@ body.pp-editing .pp-panel.pp-template-card {
     font-size: 2em;
 }
 
-/* The template editor: never mistaken for a layout panel. */
+/* The template editor: never mistaken for a layout panel. Unlike layout
+   panels (kept below SillyTavern's drawers) it is temporary and opened from
+   the drawer, so it sits above the drawers - below its properties pane
+   (3100) and the drag ghost (3300). */
+.pp-panel.pp-template-editor {
+    z-index: 3095 !important;
+}
 body.pp-editing .pp-panel.pp-template-editor {
     outline: 2px dashed var(--SmartThemeQuoteColor);
     outline-offset: 3px;
