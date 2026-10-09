@@ -18,6 +18,7 @@ import { listVariables } from '../api/list-variables.js';
 import { createVariable } from '../api/create-variable.js';
 import { activatePreset } from '../api/activate-preset.js';
 import { getVariableValues } from '../api/get-variable-values.js';
+import { listAllVariables } from '../api/list-all-variables.js';
 import { setVariableValue } from '../api/set-variable-value.js';
 
 export const CONFIG_PRESET_NAME = 'PP Configuration';
@@ -63,6 +64,19 @@ export async function readChatLayoutId(chatId) {
     const values = await getVariableValues(EXTENSION_ID, chatId, [LAYOUT_VARIABLE]);
     const value = values?.[LAYOUT_VARIABLE]?.value;
     return typeof value === 'string' && value ? value : null;
+}
+
+// A chat that has a stored layout choice but PP Configuration switched off
+// (e.g. deactivated by hand in State Engine's manager) still shows the
+// layout - the value stays stored - but a new chat continuing from it would
+// not carry the choice (only active presets' variables are copied). This
+// switches the preset back on. True if it had to.
+export async function ensureConfigActive(chatId) {
+    if (!chatId) return false;
+    const presets = (await listAllVariables(EXTENSION_ID, chatId)) ?? [];
+    const config = presets.find((p) => p.namespace === NAMESPACE && p.name === CONFIG_PRESET_NAME);
+    if (!config || config.active) return false;
+    return activatePreset(EXTENSION_ID, chatId, NAMESPACE, CONFIG_PRESET_NAME);
 }
 
 // Records this chat's layout choice, activating the preset first so the

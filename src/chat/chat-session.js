@@ -39,7 +39,7 @@ import { listLayoutRoles } from '../library/role-library.js';
 import {
     switchLayout, setLayoutShown, getBoundVariableNames, getBoundImageNames, getBoundRoleIds, onBindingsChange, refreshPanels,
 } from '../panels/panel-manager.js';
-import { ensureConfigPreset, readChatLayoutId, writeChatLayoutId } from './pp-config.js';
+import { ensureConfigPreset, ensureConfigActive, readChatLayoutId, writeChatLayoutId } from './pp-config.js';
 import {
     VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, refreshRoles, loadCatalog, isCatalogWatched,
 } from './variable-service.js';
@@ -176,6 +176,9 @@ export async function showChatLayout() {
     }
     if (chatId !== currentChatId()) return; // the chat changed again meanwhile
     chosenForChat = !!(stored && getLayout(stored));
+    // Keep the choice inheritable by a continued chat (pp-config.js).
+    if (chosenForChat) await ensureConfigActive(chatId).catch((err) => console.warn('[PrettyPanels] could not reactivate PP Configuration', err));
+    if (chatId !== currentChatId()) return;
     showLayout(chosenForChat ? stored : null);
     missingRoles = [];
     roleCheckFailed = false;
