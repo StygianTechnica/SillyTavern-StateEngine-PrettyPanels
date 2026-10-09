@@ -9,6 +9,9 @@
 //              personality, faction, role (the active variant's), present
 //   runtime    thought, mood, intent (built in), and the setting's own
 //              runtime fields as "custom.<name>" (State Engine spec 1.43)
+//   icons      "icon.<name>" for every enum runtime field: the image its
+//              current value has (State Engine spec 1.46 - runtime.images,
+//              already checked for <img src>), drawn like any image field
 //
 // Outside a template there is no character, so a character field has no
 // value there.
@@ -27,7 +30,8 @@ export const CHARACTER_IDENTITY_FIELDS = [
 ];
 const BUILT_IN_RUNTIME = ['thought', 'mood', 'intent'];
 const CUSTOM_PREFIX = 'custom.';
-const FIELD_PATTERN = /^(?:[a-z_]+|custom\.[a-z][a-z0-9_]{0,39})$/;
+const ICON_PREFIX = 'icon.';
+const FIELD_PATTERN = /^(?:[a-z_]+|(?:custom|icon)\.[a-z][a-z0-9_]{0,39})$/;
 
 export function isCharacterField(field) {
     return typeof field === 'string' && FIELD_PATTERN.test(field);
@@ -35,6 +39,10 @@ export function isCharacterField(field) {
 
 function runtimeType(type) {
     return type === 'number' ? 'number' : 'string';
+}
+
+function labelFor(name) {
+    return name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ');
 }
 
 // The fields a template can use, for the Character palette: identity, then
@@ -45,17 +53,28 @@ export function characterFieldList(runtimeFields = []) {
     const fields = runtimeFields.length ? runtimeFields : BUILT_IN_RUNTIME.map((name) => ({ name, type: 'string', builtIn: true }));
     const runtime = fields.map((f) => ({
         field: f.builtIn ? f.name : `${CUSTOM_PREFIX}${f.name}`,
-        label: f.name.charAt(0).toUpperCase() + f.name.slice(1).replace(/_/g, ' '),
+        label: labelFor(f.name),
         type: runtimeType(f.type),
         group: 'Runtime state',
         description: f.description ?? '',
     }));
-    return [...identity, ...runtime];
+    // An image in place of the word, from the enum's images.
+    const icons = fields.filter((f) => f.type === 'enum').map((f) => ({
+        field: `${ICON_PREFIX}${f.name}`,
+        label: `${labelFor(f.name)} (icon)`,
+        type: 'image',
+        group: 'Runtime state',
+        description: `The image set for the current ${f.name.replace(/_/g, ' ')} (Character Manager > Runtime fields > Images).`,
+    }));
+    return [...identity, ...runtime, ...icons];
 }
 
 // A display definition for a character field (the shape a variable's has):
 // labels and formats an element bound to it.
 export function characterFieldDef(field) {
+    if (field.startsWith(ICON_PREFIX)) {
+        return { name: `char:${field}`, type: 'image', label: `${labelFor(field.slice(ICON_PREFIX.length))} (icon)`, characterField: field };
+    }
     const known = CHARACTER_IDENTITY_FIELDS.find(([f]) => f === field);
     const label = known ? known[1] : (field.startsWith(CUSTOM_PREFIX) ? field.slice(CUSTOM_PREFIX.length) : field).replace(/_/g, ' ');
     return { name: `char:${field}`, type: known ? known[2] : 'string', label: label.charAt(0).toUpperCase() + label.slice(1), characterField: field };
@@ -66,6 +85,7 @@ export function characterFieldValue(character, field) {
     if (!character) return undefined;
     if (BUILT_IN_RUNTIME.includes(field)) return character.runtime?.[field] ?? undefined;
     if (field.startsWith(CUSTOM_PREFIX)) return character.runtime?.custom?.[field.slice(CUSTOM_PREFIX.length)] ?? undefined;
+    if (field.startsWith(ICON_PREFIX)) return character.runtime?.images?.[field.slice(ICON_PREFIX.length)] ?? undefined;
     if (field === 'present') return character.runtime?.present ?? character.present ?? false;
     const value = character[field];
     return value === null || value === '' ? undefined : value;

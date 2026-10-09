@@ -2790,6 +2790,13 @@ body.pp-editing .pp-character-card {
 .pp-cm-rf-row .pp-cm-rf-wide { flex: 1 1 16em; }
 .pp-cm-rf-row .menu_button { margin: 0; }
 .pp-cm-rf-row input[readonly] { opacity: 0.7; }
+.pp-cm-rf-row .pp-cm-rf-full { flex: 1 1 100%; }
+.pp-cm-rf-images summary { cursor: pointer; opacity: 0.85; }
+.pp-cm-rf-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 6px; }
+.pp-cm-rf-image { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; gap: 2px 6px; align-items: center; }
+.pp-cm-rf-image-preview { grid-row: 1 / 3; width: 36px; height: 36px; border-radius: 6px; border: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.pp-cm-rf-image-preview img { width: 100%; height: 100%; object-fit: contain; }
+.pp-cm-rf-image-value { font-size: 0.9em; font-weight: 600; }
 .pp-cm-actions { display: flex; gap: 4px; }
 .pp-cm-actions .menu_button { margin: 0; }
 .pp-cm-editor { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent); }

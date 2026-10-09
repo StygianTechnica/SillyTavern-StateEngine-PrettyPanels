@@ -199,7 +199,8 @@ export function rolePublicName(id) {
 
 // A character field ref ("char:name") - character templates only.
 export const CHAR_REF_PREFIX = 'char:';
-const CHAR_FIELD = /^(?:[a-z_]+|custom\.[a-z][a-z0-9_]{0,39})$/;
+// "icon.<name>": the image an enum runtime field's value has (character-fields.js).
+const CHAR_FIELD = /^(?:[a-z_]+|(?:custom|icon)\.[a-z][a-z0-9_]{0,39})$/;
 
 export function isCharRef(ref) {
     return typeof ref === 'string' && ref.startsWith(CHAR_REF_PREFIX);

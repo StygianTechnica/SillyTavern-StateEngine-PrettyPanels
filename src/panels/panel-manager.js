@@ -73,6 +73,7 @@ import {
 import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
 import { addLayoutRole } from '../library/role-library.js';
 import { ELEMENT_TYPE_ANALOG_CLOCK, clockImageVariables } from '../elements/clock.js';
+import { refreshElementTitles } from '../elements/element-view.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
@@ -1086,6 +1087,7 @@ function applyState() {
     const enabled = isEnabled();
     const editing = enabled && isEditingMode();
     document.body.classList.toggle('pp-editing', editing);
+    refreshElementTitles(); // tooltips: bindings while editing, values otherwise
     if (!editing) {
         for (const panel of panels.values()) panel.closeProperties();
         if (selection.length) setSelection([]);

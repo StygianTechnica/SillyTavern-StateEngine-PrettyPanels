@@ -57,6 +57,36 @@ function missingTitle(binding) {
         : `${binding.name}: no value in this chat (is its preset active?)`;
 }
 
+// An element's tooltip depends on the mode: in Editing Mode, what it is
+// bound to (or why it shows nothing); otherwise just what it shows - the
+// value as text, or nothing. Both are kept on the element so switching
+// modes (refreshElementTitles) needs no redraw.
+function setTitles(container, editTitle, valueTitle = '') {
+    container.dataset.ppEditTitle = editTitle;
+    container.dataset.ppValueTitle = valueTitle;
+    applyTitle(container);
+}
+
+function applyTitle(container) {
+    container.title = (document.body.classList.contains('pp-editing') ? container.dataset.ppEditTitle : container.dataset.ppValueTitle) ?? '';
+}
+
+// After Editing Mode turns on or off (panel-manager.js applyState).
+export function refreshElementTitles(root = document) {
+    for (const el of root.querySelectorAll('.pp-element[data-pp-edit-title]')) applyTitle(el);
+}
+
+// A value as tooltip text: how the element formats it (an image has none).
+function valueTitle(entry, element, theme) {
+    if (entry === undefined) return '';
+    try {
+        const shown = formatText(entry.value, entry.def ?? null, element.format, theme?.formatting);
+        return shown.image ? '' : String(shown.text ?? '');
+    } catch {
+        return '';
+    }
+}
+
 function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
 }
@@ -94,7 +124,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
     if (element.type === ELEMENT_TYPE_SHAPE) {
         container.classList.remove('pp-kind-widget', 'pp-element-unbound', 'pp-element-missing');
         applyElementStyle(container, {});
-        container.title = 'Shape';
+        setTitles(container, 'Shape');
         renderShape(container, element);
         return;
     }
@@ -105,7 +135,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
         applyElementStyle(container, element.style);
         valueEl.textContent = formatPlainText(element.content || '', element.format);
         container.classList.toggle('pp-element-empty', !element.content);
-        container.title = 'Free text';
+        setTitles(container, 'Free text');
         return;
     }
     if (element.type !== ELEMENT_TYPE_TEXT) {
@@ -113,9 +143,10 @@ export function renderElementContent(container, stored, entry, theme = null, con
         applyElementStyle(container, {}); // text styling never applies to widgets
         container.classList.toggle('pp-element-unbound', !element.binding);
         container.classList.toggle('pp-element-missing', !!element.binding && entry === undefined);
-        container.title = !element.binding
+        setTitles(container, !element.binding
             ? 'Unbound - drag a variable onto this element to bind it'
-            : (entry === undefined ? missingTitle(element.binding) : bindingTitle(element.binding));
+            : (entry === undefined ? missingTitle(element.binding) : bindingTitle(element.binding)),
+        element.type === ELEMENT_TYPE_ANALOG_CLOCK ? '' : valueTitle(entry, element, theme));
         if (element.type === ELEMENT_TYPE_ANALOG_CLOCK) renderClock(container.querySelector('.pp-widget'), element, entry, clockDefaultsFor(element, theme, context));
         else renderWidget(container, element, entry, theme?.formatting);
         return;
@@ -131,16 +162,16 @@ export function renderElementContent(container, stored, entry, theme = null, con
     if (!element.binding) {
         container.classList.add('pp-element-unbound');
         valueEl.textContent = '—';
-        container.title = 'Unbound - drag a variable onto this element to bind it';
+        setTitles(container, 'Unbound - drag a variable onto this element to bind it');
         return;
     }
     if (entry === undefined) {
         container.classList.add('pp-element-missing');
         valueEl.textContent = '—';
-        container.title = missingTitle(element.binding);
+        setTitles(container, missingTitle(element.binding));
         return;
     }
-    container.title = bindingTitle(element.binding);
+    setTitles(container, bindingTitle(element.binding), valueKind(def, entry.value) === 'character' ? '' : valueTitle(entry, element, theme));
     // A character (or a list of characters) draws cards (spec 1.42).
     if (valueKind(def, entry.value) === 'character') {
         const { textCase, value: options } = normalizeFormat(element.format);
@@ -177,10 +208,10 @@ function renderCharacterElement(container, element, entry) {
         container.classList.add(element.binding ? 'pp-element-missing' : 'pp-element-unbound');
         valueEl.className = 'pp-element-value';
         valueEl.textContent = '—';
-        container.title = !element.binding ? 'Unbound - drag a character variable (or a list of characters) onto this element' : missingTitle(element.binding);
+        setTitles(container, !element.binding ? 'Unbound - drag a character variable (or a list of characters) onto this element' : missingTitle(element.binding));
         return;
     }
-    container.title = bindingTitle(element.binding);
+    setTitles(container, bindingTitle(element.binding));
     const def = entry.def;
     const { textCase, value: options } = normalizeFormat(element.format);
     renderCharacterTiles(valueEl, element, entry.value, def?.type === 'array' || Array.isArray(entry.value), {

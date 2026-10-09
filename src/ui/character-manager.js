@@ -301,20 +301,42 @@ function runtimeHtml(c) {
     return `<div class="pp-cm-runtime"><span class="pp-cm-runtime-head">Runtime${c.runtime.present ? '' : ' (not in the scene - cleared)'}</span>${cells}</div>`;
 }
 
-// The Runtime fields tab's editable copy: enum values as one comma list.
+// The Runtime fields tab's editable copy: enum values as one comma list,
+// and an enum's images (State Engine spec 1.46) as { [value]: reference }.
 function draftFrom(fields) {
     return fields.map((f) => ({
         name: f.name, type: f.type, prompted: f.prompted, description: f.description ?? '', builtIn: f.builtIn === true,
-        values: (f.values ?? []).join(', '), min: f.min ?? '', max: f.max ?? '',
+        values: (f.values ?? []).join(', '), images: { ...(f.images ?? {}) }, min: f.min ?? '', max: f.max ?? '',
     }));
+}
+
+function draftValues(f) {
+    return f.values.split(',').map((v) => v.trim()).filter(Boolean);
 }
 
 function draftToFields(draft) {
     return draft.map((f) => ({
         name: f.name.trim(), type: f.type, prompted: f.prompted, description: f.description,
-        ...(f.type === 'enum' ? { values: f.values.split(',').map((v) => v.trim()).filter(Boolean) } : {}),
+        ...(f.type === 'enum' ? { values: draftValues(f), images: f.images ?? {} } : {}),
         ...(f.type === 'number' ? { min: f.min === '' ? null : Number(f.min), max: f.max === '' ? null : Number(f.max) } : {}),
     }));
+}
+
+// An enum's images: one URL box, upload button and preview per value. A
+// card template shows the image in place of the word ("Mood (icon)").
+function enumImagesHtml(f) {
+    const values = draftValues(f);
+    if (!values.length) return '';
+    const cells = values.map((value) => `
+        <div class="pp-cm-rf-image" title="Shown in place of &quot;${escapeHtml(value)}&quot; by a card template's icon element">
+            <span class="pp-cm-rf-image-preview" data-rf-preview="${escapeHtml(f.images?.[value] ?? '')}"></span>
+            <span class="pp-cm-rf-image-value">${escapeHtml(value)}</span>
+            <div class="pp-cm-image-row">
+                <input type="text" class="text_pole" data-rf-image="${escapeHtml(value)}" value="${escapeHtml(f.images?.[value] ?? '')}" placeholder="URL or user/images/... path" />
+                <div class="menu_button fa-solid fa-upload" data-cm-upload="rf" title="Upload an image"></div>
+            </div>
+        </div>`).join('');
+    return `<details class="pp-cm-rf-images pp-cm-rf-full"${Object.keys(f.images ?? {}).length ? ' open' : ''}><summary>Images (optional - an icon per value)</summary><div class="pp-cm-rf-image-grid">${cells}</div></details>`;
 }
 
 function runtimeEditorHtml() {
@@ -328,6 +350,7 @@ function runtimeEditorHtml() {
             <label class="pp-cm-field pp-cm-rf-wide"><span>Description (what the model is asked for)</span><input type="text" class="text_pole" data-rf="description" value="${escapeHtml(f.description)}" /></label>
             <label class="checkbox_label pp-cm-check" title="Prompted: the prompted update writes it each turn. Off: you set it by hand in This chat."><input type="checkbox" data-rf="prompted"${f.prompted ? ' checked' : ''} /><span>Prompted</span></label>
             ${f.builtIn ? '<span class="pp-cm-badge" title="Built-in">built-in</span>' : '<div class="menu_button fa-solid fa-trash-can" data-cm-action="removeRuntimeField" title="Remove this field"></div>'}
+            ${f.type === 'enum' ? enumImagesHtml(f) : ''}
         </div>`).join('');
     return `
         <div class="pp-cm-rf">
@@ -349,7 +372,9 @@ function render() {
         <div class="menu_button pp-cm-tab${state.view === 'runtime' ? ' pp-cm-tab-active' : ''}" data-cm-view="runtime">Runtime fields</div>`;
     overlay.querySelector('[data-cm="toolbar"]').innerHTML = toolbarHtml();
     if (state.view === 'runtime') {
-        overlay.querySelector('[data-cm="list"]').innerHTML = runtimeEditorHtml();
+        const list = overlay.querySelector('[data-cm="list"]');
+        list.innerHTML = runtimeEditorHtml();
+        for (const slot of list.querySelectorAll('[data-rf-preview]')) showPreview(slot, slot.dataset.rfPreview);
         return;
     }
     const shown = visibleCharacters();
@@ -555,7 +580,8 @@ async function onChange(e) {
         // A Runtime fields draft edit; a type change redraws (its options differ).
         const field = state.runtimeDraft.fields[Number(e.target.closest('[data-index]').dataset.index)];
         field[e.target.dataset.rf] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-        if (e.target.dataset.rf === 'type') render();
+        // The values decide which image boxes there are.
+        if (e.target.dataset.rf === 'type' || e.target.dataset.rf === 'values') render();
     } else if (key === 'chatSetting' && chatId && e.target.value) {
         if (refused(await setChatCharacterSetting(EXTENSION_ID, chatId, e.target.value), 'Choosing the setting')) return;
         await refreshValues();
@@ -572,6 +598,28 @@ async function onChange(e) {
     }
 }
 
+// An enum image's preview (src set as a property, never as markup).
+function showPreview(slot, reference) {
+    slot.replaceChildren();
+    if (!reference) return;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.addEventListener('error', () => img.remove(), { once: true });
+    img.src = reference;
+    slot.append(img);
+}
+
+// An enum image box edited (typed, pasted, uploaded): into the draft, and its preview.
+function onEnumImageEdit(input) {
+    const field = state.runtimeDraft?.fields[Number(input.closest('[data-index]').dataset.index)];
+    if (!field) return;
+    field.images = { ...(field.images ?? {}) };
+    const reference = input.value.trim();
+    if (reference) field.images[input.dataset.rfImage] = reference;
+    else delete field.images[input.dataset.rfImage];
+    showPreview(input.closest('.pp-cm-rf-image').querySelector('[data-rf-preview]'), reference);
+}
+
 async function onUpload(button) {
     const file = await pickImageFile();
     if (!file) return;
@@ -579,6 +627,7 @@ async function onUpload(button) {
         const path = await importImageFile(EXTENSION_ID, file, { folder: IMAGE_FOLDER });
         const field = button.closest('.pp-cm-image-row').querySelector('input');
         field.value = path;
+        if (field.dataset.rfImage !== undefined) onEnumImageEdit(field);
         notify('info', 'Image uploaded - Save to keep it.');
     } catch (err) {
         notify('error', err?.message ?? 'The image could not be uploaded.');
@@ -621,6 +670,10 @@ function build() {
     });
     overlay.addEventListener('change', (e) => void onChange(e));
     overlay.addEventListener('input', (e) => {
+        if (e.target.dataset.rfImage !== undefined) {
+            onEnumImageEdit(e.target);
+            return;
+        }
         if (e.target.dataset.rf && e.target.type !== 'checkbox' && e.target.tagName !== 'SELECT') {
             const field = state.runtimeDraft?.fields[Number(e.target.closest('[data-index]').dataset.index)];
             if (field) field[e.target.dataset.rf] = e.target.value;

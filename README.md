@@ -27,6 +27,9 @@ activation.
     element is dragged, the panel's other elements are faintly outlined.
 - Locked panels (and their elements) can't be moved, resized or edited until unlocked; in
   Editing Mode they show a small lock icon, and their properties are read-only except Unlock.
+- **Tooltips** - in Editing Mode, hovering an element names what it is bound to (or why it
+  shows nothing); outside Editing Mode it shows just the value, as the element formats it
+  (images, clocks and empty elements have none).
 
 ### Layout Tools
 
@@ -352,8 +355,9 @@ variables. The characters themselves - and every rule about them - are State Eng
   panel has (lock, layering, anchor, Panel Library). The properties pane's palette gains a
   **Character** tab: the card's character fields - name, image, aliases, in the scene, faction,
   role, biography, personality, introduction, and the runtime state (thought, mood, intent and
-  the setting's own runtime fields). Template elements can show variables and roles too, and
-  images. Unlike panel templates, character templates **keep their bindings**; an export
+  the setting's own runtime fields). Every enum runtime field also has an **icon** field
+  ("Mood (icon)"): the image set for its current value, drawn like any image element - an icon
+  in place of the word. Template elements can show variables and roles too, and images. Unlike panel templates, character templates **keep their bindings**; an export
   carries them with the definitions of the roles they use, and a layout export carries the
   character templates its Character elements use. Edits show on the cards as you make them.
 - **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat
@@ -375,7 +379,9 @@ variables. The characters themselves - and every rule about them - are State Eng
   - **Runtime fields**: a setting's runtime field definitions - the built-in thought, mood
     (an enum - edit its values) and intent, plus your own string, number (with min/max) or enum
     fields, each with a description (what the model is asked for) and **Prompted** on (the
-    prompted update fills it) or off (you set it in This chat). Edit, then **Save fields**.
+    prompted update fills it) or off (you set it in This chat). An enum field's **Images**
+    section takes an image per value (a URL or an upload; optional) for its icon field. Edit,
+    then **Save fields**.
   Actions: edit (name, aliases, image - a URL or an upload - faction, role, biography,
   personality; saving confirms the character), confirm, **resolve** an unconfirmed character to
   one you already have (its detected name becomes their alias, and they are confirmed), merge
