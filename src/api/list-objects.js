@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's setCharacterRuntimeFields() call.
+// Thin wrapper around the Object API's listObjects() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Replaces a setting's runtime fields (built-ins are kept; enum values validated). Returns the new list, or null. See the State Engine API Reference, "Character API".
-export async function setCharacterRuntimeFields(extensionId, settingId, fields) {
+// A chat's objects of `type` (its own, then its setting's), or with { settingId } a setting's canonical ones. See the State Engine API Reference, "Object API".
+export async function listObjects(extensionId, chatId, type, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.setCharacterRuntimeFields(extensionId, ensureInstanceId(), settingId, fields);
+    return stateEngine.listObjects(extensionId, ensureInstanceId(), chatId, type, options);
 }

@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's setCharacterActiveVariant() call.
+// Thin wrapper around the Object API's resolveObject() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Chooses the variant a character uses (null = its base). Returns the character, or null. See the State Engine API Reference, "Character API".
-export async function setCharacterActiveVariant(extensionId, chatId, id, variantId, options) {
+// A detection that is really a known object: merged into it, which is then confirmed. See the State Engine API Reference, "Object API".
+export async function resolveObject(extensionId, chatId, sourceId, targetId, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.setCharacterActiveVariant(extensionId, ensureInstanceId(), chatId, id, variantId, options);
+    return stateEngine.resolveObject(extensionId, ensureInstanceId(), chatId, sourceId, targetId, options);
 }

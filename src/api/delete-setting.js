@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's listCharacters() call.
+// Thin wrapper around the Object API's deleteSetting() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// A chat's characters (its own and its setting's), or with { settingId } a setting's canonical characters. See the State Engine API Reference, "Character API".
-export async function listCharacters(extensionId, chatId, options) {
+// Deletes a setting and its objects (Default cannot be deleted). See the State Engine API Reference, "Object API".
+export async function deleteSetting(extensionId, settingId) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.listCharacters(extensionId, ensureInstanceId(), chatId, options);
+    return stateEngine.deleteSetting(extensionId, ensureInstanceId(), settingId);
 }

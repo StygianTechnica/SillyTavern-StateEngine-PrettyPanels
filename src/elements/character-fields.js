@@ -3,15 +3,23 @@
 // Each card a Character element draws is one character; an element bound to
 // a character field shows that card's character's value.
 //
+// A character is a State Engine OBJECT of type character (State Engine API
+// Reference, "Object API"): { name, aliases, image, description,
+// introduction_snippet, ...the type's fields, present, confirmed,
+// runtime: { present, values: { [field]: value }, images } }.
+//
 // A character-field binding is { char: field }, as a ref "char:<field>"
 // (element-model.js CHAR_REF_PREFIX). Fields:
-//   identity   name, aliases, image, introduction_snippet, biography,
-//              personality, faction, role (the active variant's), present
+//   identity   name, aliases, image, introduction_snippet, description and
+//              the character type's fields - personality, faction, role,
+//              goals, relationships (the active variant's) - and present.
+//              "biography" (templates made before objects) reads description.
 //   runtime    thought, mood, intent (built in), and the setting's own
-//              runtime fields as "custom.<name>" (State Engine spec 1.43)
+//              runtime fields as "custom.<name>" - all read from
+//              runtime.values
 //   icons      "icon.<name>" for every enum runtime field: the image its
-//              current value has (State Engine spec 1.46 - runtime.images,
-//              already checked for <img src>), drawn like any image field
+//              current value has (runtime.images, already checked for
+//              <img src>), drawn like any image field
 //
 // Outside a template there is no character, so a character field has no
 // value there.
@@ -24,10 +32,14 @@ export const CHARACTER_IDENTITY_FIELDS = [
     ['present', 'In the scene', 'boolean'],
     ['faction', 'Faction', 'string'],
     ['role', 'Role', 'string'],
-    ['biography', 'Biography', 'text'],
+    ['description', 'Description', 'text'],
     ['personality', 'Personality', 'text'],
+    ['goals', 'Goals', 'text'],
+    ['relationships', 'Relationships', 'text'],
     ['introduction_snippet', 'Introduction', 'text'],
 ];
+// Fields saved under an older name -> the field that holds them now.
+const RENAMED_FIELDS = { biography: 'description' };
 const BUILT_IN_RUNTIME = ['thought', 'mood', 'intent'];
 const CUSTOM_PREFIX = 'custom.';
 const ICON_PREFIX = 'icon.';
@@ -72,6 +84,7 @@ export function characterFieldList(runtimeFields = []) {
 // A display definition for a character field (the shape a variable's has):
 // labels and formats an element bound to it.
 export function characterFieldDef(field) {
+    if (RENAMED_FIELDS[field]) return { ...characterFieldDef(RENAMED_FIELDS[field]), name: `char:${field}`, characterField: field };
     if (field.startsWith(ICON_PREFIX)) {
         return { name: `char:${field}`, type: 'image', label: `${labelFor(field.slice(ICON_PREFIX.length))} (icon)`, characterField: field };
     }
@@ -80,15 +93,17 @@ export function characterFieldDef(field) {
     return { name: `char:${field}`, type: known ? known[2] : 'string', label: label.charAt(0).toUpperCase() + label.slice(1), characterField: field };
 }
 
-// The value a character shows for `field` (undefined: none).
+// The value a character shows for `field` (undefined: none). Runtime
+// fields - built in or the setting's own - all live in runtime.values.
 export function characterFieldValue(character, field) {
     if (!character) return undefined;
-    if (BUILT_IN_RUNTIME.includes(field)) return character.runtime?.[field] ?? undefined;
-    if (field.startsWith(CUSTOM_PREFIX)) return character.runtime?.custom?.[field.slice(CUSTOM_PREFIX.length)] ?? undefined;
+    if (BUILT_IN_RUNTIME.includes(field)) return character.runtime?.values?.[field] ?? undefined;
+    if (field.startsWith(CUSTOM_PREFIX)) return character.runtime?.values?.[field.slice(CUSTOM_PREFIX.length)] ?? undefined;
     if (field.startsWith(ICON_PREFIX)) return character.runtime?.images?.[field.slice(ICON_PREFIX.length)] ?? undefined;
     if (field === 'present') return character.runtime?.present ?? character.present ?? false;
-    const value = character[field];
-    return value === null || value === '' ? undefined : value;
+    const value = character[RENAMED_FIELDS[field] ?? field];
+    if (Array.isArray(value)) return value.length ? value : undefined;
+    return value === null || value === undefined || value === '' ? undefined : value;
 }
 
 // The variable service's { value, def } shape for a character field, or
@@ -115,11 +130,14 @@ export const SAMPLE_CHARACTER = Object.freeze({
     aliases: ['the sample'],
     image: '',
     introduction_snippet: 'A sample character stepped into the light.',
-    biography: 'A stand-in used to preview character templates.',
+    description: 'A stand-in used to preview character templates.',
     personality: 'Patient, curious.',
     faction: 'Preview Guild',
     role: 'Stand-in',
+    goals: 'Show off every field.',
+    relationships: 'Friends with every template.',
+    type: 'character',
     confirmed: true,
     present: true,
-    runtime: { present: true, thought: 'Is this layout readable?', mood: 'Curious', intent: 'Show every field', custom: {} },
+    runtime: { present: true, values: { thought: 'Is this layout readable?', mood: 'Curious', intent: 'Show every field' }, images: {} },
 });

@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's ensureChatCharacterSetting() call.
+// Thin wrapper around the Object API's setObjectActiveVariant() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// (async) The chat's setting; when it has none, State Engine asks the user which one. See the State Engine API Reference, "Character API".
-export async function ensureChatCharacterSetting(extensionId, chatId) {
+// Sets the object's active variant (null: the base), for its whole setting. See the State Engine API Reference, "Object API".
+export async function setObjectActiveVariant(extensionId, chatId, id, variantId, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return await stateEngine.ensureChatCharacterSetting(extensionId, ensureInstanceId(), chatId);
+    return stateEngine.setObjectActiveVariant(extensionId, ensureInstanceId(), chatId, id, variantId, options);
 }

@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's setCharacterRuntimeValue() call.
+// Thin wrapper around the Object API's updateObjectVariant() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Sets one NON-prompted runtime field of a character in a chat. Returns the character, or null. See the State Engine API Reference, "Character API".
-export async function setCharacterRuntimeValue(extensionId, chatId, id, field, value) {
+// Edits a variant's name or overrides. See the State Engine API Reference, "Object API".
+export async function updateObjectVariant(extensionId, chatId, id, variantId, patch, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.setCharacterRuntimeValue(extensionId, ensureInstanceId(), chatId, id, field, value);
+    return stateEngine.updateObjectVariant(extensionId, ensureInstanceId(), chatId, id, variantId, patch, options);
 }

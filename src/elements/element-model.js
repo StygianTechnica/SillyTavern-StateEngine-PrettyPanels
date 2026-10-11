@@ -65,6 +65,7 @@
 
 import { NAMESPACE } from '../constants.js';
 import { normalizeFormat } from './text-format.js';
+import { isCharacterDefinition } from './object-defs.js';
 
 // Element Styling keys that are not stored: textTransform (case is
 // element.format.textCase now) and the Theme Style layer's computed CSS.
@@ -152,10 +153,9 @@ export function isImageDefinition(def) {
     return IMAGE_VARIABLE_TYPES.has(def?.type);
 }
 
-// A character variable, or a list of characters (State Engine spec 1.42).
-export function isCharacterDefinition(def) {
-    return def?.type === 'character' || (def?.type === 'array' && def?.itemType === 'character');
-}
+// A character variable, or a list of characters: a State Engine object
+// variable of object type character (src/elements/object-defs.js).
+export { isCharacterDefinition };
 
 // zIndex for a new element of `type` bound to a variable defined as `def`.
 export function defaultZIndex(type, def = null) {

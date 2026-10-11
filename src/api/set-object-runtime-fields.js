@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's createCharacter() call.
+// Thin wrapper around the Object API's setObjectRuntimeFields() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Creates a canonical (confirmed) character in a setting. Returns it, or null. See the State Engine API Reference, "Character API".
-export async function createCharacter(extensionId, settingId, data) {
+// Replaces a setting's runtime fields for `type` (built-ins cannot be removed); returns the new list. See the State Engine API Reference, "Object API".
+export async function setObjectRuntimeFields(extensionId, settingId, type, fields) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.createCharacter(extensionId, ensureInstanceId(), settingId, data);
+    return stateEngine.setObjectRuntimeFields(extensionId, ensureInstanceId(), settingId, type, fields);
 }

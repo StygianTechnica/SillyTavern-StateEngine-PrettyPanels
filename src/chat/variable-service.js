@@ -22,13 +22,14 @@ import { listAllVariables } from '../api/list-all-variables.js';
 import { getVariableValues } from '../api/get-variable-values.js';
 import { getVariableImage } from '../api/get-variable-image.js';
 import { listRoles } from '../api/list-roles.js';
-import { listCharacters } from '../api/list-characters.js';
+import { listObjects } from '../api/list-objects.js';
 import { notify } from '../ui/dialogs.js';
 import { listPPVariables, getPPVariable, ppVariableLabel, onPPVariablesChange } from '../storage/pp-variables.js';
 import { isRoleRef, roleOfRef, roleRef, isCharRef, charFieldOfRef } from '../elements/element-model.js';
-import { getChatCharacterSetting } from '../api/get-chat-character-setting.js';
-import { getCharacterRuntimeFields } from '../api/get-character-runtime-fields.js';
+import { getChatSetting } from '../api/get-chat-setting.js';
+import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
 import { characterFieldList, characterFieldDef } from '../elements/character-fields.js';
+import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
 
 // The catalog group holding Pretty Panels' own variables. Always "active"
 // (there is no preset to activate for it).
@@ -82,8 +83,9 @@ async function loadRoles(chatId) {
     }
 }
 
-// The open chat's characters (State Engine listCharacters - its own and its
-// setting's), by id: what a character variable's ids show as.
+// The open chat's characters - State Engine objects of type character, its
+// own and its setting's (listObjects) - by id: what a character variable's
+// ids show as.
 let characters = new Map();
 
 export function getCharacter(id) {
@@ -95,13 +97,13 @@ export function getCharacterList() {
 }
 
 // The character fields a template can bind (the Character palette):
-// identity, then the runtime fields of the open chat's setting (Default
-// without a chat). Never throws.
+// identity, then the character runtime fields of the open chat's setting
+// (Default without a chat). Never throws.
 export async function loadCharacterFieldList() {
     try {
         const chatId = currentChatId();
-        const settingId = (chatId ? await getChatCharacterSetting(EXTENSION_ID, chatId) : null) ?? 'default';
-        return characterFieldList((await getCharacterRuntimeFields(EXTENSION_ID, settingId)) ?? []);
+        const settingId = (chatId ? await getChatSetting(EXTENSION_ID, chatId) : null) ?? 'default';
+        return characterFieldList((await getObjectRuntimeFields(EXTENSION_ID, settingId, CHARACTER_OBJECT_TYPE)) ?? []);
     } catch (err) {
         console.warn('[PrettyPanels] could not read character runtime fields (update State Engine)', err);
         return characterFieldList([]);
@@ -111,9 +113,9 @@ export async function loadCharacterFieldList() {
 async function loadCharacters(chatId) {
     if (!chatId) return new Map();
     try {
-        return new Map(((await listCharacters(EXTENSION_ID, chatId)) ?? []).map((c) => [c.id, c]));
+        return new Map(((await listObjects(EXTENSION_ID, chatId, CHARACTER_OBJECT_TYPE)) ?? []).map((c) => [c.id, c]));
     } catch (err) {
-        console.warn('[PrettyPanels] could not read State Engine characters (update State Engine for character support)', err);
+        console.warn('[PrettyPanels] could not read State Engine characters (update State Engine for object support)', err);
         return new Map();
     }
 }

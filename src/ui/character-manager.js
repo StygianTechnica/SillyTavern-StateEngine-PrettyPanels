@@ -1,10 +1,13 @@
-// The shared Character Manager (State Engine characters, requirements spec
-// 1.42). The window lives here; every piece of data and every rule lives in
-// State Engine - this module only calls its Character API (src/api/*). It is
-// the one place characters are edited. It opens from a CharacterCard click,
-// the Pretty Panels drawer, State Engine's drawer ("Manage characters") and
-// State Engine's "New characters detected for review" notification (the
-// last two through registerCharacterManager()).
+// The shared Character Manager: State Engine's character OBJECTS (objects of
+// type character - State Engine API Reference, "Object API"). The window
+// lives here; every piece of data and every rule lives in State Engine -
+// this module only calls its Object API (src/api/*), always for type
+// character. It is the one place characters are edited. It opens from a
+// CharacterCard click, the Pretty Panels drawer, State Engine's drawer
+// ("Manage objects") and State Engine's "New ... detected for review"
+// notifications (the last two through registerObjectManager()). State
+// Engine's other object types (locations, factions...) are not managed here
+// yet - asked to open on one, it opens on characters and says so.
 //
 // Confirmed <=> in the setting (State Engine's rule): a character detected
 // in a chat is unconfirmed and only in that chat until it is reviewed -
@@ -29,40 +32,45 @@
 // (the prompted update writes them each turn), non-prompted ones editable.
 
 import { EXTENSION_ID } from '../constants.js';
-import { listCharacterSettings } from '../api/list-character-settings.js';
-import { createCharacterSetting } from '../api/create-character-setting.js';
-import { updateCharacterSetting } from '../api/update-character-setting.js';
-import { deleteCharacterSetting } from '../api/delete-character-setting.js';
-import { getChatCharacterSetting } from '../api/get-chat-character-setting.js';
-import { setChatCharacterSetting } from '../api/set-chat-character-setting.js';
-import { ensureChatCharacterSetting } from '../api/ensure-chat-character-setting.js';
-import { listCharacters } from '../api/list-characters.js';
-import { createCharacter } from '../api/create-character.js';
-import { updateCharacter } from '../api/update-character.js';
-import { mergeCharacters } from '../api/merge-characters.js';
-import { deleteCharacter } from '../api/delete-character.js';
-import { confirmCharacter } from '../api/confirm-character.js';
-import { resolveCharacter } from '../api/resolve-character.js';
-import { addCharacterVariant } from '../api/add-character-variant.js';
-import { updateCharacterVariant } from '../api/update-character-variant.js';
-import { deleteCharacterVariant } from '../api/delete-character-variant.js';
-import { setCharacterActiveVariant } from '../api/set-character-active-variant.js';
-import { registerCharacterManager } from '../api/register-character-manager.js';
-import { getCharacterRuntimeFields } from '../api/get-character-runtime-fields.js';
-import { setCharacterRuntimeFields } from '../api/set-character-runtime-fields.js';
-import { setCharacterRuntimeValue } from '../api/set-character-runtime-value.js';
+import { listSettings } from '../api/list-settings.js';
+import { createSetting } from '../api/create-setting.js';
+import { updateSetting } from '../api/update-setting.js';
+import { deleteSetting } from '../api/delete-setting.js';
+import { getChatSetting } from '../api/get-chat-setting.js';
+import { setChatSetting } from '../api/set-chat-setting.js';
+import { ensureChatSetting } from '../api/ensure-chat-setting.js';
+import { listObjects } from '../api/list-objects.js';
+import { createObject } from '../api/create-object.js';
+import { updateObject } from '../api/update-object.js';
+import { mergeObjects } from '../api/merge-objects.js';
+import { deleteObject } from '../api/delete-object.js';
+import { confirmObject } from '../api/confirm-object.js';
+import { resolveObject } from '../api/resolve-object.js';
+import { addObjectVariant } from '../api/add-object-variant.js';
+import { updateObjectVariant } from '../api/update-object-variant.js';
+import { deleteObjectVariant } from '../api/delete-object-variant.js';
+import { setObjectActiveVariant } from '../api/set-object-active-variant.js';
+import { registerObjectManager } from '../api/register-object-manager.js';
+import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
+import { setObjectRuntimeFields } from '../api/set-object-runtime-fields.js';
+import { setObjectRuntimeValue } from '../api/set-object-runtime-value.js';
+import { CHARACTER_OBJECT_TYPE as TYPE } from '../elements/object-defs.js';
 import { importImageFile } from '../api/import-image-file.js';
 import { VARIABLES_CHANGED_EVENT, currentChatId, refreshValues } from '../chat/variable-service.js';
 import { fallbackIcon } from '../elements/character-card.js';
 import { confirmYesNo, promptText, notify, chooseFromList } from './dialogs.js';
 import { pickImageFile } from './image-upload.js';
 
-// Baseline text fields beyond name/aliases/image.
+// Baseline text fields beyond name/aliases/image: every object's
+// description, then the character type's own fields (State Engine
+// listObjectTypes(): personality, faction, role, goals, relationships).
 const TEXT_FIELDS = [
     ['faction', 'Faction', 'input'],
     ['role', 'Role', 'input'],
-    ['biography', 'Biography', 'textarea'],
+    ['description', 'Description', 'textarea'],
     ['personality', 'Personality', 'textarea'],
+    ['goals', 'Goals', 'textarea'],
+    ['relationships', 'Relationships', 'textarea'],
 ];
 const IMAGE_FOLDER = 'characters';
 
@@ -110,17 +118,17 @@ async function load() {
     const token = ++renderToken;
     const chatId = currentChatId();
     const [settings, chatSetting] = await Promise.all([
-        listCharacterSettings(EXTENSION_ID),
-        chatId ? getChatCharacterSetting(EXTENSION_ID, chatId) : Promise.resolve(null),
+        listSettings(EXTENSION_ID),
+        chatId ? getChatSetting(EXTENSION_ID, chatId) : Promise.resolve(null),
     ]);
     if (!chatId && state.view === 'chat') state.view = 'setting';
     if (!state.settingId || !settings.some((s) => s.id === state.settingId)) state.settingId = chatSetting ?? settings[0]?.id ?? 'default';
     const characters = state.view === 'runtime' ? []
         : state.view === 'chat'
-            ? await listCharacters(EXTENSION_ID, chatId, {})
-            : await listCharacters(EXTENSION_ID, null, { settingId: state.settingId });
+            ? await listObjects(EXTENSION_ID, chatId, TYPE, {})
+            : await listObjects(EXTENSION_ID, null, TYPE, { settingId: state.settingId });
     const fieldsSetting = state.view === 'chat' ? (chatSetting ?? 'default') : state.settingId;
-    const runtimeFields = (await getCharacterRuntimeFields(EXTENSION_ID, fieldsSetting)) ?? [];
+    const runtimeFields = (await getObjectRuntimeFields(EXTENSION_ID, fieldsSetting, TYPE)) ?? [];
     if (token !== renderToken) return false;
     Object.assign(state, { settings: settings ?? [], chatSetting, characters: characters ?? [], runtimeFields });
     // A fresh draft for the Runtime fields tab when it opens on a setting.
@@ -138,7 +146,7 @@ async function reload() {
 // ---------------------------------------------------------------- render
 
 function settingOptions(selected) {
-    return state.settings.map((s) => `<option value="${escapeHtml(s.id)}"${s.id === selected ? ' selected' : ''}>${escapeHtml(s.name)}${s.isDefault ? ' (everything)' : ''} · ${s.characterCount}</option>`).join('');
+    return state.settings.map((s) => `<option value="${escapeHtml(s.id)}"${s.id === selected ? ' selected' : ''}>${escapeHtml(s.name)}${s.isDefault ? ' (everything)' : ''} · ${s.counts?.[TYPE] ?? 0}</option>`).join('');
 }
 
 function toolbarHtml() {
@@ -278,8 +286,9 @@ function editorHtml(c) {
 
 // ------------------------------------------------------------ runtime state
 
+// Built-in and the setting's own runtime fields alike live in runtime.values.
 function runtimeValueOf(c, field) {
-    return field.builtIn ? c.runtime?.[field.name] : c.runtime?.custom?.[field.name];
+    return c.runtime?.values?.[field.name];
 }
 
 // A character's runtime state in This chat: prompted values read-only,
@@ -443,15 +452,15 @@ async function act(action, row, target) {
                 return;
             }
             const result = state.editingId === 'new'
-                ? await createCharacter(EXTENSION_ID, state.settingId, fields)
-                : await updateCharacter(EXTENSION_ID, chatId, id, fields, options);
+                ? await createObject(EXTENSION_ID, state.settingId, TYPE, fields)
+                : await updateObject(EXTENSION_ID, chatId, id, fields, options);
             if (refused(result, 'Saving the character')) return;
             state.editingId = null;
             state.focusId = result.id;
             break;
         }
         case 'confirm':
-            if (refused(await confirmCharacter(EXTENSION_ID, chatId, id, options), 'Confirming')) return;
+            if (refused(await confirmObject(EXTENSION_ID, chatId, id, options), 'Confirming')) return;
             break;
         case 'resolve': {
             // Confirmed characters first - the ones it most likely is.
@@ -464,7 +473,7 @@ async function act(action, row, target) {
             if (!targetId) return;
             const into = others.find((c) => c.id === targetId);
             if (!await confirmYesNo(`Resolve "${character.name}" to "${into.name}"? "${character.name}" becomes one of ${into.name}'s aliases, every variable showing it shows ${into.name}, and ${into.name} is confirmed.`)) return;
-            if (refused(await resolveCharacter(EXTENSION_ID, chatId, id, targetId, options), 'Resolving')) return;
+            if (refused(await resolveObject(EXTENSION_ID, chatId, id, targetId, options), 'Resolving')) return;
             notify('success', `"${character.name}" is now an alias of ${into.name}.`);
             state.focusId = targetId;
             break;
@@ -479,32 +488,32 @@ async function act(action, row, target) {
             if (!targetId) return;
             const into = others.find((c) => c.id === targetId);
             if (!await confirmYesNo(`Merge "${character.name}" into "${into.name}"? "${character.name}" becomes one of ${into.name}'s aliases, every variable showing it shows ${into.name}, and "${character.name}" is deleted.`)) return;
-            if (refused(await mergeCharacters(EXTENSION_ID, chatId, id, targetId, options), 'The merge')) return;
+            if (refused(await mergeObjects(EXTENSION_ID, chatId, id, targetId, options), 'The merge')) return;
             state.focusId = targetId;
             break;
         }
         case 'delete': {
             const where = character.scope === 'setting' ? ' It is removed from the setting - every chat on it loses this character.' : '';
             if (!await confirmYesNo(`Delete "${character.name}"?${where} Variables showing it are cleared.`)) return;
-            if (refused(await deleteCharacter(EXTENSION_ID, chatId, id, options), 'Deleting')) return;
+            if (refused(await deleteObject(EXTENSION_ID, chatId, id, options), 'Deleting')) return;
             break;
         }
         case 'addVariant': {
             const name = await promptText('Name for the new variant (e.g. "Older", "Alternate timeline"):', '');
             if (!name) return;
-            if (refused(await addCharacterVariant(EXTENSION_ID, chatId, id, { name, overrides: {} }, options), 'Adding the variant')) return;
+            if (refused(await addObjectVariant(EXTENSION_ID, chatId, id, { name, overrides: {} }, options), 'Adding the variant')) return;
             break;
         }
         case 'saveVariant': {
             const box = target.closest('[data-variant]');
             const name = box.querySelector('[data-v="__name"]').value.trim();
-            if (refused(await updateCharacterVariant(EXTENSION_ID, chatId, id, box.dataset.variant, { name, overrides: readOverrides(box) }, options), 'Saving the variant')) return;
+            if (refused(await updateObjectVariant(EXTENSION_ID, chatId, id, box.dataset.variant, { name, overrides: readOverrides(box) }, options), 'Saving the variant')) return;
             break;
         }
         case 'deleteVariant': {
             const box = target.closest('[data-variant]');
             if (!await confirmYesNo('Delete this variant?')) return;
-            if (refused(await deleteCharacterVariant(EXTENSION_ID, chatId, id, box.dataset.variant, options), 'Deleting the variant')) return;
+            if (refused(await deleteObjectVariant(EXTENSION_ID, chatId, id, box.dataset.variant, options), 'Deleting the variant')) return;
             break;
         }
         case 'addRuntimeField':
@@ -519,7 +528,7 @@ async function act(action, row, target) {
             state.runtimeDraft = null;
             break;
         case 'saveRuntimeFields': {
-            const saved = await setCharacterRuntimeFields(EXTENSION_ID, state.runtimeDraft.settingId, draftToFields(state.runtimeDraft.fields));
+            const saved = await setObjectRuntimeFields(EXTENSION_ID, state.runtimeDraft.settingId, TYPE, draftToFields(state.runtimeDraft.fields));
             if (refused(saved, 'Saving the runtime fields')) return;
             state.runtimeDraft = { settingId: state.runtimeDraft.settingId, fields: draftFrom(saved) };
             notify('success', 'Runtime fields saved.');
@@ -532,7 +541,7 @@ async function act(action, row, target) {
         case 'newSetting': {
             const name = await promptText('Name for the new setting (a story, a world):', '');
             if (!name) return;
-            const created = await createCharacterSetting(EXTENSION_ID, { name });
+            const created = await createSetting(EXTENSION_ID, { name });
             if (refused(created, 'Creating the setting')) return;
             state.settingId = created.id;
             break;
@@ -541,14 +550,14 @@ async function act(action, row, target) {
             const setting = state.settings.find((s) => s.id === state.settingId);
             const name = await promptText('Rename the setting:', setting?.name ?? '');
             if (!name) return;
-            if (refused(await updateCharacterSetting(EXTENSION_ID, state.settingId, { name }), 'Renaming the setting')) return;
+            if (refused(await updateSetting(EXTENSION_ID, state.settingId, { name }), 'Renaming the setting')) return;
             break;
         }
         case 'deleteSetting': {
             const setting = state.settings.find((s) => s.id === state.settingId);
             if (!setting || setting.isDefault) return;
-            if (!await confirmYesNo(`Delete the setting "${setting.name}" and its ${setting.characterCount} character(s)? Chats using it will be asked for a setting again.`)) return;
-            if (refused(await deleteCharacterSetting(EXTENSION_ID, setting.id), 'Deleting the setting')) return;
+            if (!await confirmYesNo(`Delete the setting "${setting.name}" and everything in it - ${setting.objectCount} object(s), ${setting.counts?.[TYPE] ?? 0} of them character(s)? Chats using it will be asked for a setting again.`)) return;
+            if (refused(await deleteSetting(EXTENSION_ID, setting.id), 'Deleting the setting')) return;
             state.settingId = null;
             break;
         }
@@ -573,7 +582,7 @@ async function onChange(e) {
     } else if (key === 'runtimeValue') {
         const row = e.target.closest('.pp-cm-row');
         const value = e.target.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : (e.target.value || null);
-        if (refused(await setCharacterRuntimeValue(EXTENSION_ID, chatId, row.dataset.id, e.target.dataset.field, value), 'Setting the value')) return;
+        if (refused(await setObjectRuntimeValue(EXTENSION_ID, chatId, row.dataset.id, e.target.dataset.field, value), 'Setting the value')) return;
         await refreshValues();
         await reload();
     } else if (e.target.dataset.rf) {
@@ -583,16 +592,16 @@ async function onChange(e) {
         // The values decide which image boxes there are.
         if (e.target.dataset.rf === 'type' || e.target.dataset.rf === 'values') render();
     } else if (key === 'chatSetting' && chatId && e.target.value) {
-        if (refused(await setChatCharacterSetting(EXTENSION_ID, chatId, e.target.value), 'Choosing the setting')) return;
+        if (refused(await setChatSetting(EXTENSION_ID, chatId, e.target.value), 'Choosing the setting')) return;
         await refreshValues();
         await reload();
     } else if (key === 'autoConfirm') {
-        if (refused(await updateCharacterSetting(EXTENSION_ID, state.settingId, { autoConfirm: e.target.checked }), 'Changing auto-confirm')) return;
+        if (refused(await updateSetting(EXTENSION_ID, state.settingId, { autoConfirm: e.target.checked }), 'Changing auto-confirm')) return;
         await reload();
     } else if (key === 'activeVariant') {
         const row = e.target.closest('.pp-cm-row');
         const character = state.characters.find((c) => c.id === row?.dataset.id);
-        if (refused(await setCharacterActiveVariant(EXTENSION_ID, chatIdForCalls(), row.dataset.id, e.target.value || null, scopeOptions(character)), 'Choosing the variant')) return;
+        if (refused(await setObjectActiveVariant(EXTENSION_ID, chatIdForCalls(), row.dataset.id, e.target.value || null, scopeOptions(character)), 'Choosing the variant')) return;
         await refreshValues();
         await reload();
     }
@@ -695,21 +704,24 @@ function build() {
 }
 
 // Opens the manager. options: { characterId?, view?: 'chat' | 'setting',
-// settingId?, filter?: 'unconfirmed' } (State Engine passes the same shape).
+// settingId?, filter?: 'unconfirmed' }, or State Engine's object manager
+// shape { type?, objectId?, view?, settingId?, filter? }.
 export async function openCharacterManager(options = {}) {
     if (!overlay) build();
     const chatId = currentChatId();
+    const otherType = options.type && options.type !== TYPE;
+    if (otherType) notify('info', `Pretty Panels manages characters only for now - ${options.type} objects cannot be reviewed here yet.`);
     state.view = options.view ?? (chatId ? 'chat' : 'setting');
     state.runtimeDraft = null;
-    state.filter = options.filter ?? 'all';
-    state.focusId = options.characterId ?? null;
+    state.filter = otherType ? 'all' : (options.filter ?? 'all');
+    state.focusId = otherType ? null : (options.characterId ?? options.objectId ?? null);
     state.editingId = null;
     state.search = '';
     if (options.settingId) state.settingId = options.settingId;
     state.open = true;
     overlay.hidden = false;
     // A chat without a setting is asked now (State Engine's question).
-    if (chatId && state.view === 'chat') await ensureChatCharacterSetting(EXTENSION_ID, chatId);
+    if (chatId && state.view === 'chat') await ensureChatSetting(EXTENSION_ID, chatId);
     await reload();
 }
 
@@ -718,13 +730,14 @@ export function closeCharacterManager() {
     if (overlay) overlay.hidden = true;
 }
 
-// Registers this window with State Engine (its drawer button and the
-// "new characters" notification open it) and keeps it current while open.
+// Registers this window with State Engine as its object manager (its
+// drawer button and the "new ... detected" notifications open it) and
+// keeps it current while open.
 export async function initCharacterManager() {
     try {
-        await registerCharacterManager(EXTENSION_ID, (options) => void openCharacterManager(options ?? {}));
+        await registerObjectManager(EXTENSION_ID, (options) => void openCharacterManager(options ?? {}));
     } catch (err) {
-        console.warn('[PrettyPanels] could not register the Character Manager with State Engine (update State Engine for character support)', err);
+        console.warn('[PrettyPanels] could not register the Character Manager with State Engine (update State Engine for object support)', err);
     }
     const { eventSource, eventTypes } = SillyTavern.getContext();
     eventSource.on(VARIABLES_CHANGED_EVENT, () => {

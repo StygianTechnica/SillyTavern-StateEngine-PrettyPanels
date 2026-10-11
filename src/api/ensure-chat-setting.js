@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's createCharacterSetting() call.
+// Thin wrapper around the Object API's ensureChatSetting() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Creates a setting ({ name, autoConfirm? }). Returns it, or null. See the State Engine API Reference, "Character API".
-export async function createCharacterSetting(extensionId, setting) {
+// (async) The chat's setting; when it has none, State Engine asks the user which one. See the State Engine API Reference, "Object API".
+export async function ensureChatSetting(extensionId, chatId) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.createCharacterSetting(extensionId, ensureInstanceId(), setting);
+    return await stateEngine.ensureChatSetting(extensionId, ensureInstanceId(), chatId);
 }

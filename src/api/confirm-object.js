@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's mergeCharacters() call.
+// Thin wrapper around the Object API's confirmObject() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Merges one character into another (aliases, variables follow). Returns the target, or null. See the State Engine API Reference, "Character API".
-export async function mergeCharacters(extensionId, chatId, sourceId, targetId, options) {
+// Confirms an object as it is (a chat object moves into the setting). See the State Engine API Reference, "Object API".
+export async function confirmObject(extensionId, chatId, id, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.mergeCharacters(extensionId, ensureInstanceId(), chatId, sourceId, targetId, options);
+    return stateEngine.confirmObject(extensionId, ensureInstanceId(), chatId, id, options);
 }

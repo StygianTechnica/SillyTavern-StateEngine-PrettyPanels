@@ -35,6 +35,8 @@
 // setDateTimeFormatter(). Automatic date/time follow the variable's
 // datetimeMode and the theme's formatting patterns (or the calendar's own).
 
+import { isCharacterDefinition } from './object-defs.js';
+
 export const TEXT_CASES = [
     ['', 'As typed'],
     ['upper', 'UPPERCASE'],
@@ -178,7 +180,7 @@ export function setDateTimeFormatter(formatter) {
 // without a value yet (date, list, text). A calculated (or unknown, or
 // 'any') one goes by the value it holds.
 export function valueKind(def, value) {
-    if (def?.type === 'character' || (def?.type === 'array' && def?.itemType === 'character')) return 'character';
+    if (isCharacterDefinition(def)) return 'character';
     switch (def?.type) {
         case 'number': return 'number';
         case 'datetime':

@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's addCharacterVariant() call.
+// Thin wrapper around the Object API's createSetting() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Adds a named variant ({ name, overrides }). Returns the character, or null. See the State Engine API Reference, "Character API".
-export async function addCharacterVariant(extensionId, chatId, id, variant, options) {
+// A new setting from { name, autoConfirm? }, or null. See the State Engine API Reference, "Object API".
+export async function createSetting(extensionId, data) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.addCharacterVariant(extensionId, ensureInstanceId(), chatId, id, variant, options);
+    return stateEngine.createSetting(extensionId, ensureInstanceId(), data);
 }

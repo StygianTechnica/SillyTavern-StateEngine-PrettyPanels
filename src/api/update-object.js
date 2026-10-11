@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's listCharacterSettings() call.
+// Thin wrapper around the Object API's updateObject() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Every character setting (Default first): [{ id, name, autoConfirm, isDefault, characterCount, createdAt }]. See the State Engine API Reference, "Character API".
-export async function listCharacterSettings(extensionId) {
+// Edits an object's baseline (saving confirms a world object). See the State Engine API Reference, "Object API".
+export async function updateObject(extensionId, chatId, id, patch, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.listCharacterSettings(extensionId, ensureInstanceId());
+    return stateEngine.updateObject(extensionId, ensureInstanceId(), chatId, id, patch, options);
 }

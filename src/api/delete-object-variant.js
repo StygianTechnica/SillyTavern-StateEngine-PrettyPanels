@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's updateCharacter() call.
+// Thin wrapper around the Object API's deleteObjectVariant() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Edits a character's baseline fields; saving confirms it. Returns it, or null. See the State Engine API Reference, "Character API".
-export async function updateCharacter(extensionId, chatId, id, patch, options) {
+// Deletes a variant. See the State Engine API Reference, "Object API".
+export async function deleteObjectVariant(extensionId, chatId, id, variantId, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.updateCharacter(extensionId, ensureInstanceId(), chatId, id, patch, options);
+    return stateEngine.deleteObjectVariant(extensionId, ensureInstanceId(), chatId, id, variantId, options);
 }

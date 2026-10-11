@@ -1,4 +1,4 @@
-// Thin wrapper around the Character API's registerCharacterManager() call.
+// Thin wrapper around the Object API's addObjectVariant() call.
 // No additional logic belongs in this file.
 
 // See src/api/namespace.js for why this is a dynamic import, and why
@@ -8,9 +8,9 @@
 const API_PATH = '../../../SillyTavern-StateEngine/src/api/index.js';
 const IDENTITY_PATH = '../../../SillyTavern-StateEngine/src/api/identity.js';
 
-// Registers the function that opens this extension's Character Manager (State Engine's drawer button and "new characters" notification call it). See the State Engine API Reference, "Character API".
-export async function registerCharacterManager(extensionId, opener) {
+// Adds a variant { name, overrides } to an object. See the State Engine API Reference, "Object API".
+export async function addObjectVariant(extensionId, chatId, id, variant, options) {
     const { stateEngine } = await import(API_PATH);
     const { ensureInstanceId } = await import(IDENTITY_PATH);
-    return stateEngine.registerCharacterManager(extensionId, ensureInstanceId(), opener);
+    return stateEngine.addObjectVariant(extensionId, ensureInstanceId(), chatId, id, variant, options);
 }

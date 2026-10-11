@@ -614,7 +614,7 @@ export class PanelPropertiesPopup {
         if (gap !== document.activeElement) gap.value = String(options.gap);
         const info = this.el.querySelector('[data-el="charInfo"]');
         info.textContent = def && !isCharacterDefinition(def)
-            ? 'Bind a character variable, or a list of characters (an array of item type character).'
+            ? 'Bind a character variable (object type character), or a list of characters (an array of objects of type character).'
             : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Character Manager.';
     }
 
@@ -626,7 +626,7 @@ export class PanelPropertiesPopup {
         const character = { ...normalizeCharacterOptions(element.character), ...patch };
         const change = { character };
         const template = patch.templateId ? getCharacterTemplate(patch.templateId) : null;
-        if (template && this.#def(element)?.type === 'character') {
+        if (template && this.#def(element)?.type === 'object') {
             Object.assign(change, clampElementGeometry(
                 { x: element.x, y: element.y, width: template.width, height: template.height },
                 this.panel.body.clientWidth, this.panel.body.clientHeight, 'width',
