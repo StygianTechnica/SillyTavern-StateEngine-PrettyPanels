@@ -662,6 +662,7 @@ export class PanelPropertiesPopup {
         set('value.datePattern', (f) => { f.value = format.value.datePattern; });
         set('value.characterPresence', (f) => { f.checked = format.value.characterPresence; });
         set('value.characterAliases', (f) => { f.checked = format.value.characterAliases; });
+        set('value.characterHideUser', (f) => { f.checked = format.value.characterHideUser; });
         for (const node of root.querySelectorAll('[data-fmt-kind]')) node.hidden = node.dataset.fmtKind !== kind;
         const note = root.querySelector('[data-el="format-none"]');
         note.textContent = element.type === 'free-text' ? 'Free text has no value to format - type it as it should read.'
@@ -1595,6 +1596,7 @@ export class PanelPropertiesPopup {
                         <div data-fmt-kind="character">
                             <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterPresence" /><span>Show presence (in the scene or not)</span></label>
                             <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterAliases" /><span>Show aliases</span></label>
+                            <label class="checkbox_label pp-field-check" title="A list of characters leaves out the one that is your persona ({{user}}) - matched by name or alias"><input type="checkbox" data-fmt="value.characterHideUser" /><span>Leave out your persona ({{user}})</span></label>
                             <small class="pp-field-info">Characters show as cards (image or a generated icon, name, confirmed badge). Click one - outside Editing Mode - to open the Character Manager.</small>
                         </div>
                         <label class="pp-field" data-fmt-kind="imageList"><span>Show as</span>

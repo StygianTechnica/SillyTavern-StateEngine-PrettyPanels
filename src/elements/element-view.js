@@ -198,6 +198,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
             list: def?.type === 'array',
             showPresence: options.characterPresence,
             showAliases: options.characterAliases,
+            hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
             onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
         });
@@ -256,6 +257,7 @@ function renderCharacterElement(container, element, entry) {
         cardOptions: {
             showPresence: options.characterPresence,
             showAliases: options.characterAliases,
+            hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
             onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
         },

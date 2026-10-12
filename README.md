@@ -411,7 +411,8 @@ variables. The characters themselves - and every rule about them - are State Eng
   choose the **character template** each card is drawn with and, for a list, the **tiling**
   (grid, row or column - grid by default) and the gap. Cards keep the template's size; what
   doesn't fit scrolls. Clicking a card (outside Editing Mode) opens the Character Manager on
-  that character.
+  that character. **Leave out your persona ({{user}})** in Value Formatting drops the character
+  that is your persona (by name or alias) from a list - with a template or the built-in card.
 - **Built-in card** - with no template (and for a text element bound to a character variable):
   the image (or a generated icon: initials on a colour of its own), the name (Text Case
   applies), a confirmed ✓ / unconfirmed ? badge, and - in Value Formatting - an optional

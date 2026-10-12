@@ -21,6 +21,8 @@
 //       image:   '' | 'url'            imageList: '' | 'count'
 //       characterPresence: boolean  characters: show the presence dot (default on)
 //       characterAliases:  boolean  characters: list the aliases (default off)
+//       characterHideUser: boolean  a list of characters: leave out the user's
+//                                   persona ({{user}}) (default off)
 //     }
 //   }
 //
@@ -163,6 +165,7 @@ export function normalizeFormat(raw) {
             imageList: choice(value.imageList, 'imageList'),
             characterPresence: value.characterPresence !== false,
             characterAliases: value.characterAliases === true,
+            characterHideUser: value.characterHideUser === true,
         },
     };
 }

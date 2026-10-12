@@ -10,6 +10,14 @@
 // characterAliases). Clicking a card outside Editing Mode opens the
 // Character Manager on that character.
 
+import { isPersonaCharacter } from '../chat/persona.js';
+
+// `ids` without the user's persona's, when `hide` (a list's "Leave out your
+// persona"); a single character is never hidden.
+export function withoutPersona(ids, getCharacter, hide) {
+    return hide ? ids.filter((id) => !isPersonaCharacter(getCharacter(id))) : ids;
+}
+
 // A stable hue for a character id.
 export function hueFor(id) {
     let hash = 0;
@@ -106,9 +114,10 @@ export function buildCharacterCard(id, character, options) {
 }
 
 // Fills `container` with a card (a character variable) or a list of cards
-// (a list of characters). `ids` are the variable's character ids.
+// (a list of characters). `ids` are the variable's character ids. With
+// options.hideUser, a list leaves out the user's persona.
 export function renderCharacters(container, ids, getCharacter, options) {
-    const list = (Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id);
+    const list = withoutPersona((Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id), getCharacter, options.list && options.hideUser);
     container.replaceChildren();
     if (list.length === 0) {
         container.textContent = '—';

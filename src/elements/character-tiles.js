@@ -20,7 +20,7 @@
 // state is per chat, per session.
 
 import { getCharacterTemplate } from '../library/character-template-library.js';
-import { buildCharacterCard, fallbackIcon } from './character-card.js';
+import { buildCharacterCard, fallbackIcon, withoutPersona } from './character-card.js';
 import { characterEntry } from './character-fields.js';
 import { bindingRef, isCharRef, charFieldOfRef, isVariableElement, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions } from './element-model.js';
 import { buildElementContent, renderElementContent } from './element-view.js';
@@ -175,7 +175,7 @@ document.addEventListener('keydown', (e) => {
 export function renderCharacterTiles(host, element, ids, list, services) {
     const options = normalizeCharacterOptions(element.character);
     const template = getCharacterTemplate(options.templateId);
-    const chosen = (Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id);
+    const chosen = withoutPersona((Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id), services.getCharacter, list && services.cardOptions?.hideUser);
     host.replaceChildren();
     host.className = `pp-element-value pp-character-tiles pp-tiling-${list ? options.tiling : 'single'}${template ? '' : ' pp-character-builtin'}`;
     host.style.gap = `${options.gap}px`;
