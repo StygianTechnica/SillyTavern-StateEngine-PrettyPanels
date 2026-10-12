@@ -39,6 +39,10 @@ export function pickDesign(source = {}) {
         y: finite(source.y, 0),
         width: Math.max(MIN_PANEL_WIDTH, finite(source.width, DEFAULT_PANEL_WIDTH)),
         height: Math.max(MIN_PANEL_HEIGHT, finite(source.height, DEFAULT_PANEL_HEIGHT)),
+        // Placed flush against the window's right / bottom edge: it stays
+        // there at any window size (src/panels/viewport-fit.js).
+        stickRight: source.stickRight === true,
+        stickBottom: source.stickBottom === true,
         style: plainObject(source.style),
         widgets: normalizeWidgets(list(source.widgets)),
         backgrounds: list(source.backgrounds),

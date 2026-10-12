@@ -14,6 +14,7 @@
 //     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
 import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
+import { fitToViewport } from './viewport-fit.js';
 import { isVariableElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
 import { PanelPropertiesPopup } from './properties-popup.js';
@@ -27,10 +28,6 @@ import { onFlag, onChange } from '../chat/flag-watch.js';
 // Must match panel-manager.js BASE_Z_INDEX (not imported: panel-manager
 // imports this module).
 const BASE_Z_INDEX = 100;
-
-// Keep at least this much of a panel on-screen so it can always be
-// grabbed again after a window resize.
-const VISIBLE_MARGIN = 40;
 
 // An open drawer is raised above the other panels by this much.
 const DRAWER_RAISE = 500;
@@ -139,9 +136,9 @@ export class Panel {
     }
 
     // Re-renders geometry, lock state and elements from this.record.
-    // Geometry is clamped to the viewport for DISPLAY only - the stored
-    // record is left alone, so a panel placed on a large monitor returns
-    // to its real spot when the window grows again.
+    // Geometry is fitted to the viewport for DISPLAY only (viewport-fit.js)
+    // - the stored record is left alone, so a panel placed on a large
+    // monitor returns to its real spot when the window grows again.
     applyRecord() {
         const { width, height, locked } = this.record;
         Object.assign(this.el.style, { width: `${width}px`, height: `${height}px` });
@@ -162,7 +159,7 @@ export class Panel {
     applyPosition() {
         this.#clearDrawerOverlay();
         if (!(this.mounted && this.hooks.placePanel?.(this))) {
-            const pos = this.#clampPosition(this.record.x, this.record.y, this.record.width);
+            const pos = this.#fittedPosition();
             this.el.style.left = `${pos.x}px`;
             this.el.style.top = `${pos.y}px`;
         }
@@ -353,7 +350,8 @@ export class Panel {
             }
             return;
         }
-        const at = this.#clampPosition(this.record.x + area.x, this.record.y + area.y, small.width);
+        const base = this.#fittedPosition();
+        const at = this.#clampPosition(base.x + area.x, base.y + area.y, small.width, small.height);
         if (state === 'collapsed') {
             Object.assign(this.el.style, { left: `${at.x}px`, top: `${at.y}px`, width: `${small.width}px`, height: `${small.height}px` });
         } else {
@@ -538,7 +536,10 @@ export class Panel {
     getRenderedGeometry() {
         if (this.docked) {
             const rect = this.el.getBoundingClientRect();
-            return { x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) };
+            // A margin column scales its panels down in a narrow window
+            // (CSS zoom): the size is the panel's own, not the scaled one.
+            const zoom = parseFloat(getComputedStyle(this.el).zoom) || 1;
+            return { x: Math.round(rect.left), y: Math.round(rect.top), width: Math.round(rect.width / zoom), height: Math.round(rect.height / zoom) };
         }
         return {
             x: Math.round(parseFloat(this.el.style.left) || 0),
@@ -598,10 +599,15 @@ export class Panel {
         return el;
     }
 
-    #clampPosition(x, y, width) {
-        const maxX = window.innerWidth - Math.min(width, VISIBLE_MARGIN);
-        const maxY = window.innerHeight - VISIBLE_MARGIN;
-        return { x: clamp(x, 0, maxX), y: clamp(y, 0, maxY) };
+    // (x, y) moved so a `width` x `height` box there is wholly in the window.
+    #clampPosition(x, y, width, height) {
+        return { x: clamp(x, 0, window.innerWidth - width), y: clamp(y, 0, window.innerHeight - height) };
+    }
+
+    // Where the panel shows when free: its stored place, against a
+    // remembered edge, kept in the window.
+    #fittedPosition() {
+        return fitToViewport(this.record, window.innerWidth, window.innerHeight);
     }
 
     // Shared pointer-drag plumbing for move and resize: captures the
@@ -649,7 +655,7 @@ export class Panel {
     // Shows this panel at (x, y) - clamped to the viewport like any panel
     // - without committing; used for group members moving along.
     previewPosition(x, y) {
-        const pos = this.#clampPosition(x, y, this.record.width);
+        const pos = this.#clampPosition(x, y, this.record.width, this.record.height);
         this.el.style.left = `${Math.round(pos.x)}px`;
         this.el.style.top = `${Math.round(pos.y)}px`;
     }
@@ -679,7 +685,7 @@ export class Panel {
                 const grid = this.gridSize();
                 const x = softSnapSpan(origin.x + dx, origin.width, grid);
                 const y = softSnapSpan(origin.y + dy, origin.height, grid);
-                const pos = this.#clampPosition(x, y, origin.width);
+                const pos = this.#clampPosition(x, y, origin.width, origin.height);
                 this.el.style.left = `${Math.round(pos.x)}px`;
                 this.el.style.top = `${Math.round(pos.y)}px`;
                 const shiftX = Math.round(pos.x) - origin.x;

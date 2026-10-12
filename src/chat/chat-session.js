@@ -44,6 +44,7 @@ import {
     VARIABLES_CHANGED_EVENT, currentChatId, watchNames, refreshValues, refreshRoles, loadCatalog, isCatalogWatched,
 } from './variable-service.js';
 import { startRoleSync, onRolesSynced } from './role-sync.js';
+import { ARCHIVIST_COMPILED_EVENT } from './archivist-link.js';
 import { notify } from '../ui/dialogs.js';
 
 // The State Engine role request this extension keeps per chat.
@@ -274,6 +275,10 @@ export async function startChatSession() {
     const { eventSource, eventTypes } = SillyTavern.getContext();
     eventSource.on(eventTypes.CHAT_CHANGED, () => void showChatLayout());
     eventSource.on(VARIABLES_CHANGED_EVENT, (chatId) => void onVariablesChanged(chatId ?? null));
+    // Archivist compiled the chat: character cards' "archivist.*" fields change.
+    eventSource.on(ARCHIVIST_COMPILED_EVENT, ({ chatId } = {}) => {
+        if (!chatId || chatId === currentChatId()) void refreshValues();
+    });
 
     await showChatLayout();
 }

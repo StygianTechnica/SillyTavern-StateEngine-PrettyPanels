@@ -22,6 +22,8 @@
 //   anchorMode    'free' | 'anchored'
 //   anchorTarget  null | an ANCHORS id (used when anchorMode is 'anchored')
 
+import { marginWidths, COLUMN_PADDING } from './viewport-fit.js';
+
 export const ANCHOR_MODES = [
     ['free', 'Free'],
     ['anchored', 'Anchored'],
@@ -111,17 +113,29 @@ export function anchorHost(id) {
 
 // Sizes the margin columns to their panels and moves SillyTavern's chat
 // column and sidebars out of their way (CSS variables read by style.css,
-// "Layout anchors"). Call after panels were docked or undocked.
+// "Layout anchors"). In a narrow window the columns give way first, their
+// panels scaled down together (--pp-column-scale), before the chat column
+// narrows (viewport-fit.js marginWidths). Call after panels were docked or
+// undocked, and when the window changes size.
 export function updateMarginLayout() {
     const root = document.documentElement;
-    let any = false;
+    const wanted = {};
     for (const [id, side] of Object.entries(MARGIN_SIDES)) {
         const host = hosts.get(id);
         const panels = host ? [...host.children].filter((el) => el.classList.contains('pp-panel')) : [];
-        const width = panels.reduce((max, el) => Math.max(max, parseFloat(el.style.width) || 0), 0);
-        if (host) host.style.width = `${width}px`;
+        wanted[side] = panels.reduce((max, el) => Math.max(max, parseFloat(el.style.width) || 0), 0);
+    }
+    const fitted = marginWidths(wanted, window.innerWidth);
+    let any = false;
+    for (const [id, side] of Object.entries(MARGIN_SIDES)) {
+        const host = hosts.get(id);
+        const width = fitted[side];
+        if (host) {
+            host.style.width = `${width}px`;
+            host.style.setProperty('--pp-column-scale', String(fitted[`${side}Scale`]));
+        }
         // The column's own padding (style.css .pp-anchor-column) included.
-        root.style.setProperty(`--pp-anchor-${side}`, `${width > 0 ? width + 8 : 0}px`);
+        root.style.setProperty(`--pp-anchor-${side}`, `${width > 0 ? width + COLUMN_PADDING : 0}px`);
         if (width > 0) any = true;
     }
     document.body.classList.toggle('pp-anchor-margins', any);

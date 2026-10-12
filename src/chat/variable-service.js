@@ -30,6 +30,7 @@ import { getChatSetting } from '../api/get-chat-setting.js';
 import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
 import { characterFieldList, characterFieldDef } from '../elements/character-fields.js';
 import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
+import { archivistApi, withArchivistInsights } from './archivist-link.js';
 
 // The catalog group holding Pretty Panels' own variables. Always "active"
 // (there is no preset to activate for it).
@@ -85,7 +86,8 @@ async function loadRoles(chatId) {
 
 // The open chat's characters - State Engine objects of type character, its
 // own and its setting's (listObjects) - by id: what a character variable's
-// ids show as.
+// ids show as. With Archivist installed, each carries what Archivist
+// compiled about it as `archivist` (src/chat/archivist-link.js).
 let characters = new Map();
 
 export function getCharacter(id) {
@@ -103,17 +105,18 @@ export async function loadCharacterFieldList() {
     try {
         const chatId = currentChatId();
         const settingId = (chatId ? await getChatSetting(EXTENSION_ID, chatId) : null) ?? 'default';
-        return characterFieldList((await getObjectRuntimeFields(EXTENSION_ID, settingId, CHARACTER_OBJECT_TYPE)) ?? []);
+        return characterFieldList((await getObjectRuntimeFields(EXTENSION_ID, settingId, CHARACTER_OBJECT_TYPE)) ?? [], { archivist: !!archivistApi() });
     } catch (err) {
         console.warn('[PrettyPanels] could not read character runtime fields (update State Engine)', err);
-        return characterFieldList([]);
+        return characterFieldList([], { archivist: !!archivistApi() });
     }
 }
 
 async function loadCharacters(chatId) {
     if (!chatId) return new Map();
     try {
-        return new Map(((await listObjects(EXTENSION_ID, chatId, CHARACTER_OBJECT_TYPE)) ?? []).map((c) => [c.id, c]));
+        const list = new Map(((await listObjects(EXTENSION_ID, chatId, CHARACTER_OBJECT_TYPE)) ?? []).map((c) => [c.id, c]));
+        return await withArchivistInsights(chatId, list);
     } catch (err) {
         console.warn('[PrettyPanels] could not read State Engine characters (update State Engine for object support)', err);
         return new Map();

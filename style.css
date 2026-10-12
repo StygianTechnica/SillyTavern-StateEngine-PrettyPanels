@@ -1941,6 +1941,12 @@ body.pp-editing .pp-panel.pp-grouped:not(.pp-locked) .pp-panel-group {
     white-space: normal;
 }
 
+/* In a margin column: scaled down with the column in a narrow window
+   (anchors.js updateMarginLayout, --pp-column-scale). */
+.pp-anchor-column > .pp-panel.pp-docked {
+    zoom: var(--pp-column-scale, 1);
+}
+
 /* In the chat column / input area / sidebar: spans its width. */
 .pp-panel.pp-docked-row {
     width: 100% !important;

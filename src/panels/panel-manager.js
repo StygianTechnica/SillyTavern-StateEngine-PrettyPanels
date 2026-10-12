@@ -78,6 +78,7 @@ import { refreshElementTitles } from '../elements/element-view.js';
 import { isConditional, setPinned } from './panel-display.js';
 import { getValue, getImage, onValuesChange, findVariable } from '../chat/variable-service.js';
 import { softSnap } from './snap.js';
+import { edgesFor } from './viewport-fit.js';
 import { getActiveLayoutId, setActiveLayoutId, deleteLayout } from '../library/layout-library.js';
 import { getTemplate } from '../library/panel-library.js';
 import { confirmYesNo, notify } from '../ui/dialogs.js';
@@ -123,7 +124,18 @@ let draggingPanel = null;
 // Writes a panel's record: the registry for a layout panel, the panel's
 // own writer for the template editor. Returns the stored record, or null.
 function writeRecord(panel, patch) {
-    return panel.writeRecord ? panel.writeRecord(patch) : updatePanelRecord(panel.id, patch);
+    const placed = withEdges(panel, patch);
+    return panel.writeRecord ? panel.writeRecord(placed) : updatePanelRecord(panel.id, placed);
+}
+
+// A free panel's geometry written: whether it now sits flush against the
+// window's right or bottom edge goes with it (viewport-fit.js), so it
+// stays there when the window changes size.
+function withEdges(panel, patch) {
+    if (!['x', 'y', 'width', 'height'].some((key) => key in patch)) return patch;
+    const next = { ...panel.record, ...patch };
+    if (next.anchorMode === 'anchored') return patch;
+    return { ...patch, ...edgesFor(next, window.innerWidth, window.innerHeight) };
 }
 
 function anchoredTarget(record) {

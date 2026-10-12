@@ -25,6 +25,10 @@ activation.
   - click the tiny dot in the top-right corner to open that panel's properties;
   - drag an element to move it, its corner grip to resize it, click it to edit it. While one
     element is dragged, the panel's other elements are faintly outlined.
+- **Window size**: a panel always shows wholly inside the window. When the window shrinks, a
+  panel that would go off its edge moves in (and goes back to its place when the window grows
+  again); a panel you place flush against the right or bottom edge stays against that edge at
+  any window size.
 - Locked panels (and their elements) can't be moved, resized or edited until unlocked; in
   Editing Mode they show a small lock icon, and their properties are read-only except Unlock.
 - **Tooltips** - in Editing Mode, hovering an element names what it is bound to (or why it
@@ -252,7 +256,9 @@ carried over.
   sidebar list moves down, or - for the margins - the chat column moves over (and narrows if
   it must) and the side drawers shrink to fit, so nothing overlaps. Panels in the chat column,
   input area or sidebar span its width (their height is kept and can still be resized);
-  margin columns are as wide as their widest panel. Several panels on one anchor stack.
+  margin columns are as wide as their widest panel. In a narrow window the margin columns give
+  way before the chat does: they shrink, their panels scaled down together (to half size at
+  most), while the chat column would be narrower than 480px. Several panels on one anchor stack.
   Dragging a docked panel away floats it again where you drop it. Anchor mode can also be set
   in the panel's settings (Free, or Anchored + where). The **Left/Right margin** anchors are
   only offered while dragging a panel whose Anchor mode is Anchored: a Free panel dropped in a
@@ -422,7 +428,12 @@ variables. The characters themselves - and every rule about them - are State Eng
   role, biography, personality, introduction, and the runtime state (thought, mood, intent and
   the setting's own runtime fields). Every enum runtime field also has an **icon** field
   ("Mood (icon)"): the image set for its current value, drawn like any image element - an icon
-  in place of the word. Template elements can show variables and roles too, and images. Unlike panel templates, character templates **keep their bindings**; an export
+  in place of the word. With the **Archivist** extension installed there is an **Archivist
+  (memory)** group too, from what Archivist compiled about the character: traits, habits,
+  stressors, motivations, arc, how they feel lately, their relationship to your persona (what
+  it is, how they feel toward you - hostile to devoted, as a word or a -3..3 score - its
+  intensity and trend), their open story threads and the secrets they know. They fill in once
+  Archivist has compiled the chat, and update after every compile. Template elements can show variables and roles too, and images. Unlike panel templates, character templates **keep their bindings**; an export
   carries them with the definitions of the roles they use, and a layout export carries the
   character templates its Character elements use. Edits show on the cards as you make them.
 - **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat
@@ -486,6 +497,7 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/panels/snap.js` | Soft snap-to-grid |
 | `src/panels/panel-style.js` | Panel Styling model and CSS variables |
 | `src/panels/anchors.js` | Layout anchors: hosts inside SillyTavern's DOM, margin reflow, drop zones, drag overlay |
+| `src/panels/viewport-fit.js` | Keeping panels in the window: remembered edges, margin columns giving way |
 | `src/elements/element-model.js` | VariableElement records, labels, geometry clamping |
 | `src/elements/element-view.js` | One element on screen: render, drag, resize, click |
 | `src/elements/text-format.js` | Text Formatting: the one pipeline (Text Case, Value Formatting, Theme Style presets) |
@@ -508,6 +520,7 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/chat/pp-config.js` | The PP Configuration preset and `prettyPanels__layoutId` |
 | `src/chat/chat-session.js` | Per-chat layout choice, preset activation, role requests and checks, live refresh |
 | `src/chat/variable-service.js` | Variable and role catalog, current values, role resolution |
+| `src/chat/archivist-link.js` | What the Archivist extension compiled about each character, for character cards |
 | `src/panels/drawer.js` | Drawers: compact area geometry, open / closed per chat and session |
 | `src/panels/panel-display.js` | Conditional panels and banners: display settings, banner queue, editing pins |
 | `src/ui/layout-panels-drawer.js` | The drawer's Layout Panels list |
