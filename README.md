@@ -207,10 +207,15 @@ carried over.
 | Drawer Toggle | an icon that opens and closes the panel's drawer (below), no variable | icon (Font Awesome name; turned over while open), colour, size |
 | Shape | a filled rectangle or ellipse, or a line (a rule or divider), no variable | shape, fill colour/opacity, border colour/thickness, corners; a line: direction (horizontal / vertical - switching turns its box), colour (default: the theme's border colour), opacity, thickness 1-20 px, solid / dashed / dotted, fade out at the ends. The line is drawn through the middle of its box, so it stays easy to grab |
 
-- Widgets show the bound variable as value / **Max Value** (value clamped to 0..max). Max
-  Value left blank uses the variable's own range: its max if it defines one (12 of max 20 =
-  60%), otherwise 100, and its min if it defines one. Min/Max are optional per variable in
-  State Engine's editor.
+- Widgets show where the bound variable sits between **Min Value** and **Max Value** (value
+  clamped to that range). Either may be negative - a -3..3 polarity score fills from -3. Left
+  blank, each uses the variable's own range: its min (else 0) and its max (else 100) - 12 of
+  max 20 = 60%. Min/Max are optional per variable in State Engine's editor; Archivist's
+  relationship score is -3..3 on its own.
+- **Gradient**: give a widget a **Gradient high end** colour (and optionally a **Gradient
+  middle**) and its fill shades from **Fill (low end)** to it. A bar's gradient spans the whole
+  track, so a low value shows only the low-end colours; a gauge takes the colour for its value
+  - red, grey, green for a polarity, say. Reset the high end for a plain fill.
 - Animate Changes (on by default) eases width/height/arc changes over 200ms.
 - Composite Bar: an icon alone shows just the icon; icon and label text show both; with
   neither, the variable's label is shown.

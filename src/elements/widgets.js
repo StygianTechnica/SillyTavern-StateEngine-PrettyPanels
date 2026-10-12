@@ -6,10 +6,16 @@
 // The DOM for a type is built once and then only updated, so width/height
 // and stroke-dashoffset changes can animate (200ms) when `animate` is on.
 //
-// Percentage = value / max * 100, with the value clamped to [0, max].
-// `max` is the element's Max Value (widget.maxValue); left blank, the
-// bound variable's own range is used - its max if it defines one (else
-// 100) and its min if it defines one (else 0).
+// Percentage = (value - min) / (max - min) * 100, the value clamped to
+// [min, max]. `min` / `max` are the element's Min Value / Max Value
+// (widget.minValue / widget.maxValue - any numbers, negative too, max above
+// min); each one left blank comes from the bound variable's own range - its
+// min (else 0), its max (else 100). So a -3..3 score fills a bar from -3.
+//
+// GRADIENT: with a high-end colour (widget.gradientColor) the fill shades
+// from the Fill colour (the low end) - through widget.gradientMid, when set -
+// to it. A bar's gradient spans the whole track, so a low value shows only
+// the low-end colours; a gauge takes the single colour for its value.
 
 import { isColor } from '../panels/panel-style.js';
 import { iconClass } from './element-style.js';
@@ -18,11 +24,11 @@ import { formatText } from './text-format.js';
 
 // Which Widget Properties each type offers, in display order.
 export const WIDGET_FIELDS = {
-    'bar-horizontal': ['maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
-    'bar-vertical': ['maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barWidth', 'animate'],
-    'gauge-circle': ['maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
-    'gauge-semicircle': ['maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'showValue', 'animate'],
-    'composite-bar': ['labelText', 'labelColor', 'icon', 'iconColor', 'iconSize', 'maxValue', 'trackColor', 'fillColor', 'cornerRadius', 'barHeight', 'animate'],
+    'bar-horizontal': ['minValue', 'maxValue', 'trackColor', 'fillColor', 'gradientMid', 'gradientColor', 'cornerRadius', 'barHeight', 'animate'],
+    'bar-vertical': ['minValue', 'maxValue', 'trackColor', 'fillColor', 'gradientMid', 'gradientColor', 'cornerRadius', 'barWidth', 'animate'],
+    'gauge-circle': ['minValue', 'maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'gradientMid', 'gradientColor', 'showValue', 'animate'],
+    'gauge-semicircle': ['minValue', 'maxValue', 'gaugeRadius', 'strokeWidth', 'trackColor', 'fillColor', 'gradientMid', 'gradientColor', 'showValue', 'animate'],
+    'composite-bar': ['labelText', 'labelColor', 'icon', 'iconColor', 'iconSize', 'minValue', 'maxValue', 'trackColor', 'fillColor', 'gradientMid', 'gradientColor', 'cornerRadius', 'barHeight', 'animate'],
 };
 
 export const WIDGET_LIMITS = {
@@ -60,21 +66,51 @@ function color(widget, key) {
     return isColor(widget?.[key]) ? widget[key] : null;
 }
 
-// The max a widget measures against (see header).
+// The [min, max] a widget measures against (see header). A range that
+// would be empty or upside down falls back step by step: the variable's,
+// then 0..100 (or min..min+100).
+export function effectiveRange(widget, def) {
+    const given = (v) => Number.isFinite(v);
+    const min = given(widget?.minValue) ? widget.minValue : (given(def?.min) ? def.min : 0);
+    for (const max of [widget?.maxValue, def?.max, 100, min + 100]) {
+        if (given(max) && max > min) return [min, max];
+    }
+    return [min, min + 100];
+}
+
 export function effectiveMax(widget, def) {
-    if (Number.isFinite(widget?.maxValue) && widget.maxValue > 0) return widget.maxValue;
-    if (Number.isFinite(def?.max) && def.max > 0) return def.max;
-    return 100;
+    return effectiveRange(widget, def)[1];
+}
+
+export function effectiveMin(widget, def) {
+    return effectiveRange(widget, def)[0];
 }
 
 // 0-100, or null when the value isn't a number.
 export function percentOf(value, def, widget) {
     const n = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
     if (!Number.isFinite(n)) return null;
-    const max = effectiveMax(widget, def);
-    const explicit = Number.isFinite(widget?.maxValue) && widget.maxValue > 0;
-    const min = !explicit && Number.isFinite(def?.min) && def.min < max ? def.min : 0;
+    const [min, max] = effectiveRange(widget, def);
     return ((Math.min(max, Math.max(min, n)) - min) / (max - min)) * 100;
+}
+
+// The gradient's colours, low to high, or null for a plain fill: the Fill
+// colour (or the theme's) at the low end, the optional middle, the high end.
+export function gradientStops(widget) {
+    const high = color(widget, 'gradientColor');
+    if (!high) return null;
+    const low = color(widget, 'fillColor') ?? 'var(--ppt-primary, var(--SmartThemeQuoteColor))';
+    const mid = color(widget, 'gradientMid');
+    return mid ? [low, mid, high] : [low, high];
+}
+
+// The single colour at `pct` (0-100) along `stops` - for a gauge.
+export function colorAt(stops, pct) {
+    const p = Math.min(100, Math.max(0, pct ?? 0));
+    if (stops.length === 2) return `color-mix(in srgb, ${stops[1]} ${p.toFixed(1)}%, ${stops[0]})`;
+    return p <= 50
+        ? `color-mix(in srgb, ${stops[1]} ${(p * 2).toFixed(1)}%, ${stops[0]})`
+        : `color-mix(in srgb, ${stops[2]} ${((p - 50) * 2).toFixed(1)}%, ${stops[1]})`;
 }
 
 function svg(tag, attrs = {}) {
@@ -121,6 +157,18 @@ function updateBar(holder, widget, pct, vertical) {
     holder.style.setProperty(vertical ? '--pp-w-bar-w' : '--pp-w-bar-h', `${num(widget, vertical ? 'barWidth' : 'barHeight')}px`);
     const fill = holder.querySelector('.pp-bar-fill');
     fill.style[vertical ? 'height' : 'width'] = `${pct ?? 0}%`;
+    // A gradient spans the whole track: the fill shows the part up to its value.
+    const stops = gradientStops(widget);
+    if (stops && pct) {
+        fill.style.backgroundImage = `linear-gradient(${vertical ? 'to top' : 'to right'}, ${stops.join(', ')})`;
+        const span = `${(10000 / pct).toFixed(2)}%`;
+        fill.style.backgroundSize = vertical ? `100% ${span}` : `${span} 100%`;
+        fill.style.backgroundPosition = vertical ? 'bottom' : 'left';
+    } else {
+        fill.style.removeProperty('background-image');
+        fill.style.removeProperty('background-size');
+        fill.style.removeProperty('background-position');
+    }
 }
 
 // Gauge geometry from the element's own size (so the properties preview,
@@ -161,6 +209,9 @@ function updateGauge(holder, element, entry, pct, semi, formatting) {
         fill.setAttribute('transform', `rotate(-90 ${c} ${c})`);
     }
     for (const ring of [track, fill]) ring.setAttribute('stroke-width', String(stroke));
+    const stops = gradientStops(widget);
+    if (stops) fill.style.stroke = colorAt(stops, pct);
+    else fill.style.removeProperty('stroke');
     fill.setAttribute('stroke-dasharray', '100 100');
     fill.style.strokeDashoffset = String(100 - (pct ?? 0));
     fill.classList.toggle('pp-gauge-empty', !pct);

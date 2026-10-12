@@ -123,7 +123,9 @@ export function characterFieldDef(field) {
     }
     if (field.startsWith(ARCHIVIST_PREFIX)) {
         const known = ARCHIVIST_FIELDS.find(([name]) => name === field.slice(ARCHIVIST_PREFIX.length));
-        return { name: `char:${field}`, type: known?.[2] ?? 'string', label: known?.[1] ?? labelFor(field.slice(ARCHIVIST_PREFIX.length)), characterField: field };
+        const def = { name: `char:${field}`, type: known?.[2] ?? 'string', label: known?.[1] ?? labelFor(field.slice(ARCHIVIST_PREFIX.length)), characterField: field };
+        // The polarity score runs -3..3: a bar or gauge measures it so by default.
+        return field === `${ARCHIVIST_PREFIX}relationship_score` ? { ...def, min: -3, max: 3 } : def;
     }
     const known = CHARACTER_IDENTITY_FIELDS.find(([f]) => f === field);
     const label = known ? known[1] : (field.startsWith(CUSTOM_PREFIX) ? field.slice(CUSTOM_PREFIX.length) : field).replace(/_/g, ' ');

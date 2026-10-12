@@ -49,7 +49,7 @@ import {
 } from '../elements/element-model.js';
 import { normalizeCompact } from './drawer.js';
 import { DISPLAY_MODES, DISPLAY_TRIGGERS, DISPLAY_ANIMATIONS, DISPLAY_LIMITS, normalizeDisplay } from './panel-display.js';
-import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveMax } from '../elements/widgets.js';
+import { WIDGET_FIELDS, WIDGET_LIMITS, WIDGET_DEFAULTS, effectiveRange } from '../elements/widgets.js';
 import {
     TEXT_CASES, THEME_STYLES, VALUE_FORMATS, DECIMAL_LIMITS, DECIMAL_FORMATS, DATETIME_PATTERN_HINT, NUMBER_PATTERN_HINT,
     normalizeFormat, valueKind,
@@ -877,12 +877,16 @@ export class PanelPropertiesPopup {
         const bar = this.preview.querySelector('.pp-bar');
         this.#fillColor('widget', 'trackColor', widget.trackColor, bar ? getComputedStyle(bar).backgroundColor : find('.pp-gauge-track', 'stroke'));
         this.#fillColor('widget', 'fillColor', widget.fillColor, bar ? find('.pp-bar-fill', 'backgroundColor') : find('.pp-gauge-fill', 'stroke'));
+        this.#fillColor('widget', 'gradientMid', widget.gradientMid, '#888888');
+        this.#fillColor('widget', 'gradientColor', widget.gradientColor, '#888888');
         this.#fillColor('widget', 'labelColor', widget.labelColor, find('.pp-widget-label', 'color'));
         this.#fillColor('widget', 'iconColor', widget.iconColor, find('.pp-widget-icon', 'color'));
         for (const key of Object.keys(WIDGET_LIMITS)) this.#fillValue('widget', key, widget[key]);
+        this.#fillValue('widget', 'minValue', widget.minValue);
         this.#fillValue('widget', 'maxValue', widget.maxValue);
-        // Blank Max Value: show the max actually in use.
-        this.#styleField('widget', 'maxValue').placeholder = String(effectiveMax({}, this.#def(element)));
+        // Blank Min / Max Value: show the ones actually in use.
+        this.#styleField('widget', 'minValue').placeholder = String(effectiveRange({}, this.#def(element))[0]);
+        this.#styleField('widget', 'maxValue').placeholder = String(effectiveRange({ minValue: widget.minValue }, this.#def(element))[1]);
         this.#fillValue('widget', 'labelText', widget.labelText ?? '');
         this.#fillValue('widget', 'icon', widget.icon ?? '');
         this.#fillValue('widget', 'animate', widget.animate ?? WIDGET_DEFAULTS.animate);
@@ -1096,7 +1100,7 @@ export class PanelPropertiesPopup {
                 if (input.value.trim() === '') return null;
                 if (!Number.isFinite(input.valueAsNumber)) return undefined;
                 const limits = this.#numberLimits(scope, key);
-                if (!limits) return key === 'maxValue' && input.valueAsNumber <= 0 ? undefined : input.valueAsNumber;
+                if (!limits) return input.valueAsNumber;
                 if (scope === 'panel') return clampStyleNumber(key, input.valueAsNumber);
                 const n = FLOAT_STYLE_KEYS.has(key) ? Math.round(input.valueAsNumber * 100) / 100 : Math.round(input.valueAsNumber);
                 return Math.min(limits[1], Math.max(limits[0], n));
@@ -1492,16 +1496,25 @@ export class PanelPropertiesPopup {
                     ${widgetField('icon', textRow('Icon', 'widget', 'icon', 'e.g. heart'))}
                     ${widgetField('iconColor', colorRow('Icon color', 'widget', 'iconColor'))}
                     ${widgetField('iconSize', numberRow('Icon size', 'widget', 'iconSize', WIDGET_LIMITS.iconSize))}
+                    ${widgetField('minValue', `
+                        <div class="pp-style-row"><span>Min value</span>
+                            <div class="pp-style-controls">
+                                <input type="number" class="text_pole" data-style="widget:minValue" step="any" title="The value at which the widget is empty - may be negative (e.g. -3 for a -3..3 score). Blank: the variable's own min, or 0." />
+                            </div>
+                        </div>`)}
                     ${widgetField('maxValue', `
                         <div class="pp-style-row"><span>Max value</span>
                             <div class="pp-style-controls">
-                                <input type="number" class="text_pole" data-style="widget:maxValue" min="0" step="any" title="The value that fills the widget. Blank: the variable's own max, or 100." />
+                                <input type="number" class="text_pole" data-style="widget:maxValue" step="any" title="The value that fills the widget - above Min value. Blank: the variable's own max, or 100." />
                             </div>
                         </div>`)}
                     ${widgetField('gaugeRadius', numberRow('Radius', 'widget', 'gaugeRadius', WIDGET_LIMITS.gaugeRadius))}
                     ${widgetField('strokeWidth', numberRow('Stroke', 'widget', 'strokeWidth', WIDGET_LIMITS.strokeWidth))}
                     ${widgetField('trackColor', colorRow('Track', 'widget', 'trackColor'))}
-                    ${widgetField('fillColor', colorRow('Fill', 'widget', 'fillColor'))}
+                    ${widgetField('fillColor', colorRow('Fill (low end)', 'widget', 'fillColor'))}
+                    ${widgetField('gradientMid', colorRow('Gradient middle', 'widget', 'gradientMid'))}
+                    ${widgetField('gradientColor', colorRow('Gradient high end', 'widget', 'gradientColor'))}
+                    ${widgetField('gradientColor', '<small class="pp-field-info">Set a high-end colour to shade the fill from Fill to it (through the middle colour, when set); reset it for a plain fill.</small>')}
                     ${widgetField('cornerRadius', numberRow('Corners', 'widget', 'cornerRadius', WIDGET_LIMITS.cornerRadius))}
                     ${widgetField('barHeight', numberRow('Bar height', 'widget', 'barHeight', WIDGET_LIMITS.barHeight))}
                     ${widgetField('barWidth', numberRow('Bar width', 'widget', 'barWidth', WIDGET_LIMITS.barWidth))}
