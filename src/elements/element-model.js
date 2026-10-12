@@ -66,6 +66,7 @@
 import { NAMESPACE } from '../constants.js';
 import { normalizeFormat } from './text-format.js';
 import { isCharacterDefinition } from './object-defs.js';
+import { isCharacterField } from './character-fields.js';
 
 // Element Styling keys that are not stored: textTransform (case is
 // element.format.textCase now) and the Theme Style layer's computed CSS.
@@ -209,8 +210,6 @@ export function rolePublicName(id) {
 
 // A character field ref ("char:name") - character templates only.
 export const CHAR_REF_PREFIX = 'char:';
-// "icon.<name>": the image an enum runtime field's value has (character-fields.js).
-const CHAR_FIELD = /^(?:[a-z_]+|(?:custom|icon)\.[a-z][a-z0-9_]{0,39})$/;
 
 export function isCharRef(ref) {
     return typeof ref === 'string' && ref.startsWith(CHAR_REF_PREFIX);
@@ -276,7 +275,8 @@ function normalizeBinding(binding) {
     if (isRoleRef(name)) return normalizeBinding({ role: roleOfRef(name) });
     if (isCharRef(name)) return normalizeBinding({ char: charFieldOfRef(name) });
     const char = typeof binding?.char === 'string' ? binding.char.trim() : '';
-    if (char) return CHAR_FIELD.test(char) ? { char } : null;
+    // Which fields exist is character-fields.js's to say (custom., icon., archivist.).
+    if (char) return isCharacterField(char) ? { char } : null;
     if (name) return { name };
     const role = typeof binding?.role === 'string' ? binding.role.trim() : '';
     if (parseRoleId(role)) return { role };

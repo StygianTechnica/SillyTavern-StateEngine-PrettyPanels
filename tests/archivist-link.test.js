@@ -3,6 +3,7 @@
 
 import { characterInsights, withArchivistInsights } from '../src/chat/archivist-link.js';
 import { characterFieldValue, characterEntry, characterFieldList, SAMPLE_CHARACTER } from '../src/elements/character-fields.js';
+import { normalizeWidgets } from '../src/elements/element-model.js';
 
 const lucian = { id: 'chr_lucian', name: 'Lucian', aliases: ['Luc'] };
 const gavin = { id: 'chr_gavin', name: 'Gavin', aliases: [] };
@@ -90,5 +91,14 @@ describe('archivist character fields', () => {
         const fields = characterFieldList([], { archivist: true }).filter((f) => f.group === 'Archivist (memory)').map((f) => f.field);
         expect(fields).toEqual(expect.arrayContaining(['archivist.traits', 'archivist.relationship_type', 'archivist.relationship_intensity', 'archivist.secrets']));
         for (const field of fields) expect(characterFieldValue(SAMPLE_CHARACTER, field), field).not.toBeUndefined();
+    });
+});
+
+describe('a template element bound to an archivist field', () => {
+    it('keeps its binding when saved (it used to be dropped to no binding)', () => {
+        const [element] = normalizeWidgets([{ type: 'text', binding: { char: 'archivist.relationship_type' } }]);
+        expect(element.binding).toEqual({ char: 'archivist.relationship_type' });
+        const [other] = normalizeWidgets([{ type: 'text', binding: { char: 'archivist.Bad Name' } }]);
+        expect(other.binding).toBeNull();
     });
 });
