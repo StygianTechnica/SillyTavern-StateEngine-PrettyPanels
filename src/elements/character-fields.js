@@ -61,12 +61,15 @@ const ARCHIVIST_FIELDS = [
     ['motivations', 'Motivations', 'list', (a) => a.motivations, 'What drives them'],
     ['arc', 'Arc', 'text', (a) => a.arc, 'How they have changed over the story'],
     ['feeling', 'Feeling lately', 'string', (a) => a.feeling, 'How they have been feeling lately'],
-    ['relationship_type', 'Relationship to you', 'string', (a) => a.relationship?.type, 'What they are to your persona - friend, mentor, rival...'],
-    ['relationship_polarity', 'Feeling toward you', 'string', (a) => a.relationship?.polarity_label, 'hostile, antagonistic, wary, neutral, friendly, close or devoted'],
-    ['relationship_score', 'Polarity toward you (-3..3)', 'number', (a) => a.relationship?.polarity, 'How they feel toward your persona, -3 (hostile) to 3 (devoted)'],
+    // Between the character and your persona: their view of you when the
+    // story has shown it, else yours of them (relationship_view says which).
+    ['relationship_type', 'Relationship with you', 'string', (a) => a.relationship?.type, 'What they are to your persona (or you to them) - friend, mentor, rival, ally...'],
+    ['relationship_polarity', 'Feeling between you', 'string', (a) => a.relationship?.polarity_label, 'hostile, antagonistic, wary, neutral, friendly, close or devoted'],
+    ['relationship_score', 'Polarity between you (-3..3)', 'number', (a) => a.relationship?.polarity, '-3 (hostile) to 3 (devoted)'],
     ['relationship_intensity', 'Relationship intensity', 'string', (a) => a.relationship?.intensity, 'low, medium or high'],
     ['relationship_trend', 'Relationship trend', 'string', (a) => a.relationship?.trend, 'warming, cooling, stable or volatile'],
-    ['relationship', 'Relationship (sentence)', 'text', (a) => a.relationship?.text, 'One sentence on how they see your persona'],
+    ['relationship', 'Relationship (sentence)', 'text', (a) => a.relationship?.text, 'One sentence on the relationship'],
+    ['relationship_view', 'Whose view', 'string', (a) => (a.relationship ? (a.relationship.view === 'theirs' ? 'their view of you' : 'your view of them') : undefined), 'Whether the relationship fields show their view of you or yours of them'],
     ['threads', 'Open story threads', 'list', (a) => a.threads, 'Plot hooks, threads and quests they are part of, still open'],
     ['secrets', 'Secrets they know', 'list', (a) => a.secrets, 'Secrets Archivist knows they are in on'],
 ];
@@ -183,7 +186,7 @@ export const SAMPLE_CHARACTER = Object.freeze({
     archivist: {
         traits: ['patient', 'curious'], habits: ['checks every margin'], stressors: ['clipped text'], motivations: ['a tidy layout'],
         arc: 'From a blank box to a finished card.', feeling: 'hopeful',
-        relationship: { type: 'friend', polarity: 2, polarity_label: 'close', intensity: 'medium', trend: 'warming', text: 'Trusts you with every template.' },
+        relationship: { type: 'friend', polarity: 2, polarity_label: 'close', intensity: 'medium', trend: 'warming', text: 'Trusts you with every template.', view: 'theirs' },
         threads: ['The missing font'], secrets: ['Where the grid snaps'],
     },
 });

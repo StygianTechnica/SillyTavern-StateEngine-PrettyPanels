@@ -28,7 +28,7 @@ describe('characterInsights', () => {
         expect(characterInsights(view, lucian, { id: null, name: 'Sam' })).toEqual({
             traits: ['diligent'], habits: ['early runs'], stressors: ['rent'], motivations: ['keep the gym open'],
             arc: 'From drifting to driven.', feeling: 'anxious',
-            relationship: { type: 'mentor', polarity: 2, polarity_label: 'close', intensity: 'high', trend: 'warming', text: 'Lucian looks out for Sam.' },
+            relationship: { type: 'mentor', polarity: 2, polarity_label: 'close', intensity: 'high', trend: 'warming', text: 'Lucian looks out for Sam.', view: 'theirs' },
             threads: ['The manager job'],
             secrets: ['The debt'],
         });
@@ -36,6 +36,16 @@ describe('characterInsights', () => {
 
     it('matches the persona as a character object by id', () => {
         expect(characterInsights(view, lucian, gavin).relationship).toMatchObject({ type: 'rival', polarity: -1 });
+    });
+
+    it('falls back to the persona view of the character, matching names loosely (the reported gremlin)', () => {
+        const gremlin = { id: 'chr_g', name: 'A lead gremlin', aliases: [] };
+        const syrvanus = { id: 'chr_s', name: 'Syrvanus Voxaris', aliases: [] };
+        const compiled = { relationships: [{ from: { id: 'chr_s', name: 'Syrvanus Voxaris' }, to: { id: null, name: 'gremlin (lead)' }, type: 'ally', polarity: 2, polarity_label: 'close', intensity: 'medium' }] };
+        expect(characterInsights(compiled, gremlin, syrvanus).relationship).toMatchObject({ type: 'ally', polarity: 2, view: 'yours' });
+        const withInsights = { ...gremlin, archivist: characterInsights(compiled, gremlin, syrvanus) };
+        expect(characterFieldValue(withInsights, 'archivist.relationship_view')).toBe('your view of them');
+        expect(characterFieldValue(withInsights, 'archivist.relationship_type')).toBe('ally');
     });
 
     it('is null when the view says nothing about the character', () => {

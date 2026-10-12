@@ -430,10 +430,13 @@ variables. The characters themselves - and every rule about them - are State Eng
   ("Mood (icon)"): the image set for its current value, drawn like any image element - an icon
   in place of the word. With the **Archivist** extension installed there is an **Archivist
   (memory)** group too, from what Archivist compiled about the character: traits, habits,
-  stressors, motivations, arc, how they feel lately, their relationship to your persona (what
-  it is, how they feel toward you - hostile to devoted, as a word or a -3..3 score - its
-  intensity and trend), their open story threads and the secrets they know. They fill in once
-  Archivist has compiled the chat, and update after every compile. Template elements can show variables and roles too, and images. Unlike panel templates, character templates **keep their bindings**; an export
+  stressors, motivations, arc, how they feel lately, the relationship between them and your
+  persona (what it is, hostile to devoted as a word or a -3..3 score, its intensity and trend -
+  their view of you when the story has shown it, else yours of them; *Whose view* says which),
+  their open story threads and the secrets they know (not ones disproven). Names are matched
+  loosely, so Archivist's "gremlin (lead)" is the character "A lead gremlin". They fill in once
+  Archivist has compiled the chat, and update after every compile and when a character is
+  approved. Template elements can show variables and roles too, and images. Unlike panel templates, character templates **keep their bindings**; an export
   carries them with the definitions of the roles they use, and a layout export carries the
   character templates its Character elements use. Edits show on the cards as you make them.
 - **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat

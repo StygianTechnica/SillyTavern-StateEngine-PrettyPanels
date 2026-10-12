@@ -19,11 +19,19 @@ export function archivistApi() {
     }
 }
 
-const lower = (value) => String(value ?? '').trim().toLowerCase();
+const ARTICLES = new Set(['a', 'an', 'the']);
 
-// The names something goes by: its name and aliases, lower case.
+// A name as its words - lower case, no punctuation or brackets, no leading
+// article, any order - so "gremlin (lead)" is "A lead gremlin". The same
+// rule Archivist links names to objects by (its compiler/entity-link.js).
+export function nameKey(name) {
+    const words = String(name ?? '').toLowerCase().replace(/['’]s\b/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return [...new Set(words.filter((w) => !ARTICLES.has(w)))].sort().join(' ');
+}
+
+// The names something goes by: its name and aliases, as name keys.
 function namesOf(thing) {
-    return new Set([thing?.name, ...(Array.isArray(thing?.aliases) ? thing.aliases : [])].map(lower).filter(Boolean));
+    return new Set([thing?.name, ...(Array.isArray(thing?.aliases) ? thing.aliases : [])].map(nameKey).filter(Boolean));
 }
 
 // Whether a compiled entity ({ id | null, name }) is `who` (an object with
@@ -31,24 +39,34 @@ function namesOf(thing) {
 function isEntity(entity, who) {
     if (!entity || !who) return false;
     if (entity.id && who.id) return entity.id === who.id;
-    return namesOf(who).has(lower(entity.name));
+    return namesOf(who).has(nameKey(entity.name));
 }
 
 // The insights for `character` in compiled `view` (Archivist's
-// getCompiledMemory()), with its relationship toward `persona` ({ id?, name,
-// aliases? } - the user's persona): { traits, habits, stressors,
-// motivations, arc, feeling, relationship: { type, polarity,
-// polarity_label, intensity, trend, text } | null, threads: [titles of its
-// open or active threads], secrets: [secrets it knows] }, or null when the
-// view says nothing about it.
+// getCompiledMemory()), with the relationship between it and `persona`
+// ({ id?, name, aliases? } - the user's persona): { traits, habits,
+// stressors, motivations, arc, feeling, relationship: { type, polarity,
+// polarity_label, intensity, trend, text, view } | null, threads: [titles
+// of its open or active threads], secrets: [secrets it knows] }, or null
+// when the view says nothing about it.
+//
+// The relationship is the character's own view of the persona when the
+// memories show it (view 'theirs'), else the persona's view of the
+// character ('yours') - often all a story has shown so far.
 export function characterInsights(view, character, persona) {
     if (!view || !character) return null;
     const profile = (view.character_profiles ?? []).find((p) => isEntity({ id: p.entity_id, name: p.name }, character)) ?? null;
-    const relationship = persona ? (view.relationships ?? []).find((r) => isEntity(r.from, character) && isEntity(r.to, persona)) ?? null : null;
+    const find = (from, to) => (view.relationships ?? []).find((r) => isEntity(r.from, from) && isEntity(r.to, to)) ?? null;
+    const theirs = persona ? find(character, persona) : null;
+    const yours = persona && !theirs ? find(persona, character) : null;
+    const relationship = theirs ?? yours;
     const threads = (view.threads ?? [])
         .filter((t) => (t.status === 'open' || t.status === 'active') && (t.involved ?? []).some((e) => isEntity(e, character)))
         .map((t) => t.title);
-    const secrets = (view.world?.secret ?? []).filter((w) => (w.known_by ?? []).some((e) => isEntity(e, character))).map((w) => w.name);
+    // A disproven secret is kept in Archivist's record, but is no secret.
+    const secrets = (view.world?.secret ?? [])
+        .filter((w) => w.status !== 'disproven' && (w.known_by ?? []).some((e) => isEntity(e, character)))
+        .map((w) => w.name);
     if (!profile && !relationship && threads.length === 0 && secrets.length === 0) return null;
     return {
         traits: profile?.traits ?? [],
@@ -64,6 +82,7 @@ export function characterInsights(view, character, persona) {
             intensity: relationship.intensity,
             trend: relationship.trend ?? '',
             text: relationship.text ?? '',
+            view: theirs ? 'theirs' : 'yours',
         } : null,
         threads,
         secrets,
@@ -80,7 +99,7 @@ function personaOf(characters) {
         name = '';
     }
     if (!name) return null;
-    return [...characters.values()].find((c) => namesOf(c).has(lower(name))) ?? { id: null, name, aliases: [] };
+    return [...characters.values()].find((c) => namesOf(c).has(nameKey(name))) ?? { id: null, name, aliases: [] };
 }
 
 // `characters` (id -> character) with each one's insights attached as
