@@ -37,7 +37,7 @@
 // setDateTimeFormatter(). Automatic date/time follow the variable's
 // datetimeMode and the theme's formatting patterns (or the calendar's own).
 
-import { isCharacterDefinition } from './object-defs.js';
+import { isCharacterDefinition, objectTypeOf } from './object-defs.js';
 
 export const TEXT_CASES = [
     ['', 'As typed'],
@@ -176,10 +176,25 @@ export function setDateTimeFormatter(formatter) {
     formatDateTime = typeof formatter === 'function' ? formatter : null;
 }
 
+// id -> an object's display name (or null): set by the variable service,
+// which reads the objects a layout's object variables hold.
+let objectName = null;
+
+export function setObjectNamer(namer) {
+    objectName = typeof namer === 'function' ? namer : null;
+}
+
+// An object id's display name, or null when it is not known.
+export function objectDisplayName(id) {
+    return typeof id === 'string' && id ? objectName?.(id) ?? null : null;
+}
+
 // The value's kind, which decides its value formatting: 'number' |
 // 'datetime' | 'boolean' | 'list' | 'image' | 'imageList' | 'imageMap' |
 // 'character' (a character, or a list of characters - drawn as cards by
-// character-card.js) | 'text'. `def.type` is a variable type, or a role type for a role element
+// character-card.js) | 'text'. Any other object (a location, a faction...)
+// is text, a list of them a list - shown by name (objectNames below).
+// `def.type` is a variable type, or a role type for a role element
 // without a value yet (date, list, text). A calculated (or unknown, or
 // 'any') one goes by the value it holds.
 export function valueKind(def, value) {
@@ -320,9 +335,17 @@ function autoDatetime(run, shown, formatting) {
     return run(themed ? { style: 'custom', pattern: themed } : { style: AUTO_STYLES[shown] });
 }
 
+// An object variable's ids as names (characters are drawn as cards instead).
+function objectNames(value, def) {
+    if (!objectTypeOf(def) || isCharacterDefinition(def)) return value;
+    const name = (id) => (typeof id === 'string' && id ? objectName?.(id) ?? id : id);
+    return Array.isArray(value) ? value.filter((id) => typeof id === 'string' && id).map(name) : name(value);
+}
+
 // Value formatting by kind. { text } or { image: url }. Never throws - a
 // value that can't be formatted as asked falls back to its plain text.
-function formatValuePart(value, def, options, formatting) {
+function formatValuePart(raw, def, options, formatting) {
+    const value = objectNames(raw, def);
     const kind = valueKind(def, value);
     try {
         switch (kind) {

@@ -465,8 +465,12 @@ variables. The characters themselves - and every rule about them - are State Eng
     (an enum - edit its values) and intent, plus your own string, number (with min/max) or enum
     fields, each with a description (what the model is asked for) and **Prompted** on (the
     prompted update fills it) or off (you set it in This chat). An enum field's **Images**
-    section takes an image per value (a URL or an upload; optional) for its icon field. Edit,
-    then **Save fields**.
+    section takes an image per value (a URL or an upload; optional) for its icon field. Its
+    **Export set** button saves those images as an image set file (the images are inside it);
+    **Import set…** fills them from such a file, and **Built-in sets…** from a set that comes
+    with Pretty Panels (`assets/image-sets/`, e.g. *Emoji moods*). Values are matched ignoring
+    case; a set's values the field doesn't list can be added, and images the field already
+    has are only replaced if you say so. Edit, then **Save fields**.
   Actions: edit (name, aliases, image - a URL or an upload - faction, role, biography,
   personality; saving confirms the character), confirm, **resolve** an unconfirmed character to
   one you already have (its detected name becomes their alias, and they are confirmed), merge

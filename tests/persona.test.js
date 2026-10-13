@@ -36,3 +36,20 @@ describe('the persona among the characters', () => {
         expect(normalizeFormat({}).value.characterHideUser).toBe(false);
     });
 });
+
+describe('other objects in a text element', () => {
+    it('show by name - one, or a list as a list', async () => {
+        const { formatText, setObjectNamer } = await import('../src/elements/text-format.js');
+        const names = { loc_d: 'The Docks', fac_g: 'The Guild' };
+        setObjectNamer((id) => names[id] ?? null);
+        try {
+            expect(formatText('loc_d', { type: 'object', objectType: 'location' }, {}).text).toBe('The Docks');
+            expect(formatText('', { type: 'object', objectType: 'location' }, {}).text).toBe('');
+            const factions = { type: 'array', itemType: 'object', itemObjectType: 'faction' };
+            expect(formatText(['fac_g', 'fac_x'], factions, {}).text).toBe('The Guild, fac_x');
+            expect(formatText(['fac_g', 'fac_x'], factions, { value: { list: 'count' } }).text).toBe('2');
+        } finally {
+            setObjectNamer(null);
+        }
+    });
+});

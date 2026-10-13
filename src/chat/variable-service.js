@@ -23,11 +23,14 @@ import { getVariableValues } from '../api/get-variable-values.js';
 import { getVariableImage } from '../api/get-variable-image.js';
 import { listRoles } from '../api/list-roles.js';
 import { listObjects } from '../api/list-objects.js';
+import { listObjectTypes } from '../api/list-object-types.js';
 import { notify } from '../ui/dialogs.js';
 import { listPPVariables, getPPVariable, ppVariableLabel, onPPVariablesChange } from '../storage/pp-variables.js';
 import { isRoleRef, roleOfRef, roleRef, isCharRef, charFieldOfRef } from '../elements/element-model.js';
 import { getChatSetting } from '../api/get-chat-setting.js';
 import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
+import { setObjectNamer } from '../elements/text-format.js';
+import { objectTypeOf } from '../elements/object-defs.js';
 import { characterFieldList, characterFieldDef } from '../elements/character-fields.js';
 import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
 import { archivistApi, withArchivistInsights } from './archivist-link.js';
@@ -110,6 +113,47 @@ export async function loadCharacterFieldList() {
         console.warn('[PrettyPanels] could not read character runtime fields (update State Engine)', err);
         return characterFieldList([], { archivist: !!archivistApi() });
     }
+}
+
+// The other objects (locations, factions...) the shown object variables
+// hold, and the characters' own fields refer to (a character's factions),
+// by id - read after the values, for the types they hold; what a text
+// element or a card field shows for them is the name (text-format.js
+// setObjectNamer).
+let otherObjects = new Map();
+setObjectNamer((id) => otherObjects.get(id)?.name ?? characters.get(id)?.name ?? null);
+
+const OBJECT_ID = /^([a-z]{3})_[\w-]+$/;
+
+async function loadOtherObjects(chatId, read, characterList) {
+    const types = new Set();
+    for (const entry of read.values()) {
+        const type = objectTypeOf(entry?.def);
+        if (type && type !== CHARACTER_OBJECT_TYPE) types.add(type);
+    }
+    // Object types are named by their id prefix ("fac_..."): the prefixes
+    // the characters refer to, as State Engine's registry names them.
+    const prefixes = new Set();
+    for (const character of characterList.values()) {
+        for (const value of Object.values(character?.base ?? {})) {
+            for (const v of (Array.isArray(value) ? value : [value])) {
+                const prefix = typeof v === 'string' ? OBJECT_ID.exec(v)?.[1] : null;
+                if (prefix) prefixes.add(prefix);
+            }
+        }
+    }
+    if (prefixes.size) {
+        for (const t of (await listObjectTypes()) ?? []) if (prefixes.has(t.idPrefix) && t.id !== CHARACTER_OBJECT_TYPE) types.add(t.id);
+    }
+    const objects = new Map();
+    for (const type of types) {
+        try {
+            for (const object of (await listObjects(EXTENSION_ID, chatId, type)) ?? []) objects.set(object.id, object);
+        } catch (err) {
+            console.warn(`[PrettyPanels] could not read State Engine ${type} objects`, err);
+        }
+    }
+    return objects;
 }
 
 async function loadCharacters(chatId) {
@@ -265,11 +309,13 @@ export async function refreshValues() {
             }
         }
     }
+    const nextObjects = chatId ? await loadOtherObjects(chatId, next, nextCharacters) : new Map();
     // A newer refresh (e.g. after a chat switch) already started - drop this one.
     if (token !== refreshToken) return;
     const rolesChanged = JSON.stringify([...nextRoles]) !== JSON.stringify([...roles]);
     roles = nextRoles;
     characters = nextCharacters;
+    otherObjects = nextObjects;
     values = next;
     valuesChat = chatId;
     readRefs = refsRead;

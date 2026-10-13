@@ -1,0 +1,37 @@
+{
+    "format": "pretty-panels-image-set",
+    "version": 1,
+    "name": "Emoji moods",
+    "description": "An emoji for each built-in mood and 16 common others, drawn with your system's emoji font.",
+    "values": [
+        "Neutral", "Angry", "Afraid", "Curious", "Confident", "Sad", "Suspicious", "Determined",
+        "Happy", "Excited", "Calm", "Tired", "Embarrassed", "Surprised", "Loving", "Worried",
+        "Annoyed", "Bored", "Playful", "Hurt", "Proud", "Nervous", "Confused", "Disgusted"
+    ],
+    "images": {
+        "Neutral": "emoji:😐",
+        "Angry": "emoji:😠",
+        "Afraid": "emoji:😨",
+        "Curious": "emoji:🤔",
+        "Confident": "emoji:😎",
+        "Sad": "emoji:😢",
+        "Suspicious": "emoji:🤨",
+        "Determined": "emoji:😤",
+        "Happy": "emoji:😄",
+        "Excited": "emoji:🤩",
+        "Calm": "emoji:😌",
+        "Tired": "emoji:😴",
+        "Embarrassed": "emoji:😳",
+        "Surprised": "emoji:😮",
+        "Loving": "emoji:🥰",
+        "Worried": "emoji:😟",
+        "Annoyed": "emoji:😒",
+        "Bored": "emoji:🥱",
+        "Playful": "emoji:😜",
+        "Hurt": "emoji:🥺",
+        "Proud": "emoji:😊",
+        "Nervous": "emoji:😬",
+        "Confused": "emoji:😕",
+        "Disgusted": "emoji:🤢"
+    }
+}

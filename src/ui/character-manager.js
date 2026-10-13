@@ -58,12 +58,17 @@ import { CHARACTER_OBJECT_TYPE as TYPE } from '../elements/object-defs.js';
 import { importImageFile } from '../api/import-image-file.js';
 import { VARIABLES_CHANGED_EVENT, currentChatId, refreshValues } from '../chat/variable-service.js';
 import { fallbackIcon } from '../elements/character-card.js';
+import { objectDisplayName } from '../elements/text-format.js';
 import { confirmYesNo, promptText, notify, chooseFromList } from './dialogs.js';
 import { pickImageFile } from './image-upload.js';
+import { exportImageSet, importImageSet, chooseBuiltInImageSet } from './image-sets.js';
 
 // Baseline text fields beyond name/aliases/image: every object's
 // description, then the character type's own fields (State Engine
 // listObjectTypes(): personality, faction, role, goals, relationships).
+// Faction holds faction OBJECTS: shown and typed as names (comma
+// separated), which State Engine matches or records; a variant does not
+// override it.
 const TEXT_FIELDS = [
     ['faction', 'Faction', 'input'],
     ['role', 'Role', 'input'],
@@ -73,6 +78,7 @@ const TEXT_FIELDS = [
     ['relationships', 'Relationships', 'textarea'],
 ];
 const IMAGE_FOLDER = 'characters';
+const REFERENCE_FIELDS = new Set(['faction']);
 
 const state = {
     open: false,
@@ -228,9 +234,14 @@ function characterRow(c) {
         </div>`;
 }
 
+// A reference field's ids as the names they show.
+function referenceText(value) {
+    return (Array.isArray(value) ? value : [value]).filter(Boolean).map((id) => objectDisplayName(id) ?? id).join(', ');
+}
+
 function fieldsHtml(values, prefix, placeholders = {}) {
     const input = (key, label, kind) => {
-        const value = values?.[key] ?? '';
+        const value = REFERENCE_FIELDS.has(key) ? referenceText(values?.[key]) : (values?.[key] ?? '');
         const ph = placeholders[key] ? ` placeholder="${escapeHtml(placeholders[key])}"` : '';
         return kind === 'textarea'
             ? `<label class="pp-cm-field pp-cm-wide"><span>${label}</span><textarea class="text_pole" rows="3" data-${prefix}="${key}"${ph}>${escapeHtml(value)}</textarea></label>`
@@ -245,7 +256,7 @@ function fieldsHtml(values, prefix, placeholders = {}) {
                 <div class="menu_button fa-solid fa-upload" data-cm-upload="${prefix}" title="Upload an image"></div>
             </div>
         </div>
-        ${TEXT_FIELDS.map(([key, label, kind]) => input(key, label, kind)).join('')}`;
+        ${TEXT_FIELDS.filter(([key]) => prefix !== 'v' || !REFERENCE_FIELDS.has(key)).map(([key, label, kind]) => input(key, label, kind)).join('')}`;
 }
 
 function editorHtml(c) {
@@ -345,7 +356,13 @@ function enumImagesHtml(f) {
                 <div class="menu_button fa-solid fa-upload" data-cm-upload="rf" title="Upload an image"></div>
             </div>
         </div>`).join('');
-    return `<details class="pp-cm-rf-images pp-cm-rf-full"${Object.keys(f.images ?? {}).length ? ' open' : ''}><summary>Images (optional - an icon per value)</summary><div class="pp-cm-rf-image-grid">${cells}</div></details>`;
+    const setButtons = `
+        <div class="pp-cm-rf-image-sets">
+            <div class="menu_button" data-cm-action="builtInImageSet" title="Fill these images from a set that comes with Pretty Panels"><i class="fa-solid fa-icons"></i> Built-in sets…</div>
+            <div class="menu_button" data-cm-action="importImageSet" title="Fill these images from an image set file"><i class="fa-solid fa-file-import"></i> Import set…</div>
+            <div class="menu_button" data-cm-action="exportImageSet" title="Save these images as an image set file (the images are inside it), to import into another field or setting"><i class="fa-solid fa-file-export"></i> Export set</div>
+        </div>`;
+    return `<details class="pp-cm-rf-images pp-cm-rf-full"${Object.keys(f.images ?? {}).length ? ' open' : ''}><summary>Images (optional - an icon per value)</summary>${setButtons}<div class="pp-cm-rf-image-grid">${cells}</div></details>`;
 }
 
 function runtimeEditorHtml() {
@@ -416,7 +433,7 @@ function readFields(root, prefix) {
         aliases: get('aliases').split(',').map((a) => a.trim()).filter(Boolean),
         image: get('image').trim() || null,
     };
-    for (const [key] of TEXT_FIELDS) out[key] = get(key);
+    for (const [key] of TEXT_FIELDS) out[key] = REFERENCE_FIELDS.has(key) ? get(key).split(',').map((n) => n.trim()).filter(Boolean) : get(key);
     return out;
 }
 
@@ -427,7 +444,7 @@ function readOverrides(root) {
     if (all.name) out.name = all.name;
     if (all.aliases.length) out.aliases = all.aliases;
     if (all.image) out.image = all.image;
-    for (const [key] of TEXT_FIELDS) if (all[key].trim()) out[key] = all[key];
+    for (const [key] of TEXT_FIELDS) if (!REFERENCE_FIELDS.has(key) && all[key].trim()) out[key] = all[key];
     return out;
 }
 
@@ -524,6 +541,27 @@ async function act(action, row, target) {
             state.runtimeDraft.fields.splice(Number(target.closest('[data-index]').dataset.index), 1);
             render();
             return;
+        case 'exportImageSet':
+        case 'importImageSet':
+        case 'builtInImageSet': {
+            const index = Number(target.closest('[data-index]').dataset.index);
+            const field = state.runtimeDraft?.fields[index];
+            if (!field) return;
+            const current = { name: field.name.trim(), values: draftValues(field), images: field.images ?? {} };
+            if (action === 'exportImageSet') {
+                await exportImageSet(current);
+                return;
+            }
+            const result = action === 'importImageSet'
+                ? await importImageSet(current, { folder: IMAGE_FOLDER })
+                : await chooseBuiltInImageSet(current, { folder: IMAGE_FOLDER });
+            // The draft may have been discarded or switched to another setting meanwhile.
+            if (!result || state.runtimeDraft?.fields[index] !== field) return;
+            field.values = result.values.join(', ');
+            field.images = result.images;
+            render();
+            return;
+        }
         case 'discardRuntimeFields':
             state.runtimeDraft = null;
             break;

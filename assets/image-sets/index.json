@@ -1,0 +1,9 @@
+{
+    "sets": [
+        {
+            "file": "emoji-moods.json",
+            "name": "Emoji moods",
+            "description": "An emoji for each built-in mood and 16 common others, drawn with your system's emoji font."
+        }
+    ]
+}

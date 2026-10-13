@@ -31,6 +31,8 @@
 // Outside a template there is no character, so a character field has no
 // value there.
 
+import { objectDisplayName } from './text-format.js';
+
 // [field, label, display type]
 export const CHARACTER_IDENTITY_FIELDS = [
     ['name', 'Name', 'string'],
@@ -147,8 +149,15 @@ export function characterFieldValue(character, field) {
     }
     if (field === 'present') return character.runtime?.present ?? character.present ?? false;
     const value = character[RENAMED_FIELDS[field] ?? field];
-    if (Array.isArray(value)) return value.length ? value : undefined;
-    return value === null || value === undefined || value === '' ? undefined : value;
+    if (Array.isArray(value)) return value.length ? value.map(named) : undefined;
+    return value === null || value === undefined || value === '' ? undefined : named(value);
+}
+
+// A field holding other objects (a character's faction: faction objects)
+// shows their names.
+const OBJECT_ID = /^[a-z]{3}_[\w-]+$/;
+function named(value) {
+    return typeof value === 'string' && OBJECT_ID.test(value) ? objectDisplayName(value) ?? value : value;
 }
 
 // The variable service's { value, def } shape for a character field, or
