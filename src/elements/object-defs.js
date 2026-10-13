@@ -20,3 +20,10 @@ export function objectTypeOf(def) {
 export function isCharacterDefinition(def) {
     return objectTypeOf(def) === CHARACTER_OBJECT_TYPE;
 }
+
+// A variable a card element draws: any object, or a list of them - a
+// character, a location, a faction... (a text element shows other objects
+// by name, characters as cards).
+export function isObjectCardDefinition(def) {
+    return objectTypeOf(def) !== null;
+}

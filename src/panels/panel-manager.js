@@ -68,7 +68,7 @@ import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storag
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
     ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_TOGGLE, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
-    bindingRef, bindingFromRef, isCharacterDefinition, ELEMENT_TYPE_CHARACTER, isCharRef,
+    bindingRef, bindingFromRef, isObjectCardDefinition, ELEMENT_TYPE_CHARACTER, isCharRef,
 } from '../elements/element-model.js';
 import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
 import { addLayoutRole } from '../library/role-library.js';
@@ -1012,9 +1012,10 @@ export function addVariableElement(panel, name, at = null) {
     y = Math.max(0, Math.round(y));
     const def = variableDef(name);
     const image = isImageDefinition(def);
-    // A character variable (or a list of characters) becomes a Character
-    // element: built-in cards until a template is chosen in its properties.
-    const character = isCharacterDefinition(def);
+    // An object variable (or a list of objects - characters, locations,
+    // factions...) becomes a card element: built-in cards until a template
+    // is chosen in its properties.
+    const character = isObjectCardDefinition(def);
     const bodyHeight = panel.body.clientHeight || panel.record.height;
     const size = character
         ? { width: Math.min(bodyWidth - x, def.type === 'array' ? 320 : 200), height: Math.max(48, Math.min(bodyHeight - y, def.type === 'array' ? 180 : 56)) }

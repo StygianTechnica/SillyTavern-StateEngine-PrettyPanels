@@ -819,7 +819,10 @@ export async function openObjectManager(options = {}) {
     const chatId = currentChatId();
     if (!state.types.length) state.types = (await listObjectTypes()) ?? [];
     const known = (type) => typeof type === 'string' && (state.types.length === 0 || state.types.some((t) => t.id === type));
-    state.type = known(options.type) ? options.type : CHARACTER_OBJECT_TYPE;
+    // A card opens it on its object: the id's prefix says the type ("loc_...").
+    const focus = options.characterId ?? options.objectId ?? null;
+    const typeOfFocus = typeof focus === 'string' ? state.types.find((t) => focus.startsWith(`${t.idPrefix}_`))?.id : null;
+    state.type = known(options.type) ? options.type : (typeOfFocus ?? CHARACTER_OBJECT_TYPE);
     state.view = options.view ?? (chatId ? 'chat' : 'setting');
     state.runtimeDraft = null;
     state.filter = options.filter ?? 'all';

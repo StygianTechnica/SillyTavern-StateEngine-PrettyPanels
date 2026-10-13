@@ -46,7 +46,15 @@ export const CHARACTER_IDENTITY_FIELDS = [
     ['goals', 'Goals', 'text'],
     ['relationships', 'Relationships', 'text'],
     ['introduction_snippet', 'Introduction', 'text'],
+    // Yes/no facts about the object itself - for showing an element only
+    // when there is something to show (Visible: while char:has_image is on).
+    ['confirmed', 'Confirmed', 'boolean'],
+    ['has_image', 'Has an image', 'boolean'],
+    ['has_description', 'Has a description', 'boolean'],
 ];
+// Those yes/no fields, which every object has: [field, label] - the flag
+// suggestions offer them for each object variable and object role.
+export const OBJECT_FLAG_FIELDS = CHARACTER_IDENTITY_FIELDS.filter(([field]) => ['confirmed', 'has_image', 'has_description'].includes(field)).map(([field, label]) => [field, label]);
 // Fields saved under an older name -> the field that holds them now.
 const RENAMED_FIELDS = { biography: 'description' };
 const BUILT_IN_RUNTIME = ['thought', 'mood', 'intent'];
@@ -148,9 +156,23 @@ export function characterFieldValue(character, field) {
         return value === null || value === undefined || value === '' ? undefined : value;
     }
     if (field === 'present') return character.runtime?.present ?? character.present ?? false;
+    if (field === 'confirmed') return character.confirmed === true;
+    if (field === 'has_image') return typeof character.image === 'string' && character.image.trim() !== '';
+    if (field === 'has_description') return typeof character.description === 'string' && character.description.trim() !== '';
     const value = character[RENAMED_FIELDS[field] ?? field];
     if (Array.isArray(value)) return value.length ? value.map(named) : undefined;
     return value === null || value === undefined || value === '' ? undefined : named(value);
+}
+
+// One field of the object(s) a variable holds - `objects` an object or a
+// list of them (null for none): a single object's value; for a list, true
+// when any of them has the field on, else the first value there is. What a
+// flag "<variable>#<field>" reads (src/chat/variable-service.js).
+export function objectsFieldValue(objects, field) {
+    const list = (Array.isArray(objects) ? objects : [objects]).filter(Boolean);
+    const values = list.map((o) => characterFieldValue(o, field));
+    if (values.some((v) => v === true)) return true;
+    return values.find((v) => v !== undefined) ?? (list.length && values.every((v) => v === false) ? false : undefined);
 }
 
 // A field holding other objects (a character's faction: faction objects)

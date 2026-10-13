@@ -117,7 +117,10 @@ describe('drawer element fields', () => {
     it('visibleWhen: a flag ref, inverted or not; nothing else is kept', () => {
         expect(normalizeVariableElement({ type: 'text' }).visibleWhen).toBeNull();
         expect(normalizeVariableElement({ type: 'text', visibleWhen: { flag: ' se__rain ' } }).visibleWhen).toEqual({ flag: 'se__rain', invert: false });
-        expect(normalizeVariableElement({ type: 'text', visibleWhen: { flag: 'char:name' } }).visibleWhen).toBeNull();
+        // A card template's own object's field, and a field of the object a variable holds.
+        expect(normalizeVariableElement({ type: 'text', visibleWhen: { flag: 'char:has_image' } }).visibleWhen).toEqual({ flag: 'char:has_image', invert: false });
+        expect(normalizeVariableElement({ type: 'text', visibleWhen: { flag: 'se__scene_location#confirmed', invert: true } }).visibleWhen).toEqual({ flag: 'se__scene_location#confirmed', invert: true });
+        expect(normalizeVariableElement({ type: 'text', visibleWhen: { flag: '  ' } }).visibleWhen).toBeNull();
     });
 
     it('isElementVisible: only a real true is on', () => {

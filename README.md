@@ -121,6 +121,13 @@ selecting a panel or element expands its section.
   evaluates conditions - make the flag in State Engine (a calculated boolean such as
   `weather.contains("Rainy")`, a prompted or flag-mode boolean). Outside Editing Mode a hidden
   element is gone; in Editing Mode it shows faded, with an eye badge.
+  A flag can also be a **field of an object**, so something only shows when there is detail to
+  show. Every object has three yes/no fields: `confirmed`, `has_image` and `has_description`.
+  - In a card template, `char:<field>` is the card's own object: `char:has_image` shows a
+    portrait frame only for objects with an image.
+  - Anywhere (elements, and a panel's *While a flag is on* / banner flag), `<variable>#<field>`
+    is a field of the object a variable (or role) holds: `se__scene_location#has_image`,
+    `role:se__scene.location#confirmed`. For a list, the flag is on when any of them has it.
 
 ### Conditional panels and banners
 
@@ -129,6 +136,8 @@ Panel Properties > **Display** decides when a panel is on screen:
 - **Always** - every panel as it always was.
 - **While a flag is on** - shown while a State Engine boolean is on (*Reverse*: while it is
   off); it animates in and out as the flag changes, but not when a chat loads.
+  The flag may be a field of an object (see *Visible by flag*), e.g. a location panel shown
+  only while `se__scene_location#has_description` is on.
 - **Banner** - hidden until its **trigger** fires: the flag turning on (*Reverse*: off), or a
   **variable changing** (any type - e.g. the location, for a "new scene" banner). It animates
   in, holds for *Hold* seconds and animates out, even if the flag stays on. Banners that fire
@@ -411,12 +420,14 @@ its id. A namespace never has two roles with the same name.
 Pretty Panels provides State Engine's **Object Manager** window and draws character
 variables. The characters themselves - and every rule about them - are State Engine's.
 
-- **Character elements** - dragging a character variable, or a list of characters (an Array
-  of item type Character), onto a panel adds a **Character Cards** element. Its properties
+- **Object card elements** - dragging an object variable - a character, a location, a faction
+  or any other object type - or a list of them, onto a panel adds an **Object Cards** element
+  (a text element bound to one shows a character as a card, any other object by name). Its properties
   choose the **character template** each card is drawn with and, for a list, the **tiling**
   (grid, row or column - grid by default) and the gap. Cards keep the template's size; what
   doesn't fit scrolls. Clicking a card (outside Editing Mode) opens the Object Manager on
-  that character. **Leave out your persona ({{user}})** in Value Formatting drops the character
+  that object. A template's character fields that a type doesn't have (a location has no
+  mood) stay empty; name, image, aliases and description work for every type. **Leave out your persona ({{user}})** in Value Formatting drops the character
   that is your persona (by name or alias) from a list - with a template or the built-in card.
 - **Built-in card** - with no template (and for a text element bound to a character variable):
   the image (or a generated icon: initials on a colour of its own), the name (Text Case

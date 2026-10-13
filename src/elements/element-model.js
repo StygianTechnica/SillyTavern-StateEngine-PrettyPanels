@@ -65,7 +65,7 @@
 
 import { NAMESPACE } from '../constants.js';
 import { normalizeFormat } from './text-format.js';
-import { isCharacterDefinition } from './object-defs.js';
+import { isCharacterDefinition, isObjectCardDefinition } from './object-defs.js';
 import { isCharacterField } from './character-fields.js';
 
 // Element Styling keys that are not stored: textTransform (case is
@@ -99,7 +99,7 @@ export const ELEMENT_TYPES = [
     ['gauge-semicircle', 'Semi-Circular Gauge'],
     ['composite-bar', 'Composite Bar'],
     ['analogClock', 'Analog Clock'],
-    ['character', 'Character Cards'],
+    ['character', 'Object Cards'],
     ['free-text', 'Free Text'],
     ['shape', 'Shape'],
     ['toggle', 'Drawer Toggle'],
@@ -156,7 +156,7 @@ export function isImageDefinition(def) {
 
 // A character variable, or a list of characters: a State Engine object
 // variable of object type character (src/elements/object-defs.js).
-export { isCharacterDefinition };
+export { isCharacterDefinition, isObjectCardDefinition };
 
 // zIndex for a new element of `type` bound to a variable defined as `def`.
 export function defaultZIndex(type, def = null) {
@@ -354,10 +354,13 @@ export function normalizeToggleOptions(raw) {
     };
 }
 
-// { flag: <variable or role ref>, invert } or null (always visible).
+// { flag, invert } or null (always visible). The flag is a variable or
+// role ref, a field of the object(s) one holds ("se__scene_location#has_image",
+// src/chat/variable-service.js), or - in a card template - a field of the
+// card's own object ("char:has_image").
 export function normalizeVisibleWhen(raw) {
     const flag = typeof raw?.flag === 'string' ? raw.flag.trim() : '';
-    if (!flag || isCharRef(flag)) return null;
+    if (!flag) return null;
     return { flag, invert: raw.invert === true };
 }
 

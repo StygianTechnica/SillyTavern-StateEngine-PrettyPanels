@@ -21,7 +21,7 @@
 
 import { getCharacterTemplate } from '../library/character-template-library.js';
 import { buildCharacterCard, fallbackIcon, withoutPersona } from './character-card.js';
-import { characterEntry } from './character-fields.js';
+import { characterEntry, characterFieldValue } from './character-fields.js';
 import { bindingRef, isCharRef, charFieldOfRef, isVariableElement, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions } from './element-model.js';
 import { buildElementContent, renderElementContent } from './element-view.js';
 import { applyPanelTheme } from '../themes/theme-apply.js';
@@ -51,7 +51,9 @@ export function renderTemplateElements(canvas, template, character, { getValue, 
         Object.assign(el.style, { left: `${element.x}px`, top: `${element.y}px`, width: `${element.width}px`, height: `${element.height}px` });
         const entry = templateEntry(element, character, getValue);
         const flag = element.visibleWhen?.flag;
-        renderElementContent(el, element, entry, theme, { ...context, flagValue: flag ? getValue(flag)?.value : undefined });
+        // A flag may be a field of the card's own object ("char:has_image").
+        const flagValue = !flag ? undefined : (isCharRef(flag) ? characterFieldValue(character, charFieldOfRef(flag)) : getValue(flag)?.value);
+        renderElementContent(el, element, entry, theme, { ...context, flagValue });
         if (element.binding?.char === 'image' && entry === undefined && character) showFallbackPortrait(el, character);
         canvas.append(el);
     }
@@ -198,7 +200,7 @@ export function renderCharacterTiles(host, element, ids, list, services) {
             : buildCharacterCard(id, character, services.cardOptions);
         card.dataset.characterId = id;
         if (template) {
-            card.title = character ? `${character.name}\nClick to open the Object Manager.` : `${id}: not a character of this chat or its setting`;
+            card.title = character ? `${character.name}\nClick to open the Object Manager.` : `${id}: not an object of this chat or its setting`;
             // A Drawer Toggle opens or closes the card; anywhere else opens
             // the Object Manager. In Editing Mode a click selects the
             // element instead.

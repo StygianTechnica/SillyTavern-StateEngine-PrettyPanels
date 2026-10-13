@@ -40,12 +40,14 @@ import {
     loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles, loadCharacterFieldList,
 } from '../chat/variable-service.js';
 import { listLayoutRoles } from '../library/role-library.js';
+import { objectTypeOf } from '../elements/object-defs.js';
+import { OBJECT_FLAG_FIELDS } from '../elements/character-fields.js';
 import { getActiveLayoutId } from '../library/layout-library.js';
 import {
     bindingRef, bindingFromRef, rolePublicName, roleTypeForElement, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
-    CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isCharacterDefinition,
-    TOGGLE_SIZE_LIMITS,
+    CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isObjectCardDefinition,
+    TOGGLE_SIZE_LIMITS, CHAR_REF_PREFIX, roleRef,
 } from '../elements/element-model.js';
 import { normalizeCompact } from './drawer.js';
 import { DISPLAY_MODES, DISPLAY_TRIGGERS, DISPLAY_ANIMATIONS, DISPLAY_LIMITS, normalizeDisplay } from './panel-display.js';
@@ -295,11 +297,13 @@ export class PanelPropertiesPopup {
     #applyRoles() {
         if (!this.el.isConnected) return;
         this.rolePicker.setRoles(getRoleList(), listLayoutRoles(getActiveLayoutId()).map((r) => r.id));
+        this.#fillFlagOptions();
         this.#refreshElement();
     }
 
     #applyCatalog(catalog) {
         if (!this.el.isConnected) return;
+        this.catalog = catalog;
         this.picker.setCatalog(catalog);
         const list = this.el.querySelector('.pp-binding-options');
         list.replaceChildren(...catalog.flatMap((preset) => preset.variables.map((def) => {
@@ -308,8 +312,41 @@ export class PanelPropertiesPopup {
             option.label = `${def.label || localName(def.name)} · ${preset.name}`;
             return option;
         })));
+        this.#fillFlagOptions();
         this.#fillPanelStyle();
         this.#refreshElement();
+    }
+
+    // The Flag fields' suggestions (an element's Visible flag, the panel's
+    // Display flag): every variable, then the yes/no fields of the objects
+    // object variables and object roles hold ("se__scene_location#has_image"),
+    // and in a card template the card's own object's ("char:has_image").
+    #fillFlagOptions() {
+        const list = this.el.querySelector('.pp-flag-options');
+        if (!list) return;
+        const option = (value, label) => {
+            const el = document.createElement('option');
+            el.value = value;
+            el.label = label;
+            return el;
+        };
+        const fieldLabel = Object.fromEntries(OBJECT_FLAG_FIELDS);
+        const options = [];
+        if (this.templateMode) {
+            for (const [field, label] of [...OBJECT_FLAG_FIELDS, ['present', 'In the scene']]) options.push(option(`${CHAR_REF_PREFIX}${field}`, `This card's object: ${label.toLowerCase()}`));
+        }
+        for (const preset of this.catalog ?? []) {
+            for (const def of preset.variables) {
+                const name = def.label || localName(def.name);
+                options.push(option(def.name, `${name} · ${preset.name}`));
+                if (!objectTypeOf(def)) continue;
+                for (const field of Object.keys(fieldLabel)) options.push(option(`${def.name}#${field}`, `${name}: ${fieldLabel[field].toLowerCase()} · ${preset.name}`));
+            }
+        }
+        for (const role of getRoleList().filter((r) => r.type === 'object')) {
+            for (const field of Object.keys(fieldLabel)) options.push(option(`${roleRef(role.id)}#${field}`, `Role ${role.publicName}: ${fieldLabel[field].toLowerCase()}`));
+        }
+        list.replaceChildren(...options);
     }
 
     // Re-reads the panel's state into the popup and re-anchors it.
@@ -613,8 +650,8 @@ export class PanelPropertiesPopup {
         const gap = this.el.querySelector('[data-el="charGap"]');
         if (gap !== document.activeElement) gap.value = String(options.gap);
         const info = this.el.querySelector('[data-el="charInfo"]');
-        info.textContent = def && !isCharacterDefinition(def)
-            ? 'Bind a character variable (object type character), or a list of characters (an array of objects of type character).'
+        info.textContent = def && !isObjectCardDefinition(def)
+            ? 'Bind an object variable (a character, a location, a faction...), or a list of objects.'
             : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Object Manager.';
     }
 
@@ -1382,7 +1419,7 @@ export class PanelPropertiesPopup {
                     </select>
                 </label>
                 <label class="pp-field" data-el="visibleFlagRow"><span>Flag</span>
-                    <input type="text" class="text_pole" data-el="visibleFlag" placeholder="a boolean variable, e.g. se__is_raining, or role:..." autocomplete="off" />
+                    <input type="text" class="text_pole" data-el="visibleFlag" placeholder="a boolean variable (se__is_raining), role:..., an object's field (se__scene_location#has_image) or, in a card template, char:has_image" autocomplete="off" />
                 </label>
                 <div class="pp-geometry">
                     <span class="pp-geometry-caption">Position</span>
@@ -1440,7 +1477,7 @@ export class PanelPropertiesPopup {
                     </label>
                 </div>
                 <div data-for-types="character">
-                    <div class="pp-field-caption">Character Cards</div>
+                    <div class="pp-field-caption">Object Cards</div>
                     <label class="pp-field"><span>Template</span>
                         <select class="text_pole" data-el="charTemplate" title="The character template each card is drawn with (Pretty Panels drawer → Character Templates)"></select>
                     </label>
@@ -1694,15 +1731,18 @@ export class PanelPropertiesPopup {
             ${elementSection}
             ${variablesSection}
             <datalist class="pp-binding-options"></datalist>
+            <datalist class="pp-flag-options"></datalist>
             <datalist class="pp-icon-options"></datalist>
         `;
 
-        // datalist ids must be unique per page - one pair per popup.
+        // datalist ids must be unique per page - one set per popup.
         const bindingList = el.querySelector('.pp-binding-options');
         bindingList.id = `pp-binding-options-${this.panel.id}`;
         el.querySelector('[data-el="binding"]').setAttribute('list', bindingList.id);
-        el.querySelector('[data-el="visibleFlag"]').setAttribute('list', bindingList.id);
-        el.querySelector('[data-display="ref"]').setAttribute('list', bindingList.id);
+        const flagList = el.querySelector('.pp-flag-options');
+        flagList.id = `pp-flag-options-${this.panel.id}`;
+        el.querySelector('[data-el="visibleFlag"]').setAttribute('list', flagList.id);
+        el.querySelector('[data-display="ref"]').setAttribute('list', flagList.id);
         const iconList = el.querySelector('.pp-icon-options');
         iconList.id = `pp-icon-options-${this.panel.id}`;
         iconList.replaceChildren(...ICON_SUGGESTIONS.map((name) => new Option(name, name)));

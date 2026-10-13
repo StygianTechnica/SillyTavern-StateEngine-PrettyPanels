@@ -96,3 +96,19 @@ describe('character fields', () => {
         expect(characterFieldValue(SAMPLE_CHARACTER, 'mood')).toBe('Curious');
     });
 });
+
+describe('yes/no fields of an object (for showing elements only when there is something to show)', () => {
+    it('confirmed, has an image, has a description', async () => {
+        const { characterFieldValue, objectsFieldValue } = await import('../src/elements/character-fields.js');
+        const docks = { id: 'loc_d', name: 'The Docks', confirmed: true, image: 'user/images/docks.png', description: '' };
+        const alley = { id: 'loc_a', name: 'The Alley', confirmed: false, image: null, description: 'Narrow.' };
+        expect(characterFieldValue(docks, 'confirmed')).toBe(true);
+        expect(characterFieldValue(docks, 'has_image')).toBe(true);
+        expect(characterFieldValue(docks, 'has_description')).toBe(false);
+        expect(characterFieldValue(alley, 'has_image')).toBe(false);
+        // A list: on when any of them is; nothing held: no value.
+        expect(objectsFieldValue([alley, docks], 'has_image')).toBe(true);
+        expect(objectsFieldValue([alley], 'confirmed')).toBe(false);
+        expect(objectsFieldValue(null, 'confirmed')).toBeUndefined();
+    });
+});

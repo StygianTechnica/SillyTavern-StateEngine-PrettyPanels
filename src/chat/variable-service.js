@@ -31,7 +31,7 @@ import { getChatSetting } from '../api/get-chat-setting.js';
 import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
 import { setObjectNamer } from '../elements/text-format.js';
 import { objectTypeOf } from '../elements/object-defs.js';
-import { characterFieldList, characterFieldDef } from '../elements/character-fields.js';
+import { characterFieldList, characterFieldDef, objectsFieldValue } from '../elements/character-fields.js';
 import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
 import { archivistApi, withArchivistInsights } from './archivist-link.js';
 
@@ -72,8 +72,31 @@ function roleDefinition(role) {
 // The variable a ref reads: the ref itself, or a role's assigned variable
 // (null if the role has none in this chat).
 export function targetOf(ref) {
+    const field = objectFieldRef(ref);
+    if (field) {
+        const base = targetOf(field.base);
+        return base ? `${base}${OBJECT_FIELD_MARK}${field.field}` : null;
+    }
     if (!isRoleRef(ref)) return ref;
     return getRole(ref)?.variable ?? null;
+}
+
+// "<variable or role ref>#<field>": a field of the object(s) that variable
+// holds - "se__scene_location#has_image", "role:se__scene.location#confirmed",
+// "pp__cast#present" - read like a card field (character-fields.js), as a
+// flag for showing panels and elements only when there is something to show.
+const OBJECT_FIELD_MARK = '#';
+function objectFieldRef(ref) {
+    if (typeof ref !== 'string') return null;
+    const at = ref.lastIndexOf(OBJECT_FIELD_MARK);
+    if (at <= 0) return null;
+    const field = ref.slice(at + 1);
+    return /^(?:[a-z_]+|(?:custom|archivist)\.[a-z][a-z0-9_]{0,39})$/.test(field) ? { base: ref.slice(0, at), field } : null;
+}
+
+// The variable (or role) ref a ref reads: itself, or a field ref's variable.
+function baseRef(ref) {
+    return objectFieldRef(ref)?.base ?? ref;
 }
 
 // Re-reads every role as seen from `chatId` (no chat: no assignments).
@@ -93,8 +116,10 @@ async function loadRoles(chatId) {
 // compiled about it as `archivist` (src/chat/archivist-link.js).
 let characters = new Map();
 
+// Any other object a card shows (a location, a faction...) comes from the
+// objects the shown variables hold (otherObjects, below).
 export function getCharacter(id) {
-    return characters.get(id) ?? null;
+    return characters.get(id) ?? otherObjects.get(id) ?? null;
 }
 
 export function getCharacterList() {
@@ -232,6 +257,15 @@ export function currentChatId() {
 // A role ref answers with its assigned variable's value (undefined when the
 // role has none in this chat).
 export function getValue(name) {
+    const field = objectFieldRef(name);
+    if (field) {
+        const held = getValue(field.base);
+        if (held === undefined) return undefined;
+        const ids = held.value;
+        const objects = Array.isArray(ids) ? ids.map(getCharacter) : (typeof ids === 'string' && ids ? getCharacter(ids) : null);
+        const value = objectsFieldValue(objects, field.field);
+        return { value, def: { name, type: typeof value === 'boolean' ? 'boolean' : 'string', label: `${field.base} ${field.field}` } };
+    }
     const target = targetOf(name);
     if (!target) return undefined;
     const own = getPPVariable(target);
@@ -286,6 +320,7 @@ export async function refreshValues() {
     const nextCharacters = await loadCharacters(chatId);
     if (token !== refreshToken) return;
     const resolve = (refs) => [...new Set(refs
+        .map(baseRef)
         .map((ref) => (isRoleRef(ref) ? nextRoles.get(roleOfRef(ref))?.variable : ref))
         .filter(Boolean))];
     // Pretty Panels' own variables are answered locally (getValue/getImage).
