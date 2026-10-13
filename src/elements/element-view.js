@@ -20,7 +20,7 @@ import { renderClock, ELEMENT_TYPE_ANALOG_CLOCK } from './clock.js';
 import { formatText, formatPlainText, normalizeFormat, valueKind, applyTextCase } from './text-format.js';
 import { renderCharacters } from './character-card.js';
 import { getCharacter } from '../chat/variable-service.js';
-import { openCharacterManager } from '../ui/character-manager.js';
+import { openObjectManager } from '../ui/object-manager.js';
 import { applyElementStyle, iconClass } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 import { isColor } from '../panels/panel-style.js';
@@ -200,7 +200,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
             showAliases: options.characterAliases,
             hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
-            onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+            onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
         });
         return;
     }
@@ -253,13 +253,13 @@ function renderCharacterElement(container, element, entry) {
     const { textCase, value: options } = normalizeFormat(element.format);
     renderCharacterTiles(valueEl, element, entry.value, def?.type === 'array' || Array.isArray(entry.value), {
         getCharacter, getValue: liveValue, getImage: liveImage,
-        onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+        onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
         cardOptions: {
             showPresence: options.characterPresence,
             showAliases: options.characterAliases,
             hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
-            onOpen: (id) => void openCharacterManager({ characterId: id, view: 'chat' }),
+            onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
         },
     });
 }

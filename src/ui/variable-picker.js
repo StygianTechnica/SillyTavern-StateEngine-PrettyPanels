@@ -285,7 +285,7 @@ export class CharacterFieldPicker {
         this.el.className = 'pp-picker pp-character-field-picker';
         this.el.innerHTML = `
             <div class="pp-picker-list"></div>
-            <small class="pp-picker-hint">Each card shows its own character's value. Drag onto the template to add it, or onto an element to bind it. Click to add it here. Runtime fields are the chat's setting's (Character Manager → Runtime fields).</small>
+            <small class="pp-picker-hint">Each card shows its own character's value. Drag onto the template to add it, or onto an element to bind it. Click to add it here. Runtime fields are the chat's setting's (Object Manager → Runtime fields).</small>
         `;
         this.list = this.el.querySelector('.pp-picker-list');
     }

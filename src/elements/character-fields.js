@@ -108,7 +108,7 @@ export function characterFieldList(runtimeFields = [], { archivist = false } = {
         label: `${labelFor(f.name)} (icon)`,
         type: 'image',
         group: 'Runtime state',
-        description: `The image set for the current ${f.name.replace(/_/g, ' ')} (Character Manager > Runtime fields > Images).`,
+        description: `The image set for the current ${f.name.replace(/_/g, ' ')} (Object Manager > Runtime fields > Images).`,
     }));
     const memory = archivist ? ARCHIVIST_FIELDS.map(([name, label, type, , description]) => ({
         field: `${ARCHIVIST_PREFIX}${name}`, label, type, group: 'Archivist (memory)', description,

@@ -615,7 +615,7 @@ export class PanelPropertiesPopup {
         const info = this.el.querySelector('[data-el="charInfo"]');
         info.textContent = def && !isCharacterDefinition(def)
             ? 'Bind a character variable (object type character), or a list of characters (an array of objects of type character).'
-            : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Character Manager.';
+            : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Object Manager.';
     }
 
     // Sets a Character element's options. Choosing a template for a single
@@ -1610,7 +1610,7 @@ export class PanelPropertiesPopup {
                             <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterPresence" /><span>Show presence (in the scene or not)</span></label>
                             <label class="checkbox_label pp-field-check"><input type="checkbox" data-fmt="value.characterAliases" /><span>Show aliases</span></label>
                             <label class="checkbox_label pp-field-check" title="A list of characters leaves out the one that is your persona ({{user}}) - matched by name or alias"><input type="checkbox" data-fmt="value.characterHideUser" /><span>Leave out your persona ({{user}})</span></label>
-                            <small class="pp-field-info">Characters show as cards (image or a generated icon, name, confirmed badge). Click one - outside Editing Mode - to open the Character Manager.</small>
+                            <small class="pp-field-info">Characters show as cards (image or a generated icon, name, confirmed badge). Click one - outside Editing Mode - to open the Object Manager.</small>
                         </div>
                         <label class="pp-field" data-fmt-kind="imageList"><span>Show as</span>
                             <select class="text_pole" data-fmt="value.imageList">${VALUE_FORMATS.imageList.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select>

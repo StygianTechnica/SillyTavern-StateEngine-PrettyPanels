@@ -1,4 +1,4 @@
-// Image sets: an enum runtime field's images (Character Manager > Runtime
+// Image sets: an enum runtime field's images (Object Manager > Runtime
 // fields > Images - an icon per value, e.g. one per mood) as a file, so a
 // set made once can be exported, imported into another field or setting,
 // and shipped with the extension (assets/image-sets/).

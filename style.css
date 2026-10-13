@@ -2753,7 +2753,7 @@ body.pp-editing .pp-character-card {
 .pp-character-badge.pp-unconfirmed { color: #e5c07b; border: 1px solid currentColor; }
 .pp-character-missing { opacity: 0.6; cursor: default; }
 
-/* The Character Manager (src/ui/character-manager.js). */
+/* The Object Manager (src/ui/object-manager.js). */
 .pp-cm-overlay {
     position: fixed;
     inset: 0;
@@ -2789,6 +2789,8 @@ body.pp-editing .pp-character-card {
     padding: 8px 10px;
     border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 60%, transparent);
 }
+.pp-cm-type { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+.pp-cm-type select { margin: 0; width: auto; min-width: 9em; }
 .pp-cm-tabs { display: flex; gap: 4px; flex: 1 1 auto; justify-content: center; }
 .pp-cm-tab { margin: 0; opacity: 0.6; }
 .pp-cm-tab-active { opacity: 1; border-color: var(--SmartThemeQuoteColor); }
@@ -2873,7 +2875,7 @@ body.pp-editing .pp-character-card {
         max-height: 90vh;
     }
 }
-/* Icon + label buttons in the Character Manager: a gap between the two
+/* Icon + label buttons in the Object Manager: a gap between the two
    (icon-only buttons carry the icon class on the button itself). */
 .pp-cm-window .menu_button > i.fa-solid {
     margin-right: 0.4em;

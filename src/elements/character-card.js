@@ -8,7 +8,7 @@
 // unconfirmed badge, and optionally a presence dot and its aliases (the
 // element's Value Formatting: format.value.characterPresence /
 // characterAliases). Clicking a card outside Editing Mode opens the
-// Character Manager on that character.
+// Object Manager on that character.
 
 import { isPersonaCharacter } from '../chat/persona.js';
 
@@ -93,7 +93,7 @@ export function buildCharacterCard(id, character, options) {
     const badge = document.createElement('span');
     badge.className = `pp-character-badge ${character.confirmed ? 'pp-confirmed' : 'pp-unconfirmed'}`;
     badge.textContent = character.confirmed ? '✓' : '?';
-    badge.title = character.confirmed ? 'Confirmed' : 'Unconfirmed - review it in the Character Manager';
+    badge.title = character.confirmed ? 'Confirmed' : 'Unconfirmed - review it in the Object Manager';
     nameRow.append(badge);
     body.append(nameRow);
     if (options.showAliases && character.aliases.length) {
@@ -103,7 +103,7 @@ export function buildCharacterCard(id, character, options) {
         body.append(aliases);
     }
     card.append(body);
-    card.title = `${character.name}${character.aliases.length ? ` (${character.aliases.join(', ')})` : ''}\n${character.id}${character.scope === 'chat' ? ' - this chat only' : ''}\nClick to open the Character Manager.`;
+    card.title = `${character.name}${character.aliases.length ? ` (${character.aliases.join(', ')})` : ''}\n${character.id}${character.scope === 'chat' ? ' - this chat only' : ''}\nClick to open the Object Manager.`;
     card.addEventListener('click', (e) => {
         // In Editing Mode a click selects the element instead.
         if (document.body.classList.contains('pp-editing')) return;

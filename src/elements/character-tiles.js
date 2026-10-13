@@ -8,7 +8,7 @@
 //
 // Cards keep the template's size. A list tiles as a grid (wrapping rows),
 // a row or a column, per the element's options; whatever doesn't fit
-// scrolls. Clicking a card outside Editing Mode opens the Character Manager
+// scrolls. Clicking a card outside Editing Mode opens the Object Manager
 // on that character.
 //
 // A template with a compact area (src/panels/drawer.js) draws collapsed
@@ -198,9 +198,9 @@ export function renderCharacterTiles(host, element, ids, list, services) {
             : buildCharacterCard(id, character, services.cardOptions);
         card.dataset.characterId = id;
         if (template) {
-            card.title = character ? `${character.name}\nClick to open the Character Manager.` : `${id}: not a character of this chat or its setting`;
+            card.title = character ? `${character.name}\nClick to open the Object Manager.` : `${id}: not a character of this chat or its setting`;
             // A Drawer Toggle opens or closes the card; anywhere else opens
-            // the Character Manager. In Editing Mode a click selects the
+            // the Object Manager. In Editing Mode a click selects the
             // element instead.
             const onClick = (e) => {
                 if (document.body.classList.contains('pp-editing')) return;

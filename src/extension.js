@@ -27,7 +27,7 @@ import { initAtmosphere } from './atmosphere/atmosphere-controller.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 import { addLayoutToolbar } from './ui/layout-toolbar.js';
 import { initLayoutGate } from './ui/layout-gate.js';
-import { initCharacterManager, openCharacterManager } from './ui/character-manager.js';
+import { initObjectManager, openObjectManager } from './ui/object-manager.js';
 
 // EXTENSION_ID / NAMESPACE live in src/constants.js - every module that
 // calls the State Engine API needs them.
@@ -97,8 +97,8 @@ export async function initExtension() {
     addLayoutToolbar();
     await addSettingsDrawer();
     initLayoutGate();
-    await initCharacterManager();
-    document.getElementById('pp_open_character_manager')?.addEventListener('click', () => void openCharacterManager());
+    await initObjectManager();
+    document.getElementById('pp_open_object_manager')?.addEventListener('click', () => void openObjectManager());
     await startChatSession();
     // Weather and ambience behind the chat, for the layout on screen.
     initAtmosphere();

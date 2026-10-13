@@ -1,35 +1,40 @@
-// The shared Character Manager: State Engine's character OBJECTS (objects of
-// type character - State Engine API Reference, "Object API"). The window
-// lives here; every piece of data and every rule lives in State Engine -
-// this module only calls its Object API (src/api/*), always for type
-// character. It is the one place characters are edited. It opens from a
+// The shared Object Manager (it began as the Character Manager): State
+// Engine's OBJECTS of every type - characters, locations, factions, items,
+// creatures, lore, quests, scenes, events (State Engine API Reference,
+// "Object API"); a dropdown in the header picks the type. The window lives
+// here; every piece of data and every rule lives in State Engine - this
+// module only calls its Object API (src/api/*). It opens from a
 // CharacterCard click, the Pretty Panels drawer, State Engine's drawer
 // ("Manage objects") and State Engine's "New ... detected for review"
-// notifications (the last two through registerObjectManager()). State
-// Engine's other object types (locations, factions...) are not managed here
-// yet - asked to open on one, it opens on characters and says so.
+// notifications (the last two through registerObjectManager(), on the type
+// they are about).
 //
-// Confirmed <=> in the setting (State Engine's rule): a character detected
-// in a chat is unconfirmed and only in that chat until it is reviewed -
-// confirmed as it is, edited and saved (which confirms it), or RESOLVED to
-// an existing character (its detected name becomes that character's alias).
-// There is no separate "add to setting".
+// Confirmed <=> in the setting (State Engine's rule): a world object
+// detected in a chat is unconfirmed and only in that chat until it is
+// reviewed - confirmed as it is, edited and saved (which confirms it), or
+// RESOLVED to an existing one (its detected name becomes that one's alias).
+// There is no separate "add to setting". Story objects (quests, scenes,
+// events) belong to their chat and are always confirmed.
 //
-// Two views:
-//   This chat - the open chat's characters: its unconfirmed ones and its
-//     setting's, with presence; the chat's setting is chosen here. Edit,
-//     confirm, resolve, merge, delete; filter to unconfirmed.
-//   Settings - any setting's canonical characters (default: the chat's
-//     setting): create, edit, merge, delete; settings themselves are created,
-//     renamed, deleted and set to auto-confirm here.
-//   Runtime fields - a setting's runtime field definitions (spec 1.43): the
-//     built-in thought, mood and intent, and the user's own (string, number
-//     or enum; prompted or not). Edited as a draft, then saved.
-// Editing a character edits its baseline (for a canonical one, in every chat
-// on its setting) and confirms it. Each character has variants (alternate
-// versions overriding baseline fields) and one active variant. In This chat,
-// each character also shows its runtime state: prompted values read-only
-// (the prompted update writes them each turn), non-prompted ones editable.
+// Three views:
+//   This chat - the open chat's objects of the type: its unconfirmed ones
+//     and its setting's, with presence; the chat's setting is chosen here.
+//     Edit, confirm, resolve, merge, delete; filter to unconfirmed.
+//   Settings - any setting's canonical objects of the type (default: the
+//     chat's setting): create, edit, merge, delete; settings themselves are
+//     created, renamed, deleted and set to auto-confirm here. Not for story
+//     types.
+//   Runtime fields - a setting's runtime field definitions for the type
+//     (string, number or enum; prompted or not). Edited as a draft, then saved.
+// The editor's fields are the setting's object preset's baseline fields
+// (State Engine getObjectFields): text, long text, choices, numbers, lists,
+// and references to other objects (a character's factions) - shown and
+// typed as names, which State Engine matches or records; a variant does not
+// override references. Editing an object edits its baseline (for a
+// canonical one, in every chat on its setting) and confirms it. Each world
+// object has variants and one active variant. In This chat, each object also
+// shows its runtime state: prompted values read-only (the prompted update
+// writes them each turn), non-prompted ones editable.
 
 import { EXTENSION_ID } from '../constants.js';
 import { listSettings } from '../api/list-settings.js';
@@ -54,7 +59,9 @@ import { registerObjectManager } from '../api/register-object-manager.js';
 import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
 import { setObjectRuntimeFields } from '../api/set-object-runtime-fields.js';
 import { setObjectRuntimeValue } from '../api/set-object-runtime-value.js';
-import { CHARACTER_OBJECT_TYPE as TYPE } from '../elements/object-defs.js';
+import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
+import { listObjectTypes } from '../api/list-object-types.js';
+import { getObjectFields } from '../api/get-object-fields.js';
 import { importImageFile } from '../api/import-image-file.js';
 import { VARIABLES_CHANGED_EVENT, currentChatId, refreshValues } from '../chat/variable-service.js';
 import { fallbackIcon } from '../elements/character-card.js';
@@ -63,25 +70,15 @@ import { confirmYesNo, promptText, notify, chooseFromList } from './dialogs.js';
 import { pickImageFile } from './image-upload.js';
 import { exportImageSet, importImageSet, chooseBuiltInImageSet } from './image-sets.js';
 
-// Baseline text fields beyond name/aliases/image: every object's
-// description, then the character type's own fields (State Engine
-// listObjectTypes(): personality, faction, role, goals, relationships).
-// Faction holds faction OBJECTS: shown and typed as names (comma
-// separated), which State Engine matches or records; a variant does not
-// override it.
-const TEXT_FIELDS = [
-    ['faction', 'Faction', 'input'],
-    ['role', 'Role', 'input'],
-    ['description', 'Description', 'textarea'],
-    ['personality', 'Personality', 'textarea'],
-    ['goals', 'Goals', 'textarea'],
-    ['relationships', 'Relationships', 'textarea'],
-];
 const IMAGE_FOLDER = 'characters';
-const REFERENCE_FIELDS = new Set(['faction']);
+// Field types the editor has an input for (images are set elsewhere).
+const EDITABLE_TYPES = new Set(['string', 'number', 'boolean', 'enum', 'array', 'object']);
 
 const state = {
     open: false,
+    type: CHARACTER_OBJECT_TYPE, // the object type shown
+    types: [], // State Engine's object types (listObjectTypes)
+    fields: [], // the shown setting's baseline field definitions for the type
     view: 'chat', // 'chat' | 'setting' | 'runtime'
     runtimeFields: [], // the shown setting's runtime fields (This chat: the chat's setting)
     runtimeDraft: null, // the Runtime fields tab's unsaved copy: { settingId, fields }
@@ -96,6 +93,14 @@ const state = {
 };
 let overlay = null;
 let renderToken = 0;
+
+// The shown type's registry entry ({ id, label, plural, noun, scope, icon, ... }).
+function typeInfo() {
+    return state.types.find((t) => t.id === state.type) ?? { id: state.type, label: state.type, plural: `${state.type}s`, noun: state.type, scope: 'world', icon: 'fa-cube' };
+}
+const noun = () => typeInfo().noun;
+const plural = () => typeInfo().plural.toLowerCase();
+const isStoryType = () => typeInfo().scope === 'story';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]);
@@ -127,16 +132,25 @@ async function load() {
         listSettings(EXTENSION_ID),
         chatId ? getChatSetting(EXTENSION_ID, chatId) : Promise.resolve(null),
     ]);
+    if (!state.types.length) state.types = (await listObjectTypes()) ?? [];
     if (!chatId && state.view === 'chat') state.view = 'setting';
+    // Story objects belong to their chat: there is no setting view of them.
+    if (isStoryType() && state.view === 'setting') state.view = chatId ? 'chat' : 'runtime';
     if (!state.settingId || !settings.some((s) => s.id === state.settingId)) state.settingId = chatSetting ?? settings[0]?.id ?? 'default';
     const characters = state.view === 'runtime' ? []
         : state.view === 'chat'
-            ? await listObjects(EXTENSION_ID, chatId, TYPE, {})
-            : await listObjects(EXTENSION_ID, null, TYPE, { settingId: state.settingId });
+            ? await listObjects(EXTENSION_ID, chatId, state.type, {})
+            : await listObjects(EXTENSION_ID, null, state.type, { settingId: state.settingId });
     const fieldsSetting = state.view === 'chat' ? (chatSetting ?? 'default') : state.settingId;
-    const runtimeFields = (await getObjectRuntimeFields(EXTENSION_ID, fieldsSetting, TYPE)) ?? [];
+    const [runtimeFields, fields] = await Promise.all([
+        getObjectRuntimeFields(EXTENSION_ID, fieldsSetting, state.type),
+        getObjectFields(EXTENSION_ID, fieldsSetting, state.type),
+    ]);
     if (token !== renderToken) return false;
-    Object.assign(state, { settings: settings ?? [], chatSetting, characters: characters ?? [], runtimeFields });
+    Object.assign(state, {
+        settings: settings ?? [], chatSetting, characters: characters ?? [], runtimeFields: runtimeFields ?? [],
+        fields: (fields ?? []).filter((d) => d.scope === 'global' && EDITABLE_TYPES.has(d.type)),
+    });
     // A fresh draft for the Runtime fields tab when it opens on a setting.
     if (state.view === 'runtime' && state.runtimeDraft?.settingId !== state.settingId) {
         state.runtimeDraft = { settingId: state.settingId, fields: draftFrom(runtimeFields) };
@@ -152,20 +166,20 @@ async function reload() {
 // ---------------------------------------------------------------- render
 
 function settingOptions(selected) {
-    return state.settings.map((s) => `<option value="${escapeHtml(s.id)}"${s.id === selected ? ' selected' : ''}>${escapeHtml(s.name)}${s.isDefault ? ' (everything)' : ''} · ${s.counts?.[TYPE] ?? 0}</option>`).join('');
+    return state.settings.map((s) => `<option value="${escapeHtml(s.id)}"${s.id === selected ? ' selected' : ''}>${escapeHtml(s.name)}${s.isDefault ? ' (everything)' : ''} · ${s.counts?.[state.type] ?? 0}</option>`).join('');
 }
 
 function toolbarHtml() {
     const chatId = currentChatId();
     if (state.view === 'chat') {
         return `
-            <label class="pp-cm-field" title="The setting this chat's characters come from - and are added to when confirmed">
+            <label class="pp-cm-field" title="The setting this chat's ${escapeHtml(plural())} come from - and are added to when confirmed">
                 <span>Setting</span>
                 <select class="text_pole" data-cm="chatSetting">${state.chatSetting ? '' : '<option value="" selected>— not chosen yet —</option>'}${settingOptions(state.chatSetting)}</select>
             </label>
             <label class="pp-cm-field"><span>Show</span>
                 <select class="text_pole" data-cm="filter">
-                    <option value="all"${state.filter === 'all' ? ' selected' : ''}>All characters</option>
+                    <option value="all"${state.filter === 'all' ? ' selected' : ''}>All ${escapeHtml(plural())}</option>
                     <option value="unconfirmed"${state.filter === 'unconfirmed' ? ' selected' : ''}>Unconfirmed (to review)</option>
                 </select>
             </label>
@@ -176,7 +190,7 @@ function toolbarHtml() {
             <label class="pp-cm-field"><span>Setting</span>
                 <select class="text_pole" data-cm="setting">${settingOptions(state.settingId)}</select>
             </label>
-            <small class="pp-cm-note">Runtime fields are what each character's state holds in a chat - written by the prompted update each turn (prompted fields) or set by hand in This chat (the others). They are cleared when a character leaves the scene.</small>`;
+            <small class="pp-cm-note">Runtime fields are what each ${escapeHtml(noun())}'s state holds in a chat - written by the prompted update each turn (prompted fields) or set by hand in This chat (the others).${typeInfo().hasPresence ? ` They are cleared when a ${escapeHtml(noun())} leaves the scene.` : ''}</small>`;
     }
     const setting = state.settings.find((s) => s.id === state.settingId);
     return `
@@ -185,12 +199,12 @@ function toolbarHtml() {
         </label>
         <div class="menu_button fa-solid fa-plus" data-cm-action="newSetting" title="New setting"></div>
         <div class="menu_button fa-solid fa-pen" data-cm-action="renameSetting" title="Rename this setting"></div>
-        <div class="menu_button fa-solid fa-trash-can" data-cm-action="deleteSetting" title="${setting?.isDefault ? 'The Default setting cannot be deleted' : 'Delete this setting and its characters'}"${setting?.isDefault ? ' data-disabled="true"' : ''}></div>
-        <label class="checkbox_label pp-cm-check" title="Confirm every character detected in a chat on this setting at once - so it is added to the setting without review">
+        <div class="menu_button fa-solid fa-trash-can" data-cm-action="deleteSetting" title="${setting?.isDefault ? 'The Default setting cannot be deleted' : 'Delete this setting and everything in it'}"${setting?.isDefault ? ' data-disabled="true"' : ''}></div>
+        <label class="checkbox_label pp-cm-check" title="Confirm everything detected in a chat on this setting at once - so it is added to the setting without review">
             <input type="checkbox" data-cm="autoConfirm"${setting?.autoConfirm ? ' checked' : ''} /><span>Always auto-confirm</span>
         </label>
         <input type="search" class="text_pole pp-cm-search" data-cm="search" placeholder="Search names and aliases…" value="${escapeHtml(state.search)}" />
-        <div class="menu_button" data-cm-action="newCharacter" title="Create a canonical character in this setting"><i class="fa-solid fa-user-plus"></i> New character</div>
+        <div class="menu_button" data-cm-action="newCharacter" title="Create a canonical ${escapeHtml(noun())} in this setting"><i class="fa-solid fa-plus"></i> New ${escapeHtml(noun())}</div>
         ${chatId ? '' : '<small class="pp-cm-note">No chat open - only settings can be browsed.</small>'}`;
 }
 
@@ -210,12 +224,12 @@ function characterRow(c) {
                 <div class="pp-cm-title">
                     <span class="pp-cm-name">${escapeHtml(c.name)}</span>
                     <span class="pp-cm-badge ${c.confirmed ? 'pp-cm-confirmed' : 'pp-cm-unconfirmed'}" title="${c.confirmed
-                        ? 'Confirmed - in the setting: every chat on it has this character'
+                        ? `Confirmed - ${isStoryType() ? 'it belongs to this chat' : `in the setting: every chat on it has this ${noun()}`}`
                         : (c.scope === 'chat'
-                            ? 'Detected, not reviewed yet - only in this chat. Confirm it (or save an edit) to add it to the setting, or resolve it to a character you already have.'
+                            ? `Detected, not reviewed yet - only in this chat. Confirm it (or save an edit) to add it to the setting, or resolve it to a ${noun()} you already have.`
                             : 'Not reviewed yet')}">${c.confirmed ? 'Confirmed' : 'Unconfirmed'}</span>
-                    ${chatView ? `<span class="pp-cm-presence ${c.present ? 'pp-present' : 'pp-absent'}" title="${c.present ? 'In the scene' : 'Not in the scene'}"></span>` : ''}
-                    ${variant ? `<span class="pp-cm-badge pp-cm-variant" title="The variant this character uses">${escapeHtml(variant.name)}</span>` : ''}
+                    ${chatView && typeInfo().hasPresence ? `<span class="pp-cm-presence ${c.present ? 'pp-present' : 'pp-absent'}" title="${c.present ? 'In the scene' : 'Not in the scene'}"></span>` : ''}
+                    ${variant ? `<span class="pp-cm-badge pp-cm-variant" title="The variant this ${escapeHtml(noun())} uses">${escapeHtml(variant.name)}</span>` : ''}
                 </div>
                 ${c.aliases.length ? `<div class="pp-cm-aliases">Also: ${escapeHtml(c.aliases.join(', '))}</div>` : ''}
                 <div class="pp-cm-id" title="Identity key">${escapeHtml(c.id)}${chatView && c.matches ? ` · matched ${c.matches}×` : ''}</div>
@@ -226,8 +240,8 @@ function characterRow(c) {
                 <div class="menu_button fa-solid fa-pen" data-cm-action="edit" title="Edit (saving confirms it)"></div>
                 ${c.confirmed ? '' : '<div class="menu_button fa-solid fa-check" data-cm-action="confirm" title="Confirm as it is - adds it to the setting"></div>'}
                 ${c.confirmed
-                    ? '<div class="menu_button fa-solid fa-code-merge" data-cm-action="merge" title="Merge into another character"></div>'
-                    : '<div class="menu_button fa-solid fa-user-check" data-cm-action="resolve" title="Resolve to an existing character - this detected name becomes one of their aliases"></div>'}
+                    ? `<div class="menu_button fa-solid fa-code-merge" data-cm-action="merge" title="Merge into another ${escapeHtml(noun())}"></div>`
+                    : `<div class="menu_button fa-solid fa-user-check" data-cm-action="resolve" title="Resolve to an existing ${escapeHtml(noun())} - this detected name becomes one of its aliases"></div>`}
                 <div class="menu_button fa-solid fa-trash-can" data-cm-action="delete" title="Delete"></div>
             </div>
             ${state.editingId === c.id ? editorHtml(c) : ''}
@@ -236,19 +250,43 @@ function characterRow(c) {
 
 // A reference field's ids as the names they show.
 function referenceText(value) {
-    return (Array.isArray(value) ? value : [value]).filter(Boolean).map((id) => objectDisplayName(id) ?? id).join(', ');
+    return (Array.isArray(value) ? value : [value]).filter(Boolean).map((id) => objectDisplayName(id) ?? state.characters.find((c) => c.id === id)?.name ?? id).join(', ');
+}
+
+const isReference = (def) => def.type === 'object' || (def.type === 'array' && def.itemType === 'object');
+const labelOf = (def) => def.label || `${def.name.charAt(0).toUpperCase()}${def.name.slice(1).replace(/_/g, ' ')}`;
+
+// One baseline field's input, by its definition.
+function fieldInput(def, values, prefix, placeholder) {
+    const key = def.name;
+    const raw = values?.[key];
+    const ph = placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : '';
+    const label = escapeHtml(labelOf(def));
+    const attr = `data-${prefix}="${escapeHtml(key)}"`;
+    if (def.type === 'enum') {
+        return `<label class="pp-cm-field"><span>${label}</span><select class="text_pole" ${attr}><option value="">—</option>${def.enumValues.map((v) => `<option value="${escapeHtml(v)}"${v === raw ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select></label>`;
+    }
+    if (def.type === 'boolean') {
+        return `<label class="pp-cm-field"><span>${label}</span><select class="text_pole" ${attr}><option value="">—</option><option value="true"${raw === true ? ' selected' : ''}>Yes</option><option value="false"${raw === false ? ' selected' : ''}>No</option></select></label>`;
+    }
+    if (def.type === 'number') {
+        return `<label class="pp-cm-field"><span>${label}</span><input type="number" class="text_pole" ${attr} value="${escapeHtml(raw ?? '')}"${def.min !== null && def.min !== undefined ? ` min="${def.min}"` : ''}${def.max !== null && def.max !== undefined ? ` max="${def.max}"` : ''}${ph} /></label>`;
+    }
+    if (isReference(def) || def.type === 'array') {
+        const value = isReference(def) ? referenceText(raw) : (Array.isArray(raw) ? raw.join(', ') : '');
+        const hint = isReference(def) ? `comma separated names - matched to known ${def.type === 'object' ? def.objectType : def.itemObjectType} objects, or recorded as new ones` : 'comma separated';
+        return `<label class="pp-cm-field pp-cm-wide" title="${escapeHtml(hint)}"><span>${label}</span><input type="text" class="text_pole" ${attr} value="${escapeHtml(value)}"${ph || ` placeholder="${escapeHtml(hint)}"`} /></label>`;
+    }
+    return def.multiline
+        ? `<label class="pp-cm-field pp-cm-wide"><span>${label}</span><textarea class="text_pole" rows="3" ${attr}${ph}>${escapeHtml(raw ?? '')}</textarea></label>`
+        : `<label class="pp-cm-field"><span>${label}</span><input type="text" class="text_pole" ${attr} value="${escapeHtml(raw ?? '')}"${ph} /></label>`;
 }
 
 function fieldsHtml(values, prefix, placeholders = {}) {
-    const input = (key, label, kind) => {
-        const value = REFERENCE_FIELDS.has(key) ? referenceText(values?.[key]) : (values?.[key] ?? '');
-        const ph = placeholders[key] ? ` placeholder="${escapeHtml(placeholders[key])}"` : '';
-        return kind === 'textarea'
-            ? `<label class="pp-cm-field pp-cm-wide"><span>${label}</span><textarea class="text_pole" rows="3" data-${prefix}="${key}"${ph}>${escapeHtml(value)}</textarea></label>`
-            : `<label class="pp-cm-field"><span>${label}</span><input type="text" class="text_pole" data-${prefix}="${key}" value="${escapeHtml(value)}"${ph} /></label>`;
-    };
+    const description = values?.description ?? '';
+    const descriptionPh = placeholders.description ? ` placeholder="${escapeHtml(placeholders.description)}"` : '';
     return `
-        ${input('name', 'Name', 'input')}
+        <label class="pp-cm-field"><span>Name</span><input type="text" class="text_pole" data-${prefix}="name" value="${escapeHtml(values?.name ?? '')}"${placeholders.name ? ` placeholder="${escapeHtml(placeholders.name)}"` : ''} /></label>
         <label class="pp-cm-field pp-cm-wide"><span>Aliases</span><input type="text" class="text_pole" data-${prefix}="aliases" value="${escapeHtml((values?.aliases ?? []).join(', '))}" placeholder="${escapeHtml(placeholders.aliases ?? 'comma separated: the stranger, Captain')}" /></label>
         <div class="pp-cm-field pp-cm-wide"><span>Image</span>
             <div class="pp-cm-image-row">
@@ -256,7 +294,8 @@ function fieldsHtml(values, prefix, placeholders = {}) {
                 <div class="menu_button fa-solid fa-upload" data-cm-upload="${prefix}" title="Upload an image"></div>
             </div>
         </div>
-        ${TEXT_FIELDS.filter(([key]) => prefix !== 'v' || !REFERENCE_FIELDS.has(key)).map(([key, label, kind]) => input(key, label, kind)).join('')}`;
+        <label class="pp-cm-field pp-cm-wide"><span>Description</span><textarea class="text_pole" rows="3" data-${prefix}="description"${descriptionPh}>${escapeHtml(description)}</textarea></label>
+        ${state.fields.filter((def) => prefix !== 'v' || !isReference(def)).map((def) => fieldInput(def, values, prefix, placeholders[def.name])).join('')}`;
 }
 
 function editorHtml(c) {
@@ -289,7 +328,7 @@ function editorHtml(c) {
                 <div class="menu_button" data-cm-action="addVariant"><i class="fa-solid fa-plus"></i> Add variant</div>
             </div>` : ''}
             <div class="pp-cm-buttons">
-                <div class="menu_button" data-cm-action="save" title="${c ? 'Saving confirms the character - it is then in the setting' : ''}"><i class="fa-solid fa-floppy-disk"></i> ${c ? 'Save (confirms)' : 'Create'}</div>
+                <div class="menu_button" data-cm-action="save" title="${c && !isStoryType() ? `Saving confirms the ${escapeHtml(noun())} - it is then in the setting` : ''}"><i class="fa-solid fa-floppy-disk"></i> ${c ? (isStoryType() ? 'Save' : 'Save (confirms)') : 'Create'}</div>
                 <div class="menu_button" data-cm-action="cancel">Cancel</div>
             </div>
         </div>`;
@@ -392,9 +431,13 @@ function runtimeEditorHtml() {
 function render() {
     if (!overlay) return;
     const chatId = currentChatId();
+    const typeSelect = overlay.querySelector('[data-cm="type"]');
+    typeSelect.innerHTML = (state.types.length ? state.types : [typeInfo()])
+        .map((t) => `<option value="${escapeHtml(t.id)}"${t.id === state.type ? ' selected' : ''}>${escapeHtml(t.plural)}</option>`).join('');
+    overlay.querySelector('[data-cm="typeIcon"]').className = `fa-solid ${typeInfo().icon ?? 'fa-cube'}`;
     overlay.querySelector('[data-cm="tabs"]').innerHTML = `
         <div class="menu_button pp-cm-tab${state.view === 'chat' ? ' pp-cm-tab-active' : ''}" data-cm-view="chat"${chatId ? '' : ' data-disabled="true" title="Open a chat"'}>This chat</div>
-        <div class="menu_button pp-cm-tab${state.view === 'setting' ? ' pp-cm-tab-active' : ''}" data-cm-view="setting">Settings</div>
+        <div class="menu_button pp-cm-tab${state.view === 'setting' ? ' pp-cm-tab-active' : ''}" data-cm-view="setting"${isStoryType() ? ` data-disabled="true" title="${escapeHtml(typeInfo().plural)} belong to their chat, not to a setting"` : ''}>Settings</div>
         <div class="menu_button pp-cm-tab${state.view === 'runtime' ? ' pp-cm-tab-active' : ''}" data-cm-view="runtime">Runtime fields</div>`;
     overlay.querySelector('[data-cm="toolbar"]').innerHTML = toolbarHtml();
     if (state.view === 'runtime') {
@@ -405,9 +448,11 @@ function render() {
     }
     const shown = visibleCharacters();
     const list = overlay.querySelector('[data-cm="list"]');
-    const creating = state.editingId === 'new' ? `<div class="pp-cm-row pp-cm-new"><div class="pp-cm-main"><b>New character in ${escapeHtml(state.settings.find((s) => s.id === state.settingId)?.name ?? '')}</b></div>${editorHtml(null)}</div>` : '';
+    const creating = state.editingId === 'new' ? `<div class="pp-cm-row pp-cm-new"><div class="pp-cm-main"><b>New ${escapeHtml(noun())} in ${escapeHtml(state.settings.find((s) => s.id === state.settingId)?.name ?? '')}</b></div>${editorHtml(null)}</div>` : '';
     list.innerHTML = creating + (shown.length ? shown.map(characterRow).join('')
-        : `<div class="pp-cm-empty">${state.view === 'chat' && state.filter === 'unconfirmed' ? 'Nothing to review - no unconfirmed characters.' : 'No characters yet. Characters a prompted character variable meets are added here (unconfirmed, until you review them); you can also create them in a setting.'}</div>`);
+        : `<div class="pp-cm-empty">${state.view === 'chat' && state.filter === 'unconfirmed'
+            ? `Nothing to review - no unconfirmed ${escapeHtml(plural())}.`
+            : `No ${escapeHtml(plural())} yet. ${escapeHtml(typeInfo().plural)} a prompted ${escapeHtml(noun())} variable meets are added here${isStoryType() ? '' : ' (unconfirmed, until you review them); you can also create them in a setting'}.`}</div>`);
     for (const row of list.querySelectorAll('.pp-cm-row[data-id]')) {
         const character = state.characters.find((c) => c.id === row.dataset.id);
         const slot = row.querySelector('[data-portrait]');
@@ -433,7 +478,18 @@ function readFields(root, prefix) {
         aliases: get('aliases').split(',').map((a) => a.trim()).filter(Boolean),
         image: get('image').trim() || null,
     };
-    for (const [key] of TEXT_FIELDS) out[key] = REFERENCE_FIELDS.has(key) ? get(key).split(',').map((n) => n.trim()).filter(Boolean) : get(key);
+    out.description = get('description');
+    for (const def of state.fields) {
+        const el = root.querySelector(`[data-${prefix}="${CSS.escape(def.name)}"]`);
+        if (!el) continue;
+        const value = el.value ?? '';
+        const list = () => value.split(',').map((n) => n.trim()).filter(Boolean);
+        if (def.type === 'object') out[def.name] = value.trim() ? list().slice(0, 1) : '';
+        else if (def.type === 'array') out[def.name] = list();
+        else if (def.type === 'number') out[def.name] = value === '' ? null : Number(value);
+        else if (def.type === 'boolean') out[def.name] = value === '' ? null : value === 'true';
+        else out[def.name] = value;
+    }
     return out;
 }
 
@@ -444,7 +500,13 @@ function readOverrides(root) {
     if (all.name) out.name = all.name;
     if (all.aliases.length) out.aliases = all.aliases;
     if (all.image) out.image = all.image;
-    for (const [key] of TEXT_FIELDS) if (!REFERENCE_FIELDS.has(key) && all[key].trim()) out[key] = all[key];
+    if (all.description.trim()) out.description = all.description;
+    for (const def of state.fields) {
+        if (isReference(def) || !(def.name in all)) continue;
+        const value = all[def.name];
+        const blank = value === null || value === '' || (Array.isArray(value) && value.length === 0);
+        if (!blank) out[def.name] = value;
+    }
     return out;
 }
 
@@ -465,13 +527,13 @@ async function act(action, row, target) {
         case 'save': {
             const fields = readFields(row.querySelector('[data-editor]'), 'f');
             if (!fields.name) {
-                notify('warning', 'A character needs a name.');
+                notify('warning', `A ${noun()} needs a name.`);
                 return;
             }
             const result = state.editingId === 'new'
-                ? await createObject(EXTENSION_ID, state.settingId, TYPE, fields)
+                ? await createObject(EXTENSION_ID, state.settingId, state.type, fields)
                 : await updateObject(EXTENSION_ID, chatId, id, fields, options);
-            if (refused(result, 'Saving the character')) return;
+            if (refused(result, `Saving the ${noun()}`)) return;
             state.editingId = null;
             state.focusId = result.id;
             break;
@@ -485,7 +547,7 @@ async function act(action, row, target) {
             const targetId = await chooseFromList({
                 title: `"${character.name}" is really…`,
                 items: others.map((c) => ({ value: c.id, label: c.name, detail: [c.aliases.join(', '), c.confirmed ? '' : 'unconfirmed'].filter(Boolean).join(' · ') })),
-                emptyText: 'There is no other character to resolve it to - confirm or edit this one instead.',
+                emptyText: `There is no other ${noun()} to resolve it to - confirm or edit this one instead.`,
             });
             if (!targetId) return;
             const into = others.find((c) => c.id === targetId);
@@ -500,7 +562,7 @@ async function act(action, row, target) {
             const targetId = await chooseFromList({
                 title: `Merge "${character.name}" into…`,
                 items: others.map((c) => ({ value: c.id, label: c.name, detail: [c.aliases.join(', '), c.confirmed ? '' : 'unconfirmed'].filter(Boolean).join(' · ') })),
-                emptyText: 'There is no other character to merge into.',
+                emptyText: `There is no other ${noun()} to merge into.`,
             });
             if (!targetId) return;
             const into = others.find((c) => c.id === targetId);
@@ -510,7 +572,7 @@ async function act(action, row, target) {
             break;
         }
         case 'delete': {
-            const where = character.scope === 'setting' ? ' It is removed from the setting - every chat on it loses this character.' : '';
+            const where = character.scope === 'setting' ? ` It is removed from the setting - every chat on it loses this ${noun()}.` : '';
             if (!await confirmYesNo(`Delete "${character.name}"?${where} Variables showing it are cleared.`)) return;
             if (refused(await deleteObject(EXTENSION_ID, chatId, id, options), 'Deleting')) return;
             break;
@@ -566,7 +628,7 @@ async function act(action, row, target) {
             state.runtimeDraft = null;
             break;
         case 'saveRuntimeFields': {
-            const saved = await setObjectRuntimeFields(EXTENSION_ID, state.runtimeDraft.settingId, TYPE, draftToFields(state.runtimeDraft.fields));
+            const saved = await setObjectRuntimeFields(EXTENSION_ID, state.runtimeDraft.settingId, state.type, draftToFields(state.runtimeDraft.fields));
             if (refused(saved, 'Saving the runtime fields')) return;
             state.runtimeDraft = { settingId: state.runtimeDraft.settingId, fields: draftFrom(saved) };
             notify('success', 'Runtime fields saved.');
@@ -594,7 +656,7 @@ async function act(action, row, target) {
         case 'deleteSetting': {
             const setting = state.settings.find((s) => s.id === state.settingId);
             if (!setting || setting.isDefault) return;
-            if (!await confirmYesNo(`Delete the setting "${setting.name}" and everything in it - ${setting.objectCount} object(s), ${setting.counts?.[TYPE] ?? 0} of them character(s)? Chats using it will be asked for a setting again.`)) return;
+            if (!await confirmYesNo(`Delete the setting "${setting.name}" and everything in it - ${setting.objectCount} object(s), ${setting.counts?.[CHARACTER_OBJECT_TYPE] ?? 0} of them character(s)? Chats using it will be asked for a setting again.`)) return;
             if (refused(await deleteSetting(EXTENSION_ID, setting.id), 'Deleting the setting')) return;
             state.settingId = null;
             break;
@@ -609,7 +671,13 @@ async function act(action, row, target) {
 async function onChange(e) {
     const key = e.target.dataset.cm;
     const chatId = currentChatId();
-    if (key === 'filter') {
+    if (key === 'type') {
+        state.type = e.target.value;
+        state.editingId = null;
+        state.runtimeDraft = null;
+        state.focusId = null;
+        await reload();
+    } else if (key === 'filter') {
         state.filter = e.target.value;
         render();
     } else if (key === 'setting') {
@@ -685,9 +753,11 @@ function build() {
     overlay = document.createElement('div');
     overlay.className = 'pp-cm-overlay';
     overlay.innerHTML = `
-        <div class="pp-cm-window" role="dialog" aria-label="Character Manager">
+        <div class="pp-cm-window" role="dialog" aria-label="Object Manager">
             <div class="pp-cm-header">
-                <b><i class="fa-solid fa-users"></i> Characters</b>
+                <label class="pp-cm-type" title="Which objects to show"><i class="fa-solid fa-users" data-cm="typeIcon"></i>
+                    <select class="text_pole" data-cm="type"></select>
+                </label>
                 <div class="pp-cm-tabs" data-cm="tabs"></div>
                 <div class="menu_button fa-solid fa-xmark" data-cm-close title="Close"></div>
             </div>
@@ -696,7 +766,7 @@ function build() {
         </div>`;
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay || e.target.closest('[data-cm-close]')) {
-            closeCharacterManager();
+            closeObjectManager();
             return;
         }
         const view = e.target.closest('[data-cm-view]');
@@ -736,7 +806,7 @@ function build() {
         }
     });
     document.addEventListener('keydown', (e) => {
-        if (state.open && e.key === 'Escape' && !e.target.closest?.('.pp-cm-editor')) closeCharacterManager();
+        if (state.open && e.key === 'Escape' && !e.target.closest?.('.pp-cm-editor')) closeObjectManager();
     });
     document.body.append(overlay);
 }
@@ -744,15 +814,16 @@ function build() {
 // Opens the manager. options: { characterId?, view?: 'chat' | 'setting',
 // settingId?, filter?: 'unconfirmed' }, or State Engine's object manager
 // shape { type?, objectId?, view?, settingId?, filter? }.
-export async function openCharacterManager(options = {}) {
+export async function openObjectManager(options = {}) {
     if (!overlay) build();
     const chatId = currentChatId();
-    const otherType = options.type && options.type !== TYPE;
-    if (otherType) notify('info', `Pretty Panels manages characters only for now - ${options.type} objects cannot be reviewed here yet.`);
+    if (!state.types.length) state.types = (await listObjectTypes()) ?? [];
+    const known = (type) => typeof type === 'string' && (state.types.length === 0 || state.types.some((t) => t.id === type));
+    state.type = known(options.type) ? options.type : CHARACTER_OBJECT_TYPE;
     state.view = options.view ?? (chatId ? 'chat' : 'setting');
     state.runtimeDraft = null;
-    state.filter = otherType ? 'all' : (options.filter ?? 'all');
-    state.focusId = otherType ? null : (options.characterId ?? options.objectId ?? null);
+    state.filter = options.filter ?? 'all';
+    state.focusId = options.characterId ?? options.objectId ?? null;
     state.editingId = null;
     state.search = '';
     if (options.settingId) state.settingId = options.settingId;
@@ -763,7 +834,7 @@ export async function openCharacterManager(options = {}) {
     await reload();
 }
 
-export function closeCharacterManager() {
+export function closeObjectManager() {
     state.open = false;
     if (overlay) overlay.hidden = true;
 }
@@ -771,11 +842,11 @@ export function closeCharacterManager() {
 // Registers this window with State Engine as its object manager (its
 // drawer button and the "new ... detected" notifications open it) and
 // keeps it current while open.
-export async function initCharacterManager() {
+export async function initObjectManager() {
     try {
-        await registerObjectManager(EXTENSION_ID, (options) => void openCharacterManager(options ?? {}));
+        await registerObjectManager(EXTENSION_ID, (options) => void openObjectManager(options ?? {}));
     } catch (err) {
-        console.warn('[PrettyPanels] could not register the Character Manager with State Engine (update State Engine for object support)', err);
+        console.warn('[PrettyPanels] could not register the Object Manager with State Engine (update State Engine for object support)', err);
     }
     const { eventSource, eventTypes } = SillyTavern.getContext();
     eventSource.on(VARIABLES_CHANGED_EVENT, () => {

@@ -408,14 +408,14 @@ its id. A namespace never has two roles with the same name.
 
 ## Characters
 
-Pretty Panels provides State Engine's **Character Manager** window and draws character
+Pretty Panels provides State Engine's **Object Manager** window and draws character
 variables. The characters themselves - and every rule about them - are State Engine's.
 
 - **Character elements** - dragging a character variable, or a list of characters (an Array
   of item type Character), onto a panel adds a **Character Cards** element. Its properties
   choose the **character template** each card is drawn with and, for a list, the **tiling**
   (grid, row or column - grid by default) and the gap. Cards keep the template's size; what
-  doesn't fit scrolls. Clicking a card (outside Editing Mode) opens the Character Manager on
+  doesn't fit scrolls. Clicking a card (outside Editing Mode) opens the Object Manager on
   that character. **Leave out your persona ({{user}})** in Value Formatting drops the character
   that is your persona (by name or alias) from a list - with a template or the built-in card.
 - **Built-in card** - with no template (and for a text element bound to a character variable):
@@ -448,9 +448,14 @@ variables. The characters themselves - and every rule about them - are State Eng
 - **Confirmed = in the setting.** A detected character is unconfirmed and only in its chat
   until it is reviewed: confirmed as it is, edited and saved, or resolved to an existing
   character. Confirming adds it to the setting - there is no separate "add to setting".
-- **The Character Manager** - opens from a card, the drawer's **Character Manager** button,
-  State Engine's **Manage characters** button and its "New characters detected for review"
-  notification. Two views:
+- **The Object Manager** (it began as the Character Manager) - opens from a card, the
+  drawer's **Object Manager** button, State Engine's **Manage objects** button and its "New
+  ... detected for review" notifications, on the type they are about. The dropdown in its
+  header picks the type: characters, locations, factions, items, creatures, lore, quests,
+  scenes, events. The editor's fields are the setting's fields for that type (State Engine's
+  object presets); fields holding other objects (a character's factions) are typed as
+  comma-separated names. Quests, scenes and events belong to their chat, so they have no
+  Settings view. Three views:
   - **This chat**: the chat's characters - its unconfirmed ones (detected, not yet reviewed,
     only in this chat) and its setting's - with presence, the introduction snippet (read-only),
     id, confirmed status; the chat's **setting** is chosen here. Filter to the unconfirmed ones
@@ -542,7 +547,7 @@ variables. The characters themselves - and every rule about them - are State Eng
 | `src/ui/atmosphere-drawer.js` | The drawer's Atmosphere section |
 | `src/chat/flag-watch.js` + `flag-watch-core.js` | Flag and change watcher: `onFlag`, `onChange`, `isFlagOn` for flag-driven features (baseline on chat load) |
 | `src/ui/layout-gate.js` | The "Select a layout" card and the missing-roles warning |
-| `src/ui/character-manager.js` | The shared Character Manager window (State Engine's Character API) |
+| `src/ui/object-manager.js` | The shared Object Manager window, every object type (State Engine's Object API) |
 | `src/elements/character-card.js` | CharacterCard / CharacterList and the generated fallback icons |
 | `src/elements/character-fields.js` | Character fields a template binds (`char:<field>`), their values and the sample character |
 | `src/elements/character-tiles.js` | Character elements: template cards, tiled as a grid, row or column |
