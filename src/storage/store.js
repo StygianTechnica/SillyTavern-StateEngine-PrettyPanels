@@ -9,6 +9,10 @@
 //     version, enabled, editingMode,
 //     snapToGrid, gridSize, showGrid,
 //     toolbar: { x, y, collapsed },   the Layout Tools toolbar
+//     editButton: { show, dx, dy },   the Editing Mode pencil on the chat
+//                         (src/ui/edit-button.js): shown or not, and where -
+//                         dx/dy from the chat's top-right corner (null: the
+//                         corner itself)
 //     activeLayoutId,     the layout on screen (or, while a chat has not
 //                         chosen one, the last one edited - see
 //                         src/chat/chat-session.js). There is no default
@@ -233,6 +237,10 @@ export function getStore() {
     }
     if (!isObject(store.toolbar)) {
         store.toolbar = { x: null, y: null, collapsed: false };
+        changed = true;
+    }
+    if (!isObject(store.editButton)) {
+        store.editButton = { show: true, dx: null, dy: null };
         changed = true;
     }
     if (!isObject(store.layouts)) {

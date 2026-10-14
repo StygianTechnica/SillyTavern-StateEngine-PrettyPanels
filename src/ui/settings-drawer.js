@@ -6,6 +6,7 @@
 // Library sections are wired in src/ui/library-drawer.js.
 
 import { getState, onStateChange, setEnabled, setEditingMode, getGrid, setGrid } from '../panels/panel-manager.js';
+import { isEditButtonShown, setEditButtonShown, onEditButtonChange } from './edit-button.js';
 import { initLibraryDrawer } from './library-drawer.js';
 import { initLayoutRolesDrawer } from './layout-roles-drawer.js';
 import { initLayoutPanelsDrawer } from './layout-panels-drawer.js';
@@ -46,6 +47,10 @@ export async function addSettingsDrawer() {
     document.getElementById('pp_enabled').addEventListener('change', (e) => setEnabled(e.target.checked));
     document.getElementById('pp_editing_mode').addEventListener('change', (e) => setEditingMode(e.target.checked));
     document.getElementById('pp_theme_editor').addEventListener('click', () => openThemeEditor());
+    const editButtonBox = document.getElementById('pp_edit_button');
+    editButtonBox.checked = isEditButtonShown();
+    editButtonBox.addEventListener('change', (e) => setEditButtonShown(e.target.checked));
+    onEditButtonChange(() => { editButtonBox.checked = isEditButtonShown(); });
 
     const snapBox = document.getElementById('pp_snap_to_grid');
     const sizeInput = document.getElementById('pp_grid_size');

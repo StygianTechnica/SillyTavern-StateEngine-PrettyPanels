@@ -2950,6 +2950,23 @@ body.pp-editing .pp-panel.pp-template-editor {
     outline: 2px dashed var(--SmartThemeQuoteColor);
     outline-offset: 3px;
 }
+/* Behind the template: the host panel's background (template-editor.js
+   buildBackdrop), or the theme's panel tint - a little larger than the
+   template, so its edges show. */
+.pp-template-editor-backdrop {
+    position: absolute;
+    inset: -6px;
+    pointer-events: none;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: var(--ppt-background, var(--SmartThemeBlurTintColor));
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    box-shadow: 0 4px 16px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.45));
+}
+.pp-template-editor-backdrop-image {
+    position: absolute;
+    inset: 0;
+}
 .pp-template-editor-bar {
     position: absolute;
     left: 0;
@@ -3215,4 +3232,45 @@ body.pp-editing .pp-element[data-flag-badge]:not(.pp-element-flag-hidden)::after
 }
 .pp-atmo-intensity input[type="range"] {
     flex: 1 1 auto;
+}
+
+/* The Editing Mode pencil on the chat (src/ui/edit-button.js). Above the
+   panels and the chat, below SillyTavern's drawers and popups. */
+.pp-edit-button {
+    position: fixed;
+    z-index: 2900;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--SmartThemeBodyColor);
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 50%;
+    box-shadow: 0 1px 4px var(--SmartThemeShadowColor, rgba(0, 0, 0, 0.4));
+    opacity: 0.55;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    transition: opacity 0.15s ease;
+}
+.pp-edit-button[hidden] {
+    display: none;
+}
+.pp-edit-button:hover,
+.pp-edit-button:focus-visible,
+.pp-edit-button-active {
+    opacity: 1;
+}
+.pp-edit-button-active {
+    color: var(--SmartThemeQuoteColor);
+    border-color: var(--SmartThemeQuoteColor);
+}
+.pp-edit-button-dragging {
+    cursor: grabbing;
+    opacity: 1;
 }

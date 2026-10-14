@@ -252,3 +252,14 @@ export function setToolbarState(patch) {
     store.toolbar = { ...store.toolbar, ...patch };
     save();
 }
+
+// The Editing Mode pencil on the chat (src/ui/edit-button.js): { show, dx, dy }.
+export function getEditButtonState() {
+    return { show: true, dx: null, dy: null, ...getStore().editButton };
+}
+
+export function setEditButtonState(patch) {
+    const store = getStore();
+    store.editButton = { ...getEditButtonState(), ...patch };
+    save();
+}

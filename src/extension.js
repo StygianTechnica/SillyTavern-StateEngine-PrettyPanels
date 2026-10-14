@@ -26,6 +26,7 @@ import { registerSlashCommands } from './ui/slash-commands.js';
 import { initAtmosphere } from './atmosphere/atmosphere-controller.js';
 import { addSettingsDrawer } from './ui/settings-drawer.js';
 import { addLayoutToolbar } from './ui/layout-toolbar.js';
+import { addEditButton } from './ui/edit-button.js';
 import { initLayoutGate } from './ui/layout-gate.js';
 import { initObjectManager, openObjectManager } from './ui/object-manager.js';
 
@@ -95,6 +96,7 @@ export async function initExtension() {
     addWandMenuItems();
     registerSlashCommands();
     addLayoutToolbar();
+    addEditButton();
     await addSettingsDrawer();
     initLayoutGate();
     await initObjectManager();

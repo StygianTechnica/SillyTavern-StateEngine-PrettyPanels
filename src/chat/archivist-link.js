@@ -44,7 +44,7 @@ function isEntity(entity, who) {
 
 // The insights for `character` in compiled `view` (Archivist's
 // getCompiledMemory()), with the relationship between it and `persona`
-// ({ id?, name, aliases? } - the user's persona): { traits, habits,
+// ({ id?, name, aliases? } - the user's persona): { summary, traits, habits,
 // stressors, motivations, arc, feeling, relationship: { type, polarity,
 // polarity_label, intensity, trend, text, view } | null, threads: [titles
 // of its open or active threads], secrets: [secrets it knows] }, or null
@@ -69,6 +69,7 @@ export function characterInsights(view, character, persona) {
         .map((w) => w.name);
     if (!profile && !relationship && threads.length === 0 && secrets.length === 0) return null;
     return {
+        summary: profile?.summary ?? '',
         traits: profile?.traits ?? [],
         habits: profile?.habits ?? [],
         stressors: profile?.stressors ?? [],

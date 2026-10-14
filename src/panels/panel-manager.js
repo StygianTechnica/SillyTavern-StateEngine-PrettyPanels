@@ -368,6 +368,19 @@ export function unregisterExtraPanel(panel) {
     extraPanels.delete(panel.id);
 }
 
+// The visible box (.pp-panel-box) of a layout panel on screen that draws
+// character template `templateId` in one of its Character elements - the
+// panel its cards sit on - or null. The template editor shows its
+// background behind the template.
+export function templateHostBox(templateId) {
+    for (const panel of panels.values()) {
+        const usesIt = (panel.record.widgets ?? []).some((w) => w?.character?.templateId === templateId);
+        const box = usesIt ? panel.el?.querySelector('.pp-panel-box') : null;
+        if (box?.isConnected) return box;
+    }
+    return null;
+}
+
 // The character template the editor is showing (null: none) - its
 // variables and roles are watched like the layout's.
 export function setEditorTemplate(id) {

@@ -65,6 +65,7 @@ const FIELD_PATTERN = /^(?:[a-z_]+|(?:custom|icon|archivist)\.[a-z][a-z0-9_]{0,3
 
 // [field, label, display type, how to read it from the insights, description]
 const ARCHIVIST_FIELDS = [
+    ['summary', 'Who they are now', 'text', (a) => a.summary, 'What is known about them now, judged by what they have done so far'],
     ['traits', 'Traits', 'list', (a) => a.traits, 'Personality traits Archivist inferred from the memories'],
     ['habits', 'Habits', 'list', (a) => a.habits, 'Habits and routines'],
     ['stressors', 'Stressors', 'list', (a) => a.stressors, 'What puts them under strain'],
@@ -229,6 +230,7 @@ export const SAMPLE_CHARACTER = Object.freeze({
     present: true,
     runtime: { present: true, values: { thought: 'Is this layout readable?', mood: 'Curious', intent: 'Show every field' }, images: {} },
     archivist: {
+        summary: 'A stand-in who has shown up for every template so far, patient with every margin.',
         traits: ['patient', 'curious'], habits: ['checks every margin'], stressors: ['clipped text'], motivations: ['a tidy layout'],
         arc: 'From a blank box to a finished card.', feeling: 'hopeful',
         relationship: { type: 'friend', polarity: 2, polarity_label: 'close', intensity: 'medium', trend: 'warming', text: 'Trusts you with every template.', view: 'theirs' },

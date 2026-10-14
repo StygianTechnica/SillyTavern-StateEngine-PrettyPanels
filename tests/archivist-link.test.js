@@ -9,7 +9,7 @@ const lucian = { id: 'chr_lucian', name: 'Lucian', aliases: ['Luc'] };
 const gavin = { id: 'chr_gavin', name: 'Gavin', aliases: [] };
 const view = {
     character_profiles: [{
-        entity_id: 'chr_lucian', name: 'Lucian', traits: ['diligent'], habits: ['early runs'], stressors: ['rent'], motivations: ['keep the gym open'],
+        entity_id: 'chr_lucian', name: 'Lucian', summary: 'A trainer keeping the gym afloat.', traits: ['diligent'], habits: ['early runs'], stressors: ['rent'], motivations: ['keep the gym open'],
         arc: 'From drifting to driven.', emotional_state: 'anxious',
     }],
     relationships: [
@@ -26,7 +26,7 @@ const view = {
 describe('characterInsights', () => {
     it('gathers a character\'s profile, its relationship toward the persona, open threads and secrets', () => {
         expect(characterInsights(view, lucian, { id: null, name: 'Sam' })).toEqual({
-            traits: ['diligent'], habits: ['early runs'], stressors: ['rent'], motivations: ['keep the gym open'],
+            summary: 'A trainer keeping the gym afloat.', traits: ['diligent'], habits: ['early runs'], stressors: ['rent'], motivations: ['keep the gym open'],
             arc: 'From drifting to driven.', feeling: 'anxious',
             relationship: { type: 'mentor', polarity: 2, polarity_label: 'close', intensity: 'high', trend: 'warming', text: 'Lucian looks out for Sam.', view: 'theirs' },
             threads: ['The manager job'],

@@ -9,6 +9,12 @@
 // never joins the layout or a group; its position is not stored (only its
 // size and contents are - in the template).
 //
+// A template is usually see-through - its cards sit on the panel that holds
+// the Character element - so floating over the chat or a drawer it would
+// be hard to read. It is drawn on a BACKDROP: the background of a panel on
+// screen that shows this template's cards, or the theme's panel tint when
+// none does.
+//
 // Elements may bind to the card's CHARACTER fields (the properties pane's
 // Character palette), to variables and to roles. The preview character -
 // one of this chat's characters, or a sample - answers the character fields
@@ -16,7 +22,7 @@
 
 import { Panel } from './panel.js';
 import {
-    basePanelHooks, registerExtraPanel, unregisterExtraPanel, setEditorTemplate, getState, setEditingMode, onStateChange, closePropertiesExcept,
+    basePanelHooks, registerExtraPanel, unregisterExtraPanel, setEditorTemplate, getState, setEditingMode, onStateChange, closePropertiesExcept, templateHostBox,
 } from './panel-manager.js';
 import {
     getCharacterTemplate, updateCharacterTemplate, onCharacterTemplatesChange, exportCharacterTemplate,
@@ -112,6 +118,39 @@ function fillBar() {
     select.value = editor.previewId;
 }
 
+// Whether a computed CSS colour is (nearly) see-through.
+function seeThrough(color) {
+    if (!color || color === 'transparent') return true;
+    const alpha = /rgba?\(([^)]+)\)/.exec(color)?.[1].split(/[\s,/]+/).filter(Boolean)[3];
+    return alpha !== undefined && Number.parseFloat(alpha) < 0.15;
+}
+
+// The backdrop behind the editor: the host panel's colour, blur, image and
+// texture as it shows them now - or the theme tint (the CSS default).
+function buildBackdrop(templateId) {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pp-template-editor-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    const host = templateHostBox(templateId);
+    if (!host) return backdrop;
+    const box = getComputedStyle(host);
+    const image = host.querySelector('.pp-panel-image');
+    const imageStyle = image ? getComputedStyle(image) : null;
+    const hasImage = !!imageStyle && imageStyle.backgroundImage && imageStyle.backgroundImage !== 'none';
+    if (seeThrough(box.backgroundColor) && !hasImage) return backdrop;
+    backdrop.classList.add('pp-template-editor-backdrop-host');
+    backdrop.style.backgroundColor = box.backgroundColor;
+    if (box.backdropFilter && box.backdropFilter !== 'none') backdrop.style.backdropFilter = box.backdropFilter;
+    if (hasImage) {
+        const layer = document.createElement('div');
+        layer.className = 'pp-template-editor-backdrop-image';
+        for (const prop of ['backgroundImage', 'backgroundSize', 'backgroundRepeat', 'backgroundPosition', 'opacity']) layer.style[prop] = imageStyle[prop];
+        backdrop.append(layer);
+    }
+    backdrop.title = 'The background of the panel that shows these cards';
+    return backdrop;
+}
+
 function buildBar() {
     const bar = document.createElement('div');
     bar.className = 'pp-template-editor-bar';
@@ -168,6 +207,7 @@ export function openTemplateEditor(templateId) {
     panel.isTemplateEditor = true;
     panel.el.classList.add('pp-template-editor');
     editor.panel = panel;
+    panel.el.prepend(buildBackdrop(templateId));
     editor.bar = buildBar();
     panel.el.appendChild(editor.bar);
     fillBar();
