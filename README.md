@@ -465,7 +465,9 @@ variables. The characters themselves - and every rule about them - are State Eng
   header picks the type: characters, locations, factions, items, creatures, lore, quests,
   scenes, events. The editor's fields are the setting's fields for that type (State Engine's
   object presets); fields holding other objects (a character's factions) are typed as
-  comma-separated names. Quests, scenes and events belong to their chat, so they have no
+  comma-separated names. Its **Starting values** section sets what every chat begins with for
+  the runtime fields - e.g. the factions a character or a place has before the story starts;
+  the story then changes them in that chat. Quests, scenes and events belong to their chat, so they have no
   Settings view. Three views:
   - **This chat**: the chat's characters - its unconfirmed ones (detected, not yet reviewed,
     only in this chat) and its setting's - with presence, the introduction snippet (read-only),

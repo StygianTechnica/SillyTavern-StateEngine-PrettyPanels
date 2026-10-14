@@ -39,7 +39,6 @@ export const CHARACTER_IDENTITY_FIELDS = [
     ['image', 'Image', 'image'],
     ['aliases', 'Aliases', 'list'],
     ['present', 'In the scene', 'boolean'],
-    ['faction', 'Faction', 'string'],
     ['role', 'Role', 'string'],
     ['description', 'Description', 'text'],
     ['personality', 'Personality', 'text'],
@@ -55,8 +54,9 @@ export const CHARACTER_IDENTITY_FIELDS = [
 // Those yes/no fields, which every object has: [field, label] - the flag
 // suggestions offer them for each object variable and object role.
 export const OBJECT_FLAG_FIELDS = CHARACTER_IDENTITY_FIELDS.filter(([field]) => ['confirmed', 'has_image', 'has_description'].includes(field)).map(([field, label]) => [field, label]);
-// Fields saved under an older name -> the field that holds them now.
-const RENAMED_FIELDS = { biography: 'description' };
+// Fields saved under an older name -> the field that holds them now. A
+// character's faction became the runtime factions (State Engine, 2026-10-13).
+const RENAMED_FIELDS = { biography: 'description', faction: 'factions' };
 const BUILT_IN_RUNTIME = ['thought', 'mood', 'intent'];
 const CUSTOM_PREFIX = 'custom.';
 const ICON_PREFIX = 'icon.';
@@ -89,6 +89,7 @@ export function isCharacterField(field) {
 }
 
 function runtimeType(type) {
+    if (type === 'array') return 'list';
     return type === 'number' ? 'number' : 'string';
 }
 
@@ -146,8 +147,9 @@ export function characterFieldDef(field) {
 // fields - built in or the setting's own - all live in runtime.values.
 export function characterFieldValue(character, field) {
     if (!character) return undefined;
+    field = RENAMED_FIELDS[field] ?? field;
     if (BUILT_IN_RUNTIME.includes(field)) return character.runtime?.values?.[field] ?? undefined;
-    if (field.startsWith(CUSTOM_PREFIX)) return character.runtime?.values?.[field.slice(CUSTOM_PREFIX.length)] ?? undefined;
+    if (field.startsWith(CUSTOM_PREFIX)) return shownRuntime(character.runtime?.values?.[field.slice(CUSTOM_PREFIX.length)]);
     if (field.startsWith(ICON_PREFIX)) return character.runtime?.images?.[field.slice(ICON_PREFIX.length)] ?? undefined;
     if (field.startsWith(ARCHIVIST_PREFIX)) {
         const read = ARCHIVIST_FIELDS.find(([name]) => name === field.slice(ARCHIVIST_PREFIX.length))?.[3];
@@ -156,6 +158,10 @@ export function characterFieldValue(character, field) {
         return value === null || value === undefined || value === '' ? undefined : value;
     }
     if (field === 'present') return character.runtime?.present ?? character.present ?? false;
+    // Any other runtime field the setting gives its type (a character's or a
+    // location's factions) - in a chat, or its starting value outside one.
+    if (character.runtime?.values && field in character.runtime.values) return shownRuntime(character.runtime.values[field]);
+    if (!character.runtime && character.startValues && field in character.startValues) return shownRuntime(character.startValues[field]);
     if (field === 'confirmed') return character.confirmed === true;
     if (field === 'has_image') return typeof character.image === 'string' && character.image.trim() !== '';
     if (field === 'has_description') return typeof character.description === 'string' && character.description.trim() !== '';
@@ -173,6 +179,12 @@ export function objectsFieldValue(objects, field) {
     const values = list.map((o) => characterFieldValue(o, field));
     if (values.some((v) => v === true)) return true;
     return values.find((v) => v !== undefined) ?? (list.length && values.every((v) => v === false) ? false : undefined);
+}
+
+// A runtime value as a card shows it: objects by name; none as undefined.
+function shownRuntime(value) {
+    if (Array.isArray(value)) return value.length ? value.map(named) : undefined;
+    return value === null || value === undefined || value === '' ? undefined : named(value);
 }
 
 // A field holding other objects (a character's faction: faction objects)

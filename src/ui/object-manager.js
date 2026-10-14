@@ -79,6 +79,7 @@ const state = {
     type: CHARACTER_OBJECT_TYPE, // the object type shown
     types: [], // State Engine's object types (listObjectTypes)
     fields: [], // the shown setting's baseline field definitions for the type
+    startDefs: [], // its runtime fields that can have a starting value
     view: 'chat', // 'chat' | 'setting' | 'runtime'
     runtimeFields: [], // the shown setting's runtime fields (This chat: the chat's setting)
     runtimeDraft: null, // the Runtime fields tab's unsaved copy: { settingId, fields }
@@ -150,6 +151,8 @@ async function load() {
     Object.assign(state, {
         settings: settings ?? [], chatSetting, characters: characters ?? [], runtimeFields: runtimeFields ?? [],
         fields: (fields ?? []).filter((d) => d.scope === 'global' && EDITABLE_TYPES.has(d.type)),
+        // A field answered new each turn (a thought) has nothing to start from.
+        startDefs: (fields ?? []).filter((d) => d.scope !== 'global' && EDITABLE_TYPES.has(d.type) && !d.prompted?.newEachTurn),
     });
     // A fresh draft for the Runtime fields tab when it opens on a setting.
     if (state.view === 'runtime' && state.runtimeDraft?.settingId !== state.settingId) {
@@ -298,12 +301,27 @@ function fieldsHtml(values, prefix, placeholders = {}) {
         ${state.fields.filter((def) => prefix !== 'v' || !isReference(def)).map((def) => fieldInput(def, values, prefix, placeholders[def.name])).join('')}`;
 }
 
+// The runtime fields' starting values: what every chat begins with (a
+// scenario's factions for a character or a place), which the story then
+// changes per chat.
+function startValuesHtml(c) {
+    if (!state.startDefs.length) return '';
+    const values = c?.startValues ?? {};
+    const filled = Object.values(values).some((v) => v !== null && v !== '' && !(Array.isArray(v) && v.length === 0));
+    return `
+            <details class="pp-cm-start"${filled ? ' open' : ''}>
+                <summary>Starting values <small>- what every chat begins with; the story then changes them in that chat</small></summary>
+                <div class="pp-cm-grid">${state.startDefs.map((def) => fieldInput(def, values, 's')).join('')}</div>
+            </details>`;
+}
+
 function editorHtml(c) {
     const base = c?.base ?? {};
     const variants = c?.variants ?? [];
     return `
         <div class="pp-cm-editor" data-editor>
             <div class="pp-cm-grid">${fieldsHtml(base, 'f')}</div>
+            ${startValuesHtml(c)}
             ${c ? `
             <div class="pp-cm-variants">
                 <div class="pp-cm-subhead">Variants <small>- alternate versions; the chosen one is what every chat on the setting uses. Blank fields keep the base.</small></div>
@@ -348,8 +366,11 @@ function runtimeHtml(c) {
     const cells = state.runtimeFields.map((field) => {
         const value = runtimeValueOf(c, field);
         let control;
-        if (field.prompted) {
-            control = `<span class="pp-cm-runtime-value${value === null || value === undefined ? ' pp-cm-runtime-empty' : ''}" title="Written by the prompted update each turn">${value === null || value === undefined ? '—' : escapeHtml(value)}</span>`;
+        // A list of objects (factions) shows their names; any list is read-only here.
+        const shown = Array.isArray(value) ? (value.some((v) => /^[a-z]{3}_/.test(v)) ? referenceText(value) : value.join(', ')) : value;
+        if (field.prompted || Array.isArray(value) || field.type === 'array') {
+            const empty = shown === null || shown === undefined || shown === '';
+            control = `<span class="pp-cm-runtime-value${empty ? ' pp-cm-runtime-empty' : ''}" title="${field.prompted ? 'Written by the prompted update each turn' : 'Set its starting value in the editor'}">${empty ? '—' : escapeHtml(shown)}</span>`;
         } else if (field.type === 'enum') {
             control = `<select class="text_pole" data-cm="runtimeValue" data-field="${escapeHtml(field.name)}"><option value="">—</option>${field.values.map((v) => `<option value="${escapeHtml(v)}"${v === value ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>`;
         } else {
@@ -357,7 +378,7 @@ function runtimeHtml(c) {
         }
         return `<label class="pp-cm-runtime-cell${field.prompted ? '' : ' pp-cm-runtime-manual'}" title="${escapeHtml(field.description || field.name)}${field.prompted ? '' : ' (set by hand)'}"><span>${escapeHtml(field.name)}</span>${control}</label>`;
     }).join('');
-    return `<div class="pp-cm-runtime"><span class="pp-cm-runtime-head">Runtime${c.runtime.present ? '' : ' (not in the scene - cleared)'}</span>${cells}</div>`;
+    return `<div class="pp-cm-runtime"><span class="pp-cm-runtime-head">Runtime${typeInfo().hasPresence && !c.runtime.present ? ' (not in the scene)' : ''}</span>${cells}</div>`;
 }
 
 // The Runtime fields tab's editable copy: enum values as one comma list,
@@ -409,7 +430,7 @@ function runtimeEditorHtml() {
     const rows = draft.map((f, i) => `
         <div class="pp-cm-rf-row" data-index="${i}">
             <label class="pp-cm-field"><span>Name</span><input type="text" class="text_pole" data-rf="name" value="${escapeHtml(f.name)}"${f.builtIn ? ' readonly title="A built-in field - it cannot be renamed or removed"' : ' placeholder="e.g. amorousness"'} /></label>
-            <label class="pp-cm-field"><span>Type</span><select class="text_pole" data-rf="type">${['string', 'number', 'enum'].map((t) => `<option value="${t}"${t === f.type ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+            <label class="pp-cm-field"><span>Type</span><select class="text_pole" data-rf="type">${['string', 'number', 'enum', ...(['string', 'number', 'enum'].includes(f.type) ? [] : [f.type])].map((t) => `<option value="${t}"${t === f.type ? ' selected' : ''}>${t === 'array' ? 'list' : t}</option>`).join('')}</select></label>
             ${f.type === 'enum' ? `<label class="pp-cm-field pp-cm-rf-wide"><span>Values</span><input type="text" class="text_pole" data-rf="values" value="${escapeHtml(f.values)}" placeholder="comma separated: Low, Medium, High" /></label>` : ''}
             ${f.type === 'number' ? `<label class="pp-cm-field"><span>Min</span><input type="number" class="text_pole" data-rf="min" value="${escapeHtml(f.min)}" /></label><label class="pp-cm-field"><span>Max</span><input type="number" class="text_pole" data-rf="max" value="${escapeHtml(f.max)}" /></label>` : ''}
             <label class="pp-cm-field pp-cm-rf-wide"><span>Description (what the model is asked for)</span><input type="text" class="text_pole" data-rf="description" value="${escapeHtml(f.description)}" /></label>
@@ -479,7 +500,14 @@ function readFields(root, prefix) {
         image: get('image').trim() || null,
     };
     out.description = get('description');
-    for (const def of state.fields) {
+    Object.assign(out, readValues(root, prefix, state.fields));
+    return out;
+}
+
+// The values of `defs`' inputs (data-<prefix>="<field>") in `root`.
+function readValues(root, prefix, defs) {
+    const out = {};
+    for (const def of defs) {
         const el = root.querySelector(`[data-${prefix}="${CSS.escape(def.name)}"]`);
         if (!el) continue;
         const value = el.value ?? '';
@@ -525,7 +553,9 @@ async function act(action, row, target) {
             render();
             return;
         case 'save': {
-            const fields = readFields(row.querySelector('[data-editor]'), 'f');
+            const editor = row.querySelector('[data-editor]');
+            const fields = readFields(editor, 'f');
+            if (state.startDefs.length) fields.startValues = readValues(editor, 's', state.startDefs);
             if (!fields.name) {
                 notify('warning', `A ${noun()} needs a name.`);
                 return;

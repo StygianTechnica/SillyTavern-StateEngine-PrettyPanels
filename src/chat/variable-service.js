@@ -141,7 +141,8 @@ export async function loadCharacterFieldList() {
 }
 
 // The other objects (locations, factions...) the shown object variables
-// hold, and the characters' own fields refer to (a character's factions),
+// hold, and the characters' own fields and runtime state refer to (a
+// character's factions),
 // by id - read after the values, for the types they hold; what a text
 // element or a card field shows for them is the name (text-format.js
 // setObjectNamer).
@@ -160,7 +161,9 @@ async function loadOtherObjects(chatId, read, characterList) {
     // the characters refer to, as State Engine's registry names them.
     const prefixes = new Set();
     for (const character of characterList.values()) {
-        for (const value of Object.values(character?.base ?? {})) {
+        // Baseline fields, runtime state and starting values (a character's factions).
+        const held = [...Object.values(character?.base ?? {}), ...Object.values(character?.runtime?.values ?? {}), ...Object.values(character?.startValues ?? {})];
+        for (const value of held) {
             for (const v of (Array.isArray(value) ? value : [value])) {
                 const prefix = typeof v === 'string' ? OBJECT_ID.exec(v)?.[1] : null;
                 if (prefix) prefixes.add(prefix);

@@ -2847,6 +2847,8 @@ body.pp-editing .pp-character-card {
 .pp-cm-rf-row input[readonly] { opacity: 0.7; }
 .pp-cm-rf-row .pp-cm-rf-full { flex: 1 1 100%; }
 .pp-cm-rf-images summary { cursor: pointer; opacity: 0.85; }
+.pp-cm-start summary { cursor: pointer; opacity: 0.85; }
+.pp-cm-start .pp-cm-grid { margin-top: 6px; }
 .pp-cm-rf-image-sets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .pp-cm-rf-image-sets .menu_button { width: auto; padding: 3px 10px; font-size: 0.9em; }
 .pp-cm-rf-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-top: 6px; }
