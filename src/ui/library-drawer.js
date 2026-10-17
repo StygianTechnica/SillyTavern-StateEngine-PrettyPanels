@@ -108,7 +108,7 @@ function renderCharacterTemplates() {
     if (templates.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'pp-template-empty';
-        empty.textContent = 'No character templates yet.';
+        empty.textContent = 'No card templates yet.';
         list.replaceChildren(empty);
         return;
     }
@@ -127,7 +127,7 @@ function renderCharacterTemplates() {
         `;
         row.querySelector('.pp-template-name').textContent = t.name;
         row.querySelector('.pp-template-name').title = t.name;
-        row.querySelector('.pp-template-size').textContent = `${t.width} × ${t.height}`;
+        row.querySelector('.pp-template-size').textContent = `${t.width} × ${t.height} · ${t.objectType || 'any object'}`;
         return row;
     }));
 }
@@ -213,7 +213,7 @@ const templateActions = {
 
 const characterTemplateActions = {
     async new() {
-        const name = await promptText('Name for the new character template:', 'Character Card');
+        const name = await promptText('Name for the new card template (set which objects it is for in the template editor):', 'Card');
         if (!name) return;
         openTemplateEditor(createCharacterTemplate(name).id);
     },

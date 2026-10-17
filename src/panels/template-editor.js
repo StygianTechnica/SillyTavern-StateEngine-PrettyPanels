@@ -15,21 +15,22 @@
 // screen that shows this template's cards, or the theme's panel tint when
 // none does.
 //
-// Elements may bind to the card's CHARACTER fields (the properties pane's
-// Character palette), to variables and to roles. The preview character -
-// one of this chat's characters, or a sample - answers the character fields
-// while editing.
+// Elements may bind to the card's OBJECT fields (the properties pane's
+// Character palette - the fields of the template's object type), to
+// variables and to roles. The bar sets the object type ("Any object",
+// "Character", "Location"...). The preview object - one of this chat's
+// objects of that type, or a sample - answers the fields while editing.
 
 import { Panel } from './panel.js';
 import {
     basePanelHooks, registerExtraPanel, unregisterExtraPanel, setEditorTemplate, getState, setEditingMode, onStateChange, closePropertiesExcept, templateHostBox,
 } from './panel-manager.js';
 import {
-    getCharacterTemplate, updateCharacterTemplate, onCharacterTemplatesChange, exportCharacterTemplate,
+    getCharacterTemplate, updateCharacterTemplate, onCharacterTemplatesChange, exportCharacterTemplate, setTemplateObjectType,
 } from '../library/character-template-library.js';
-import { getValue, getImage, onValuesChange, getCharacterList, getCharacter } from '../chat/variable-service.js';
+import { getValue, getImage, onValuesChange, loadTemplateFieldList, listPreviewObjects, listCardObjectTypes } from '../chat/variable-service.js';
 import { isCharRef, charFieldOfRef } from '../elements/element-model.js';
-import { characterEntry, characterFieldDef, SAMPLE_CHARACTER } from '../elements/character-fields.js';
+import { characterEntry, characterFieldDef, sampleObject } from '../elements/character-fields.js';
 import { hueFor, initialsFor } from '../elements/character-card.js';
 import { notify } from '../ui/dialogs.js';
 import { downloadJson, safeFilename } from '../ui/files.js';
@@ -38,15 +39,42 @@ import { attachFonts } from '../ui/font-transfer.js';
 // Kept above every layout panel (their z-index is 0..99).
 const EDITOR_Z_INDEX = 99;
 
-let editor = null; // { templateId, panel, bar, pos: { x, y }, previewId, stops: [] }
+// { templateId, panel, bar, pos: { x, y }, previewId, objectType, type,
+//   fields, objects: [preview objects], sample, types: [object types], stops: [] }
+let editor = null;
 
 export function isTemplateEditorOpen(templateId = null) {
     return !!editor && (templateId === null || editor.templateId === templateId);
 }
 
 function previewCharacter() {
-    if (!editor || editor.previewId === SAMPLE_CHARACTER.id) return SAMPLE_CHARACTER;
-    return getCharacter(editor.previewId) ?? SAMPLE_CHARACTER;
+    if (!editor) return sampleObject(null);
+    return editor.objects.find((o) => o.id === editor.previewId) ?? editor.sample;
+}
+
+const fieldListeners = new Set();
+
+// Called with the palette fields whenever the open editor's object type
+// is read (the properties pane's Character palette).
+export function onTemplateEditorFields(listener) {
+    fieldListeners.add(listener);
+    if (editor?.loaded) listener(editor.fields);
+    return () => fieldListeners.delete(listener);
+}
+
+// Reads what the template's object type offers: its fields (for the
+// palette and the sample) and this chat's objects of it (for the preview).
+async function loadType() {
+    if (!editor) return;
+    const objectType = getCharacterTemplate(editor.templateId)?.objectType ?? '';
+    const [{ type, fields }, objects, types] = await Promise.all([
+        loadTemplateFieldList(objectType), listPreviewObjects(objectType), editor.types.length ? editor.types : listCardObjectTypes(),
+    ]);
+    if (!editor) return;
+    Object.assign(editor, { objectType, type, fields, objects: objectType ? objects : [], sample: sampleObject(type, fields), types, loaded: true });
+    fillBar();
+    editor.panel.renderValues();
+    for (const listener of fieldListeners) listener(fields);
 }
 
 // The generated icon a card shows for a character without an image
@@ -100,17 +128,26 @@ async function exportTemplate() {
     if (withFonts) downloadJson(`${safeFilename(withFonts.data.name)}.character.json`, withFonts);
 }
 
-// The preview characters: this chat's, those in the scene first, then the sample.
+// The preview objects: this chat's of the template's type, those in the
+// scene first, then the sample.
 function previewOptions() {
-    const characters = [...getCharacterList()].sort((a, b) => Number(!!b.present) - Number(!!a.present) || a.name.localeCompare(b.name));
-    return [...characters.map((c) => ({ id: c.id, label: `${c.name}${c.present ? ' (in the scene)' : ''}` })), { id: SAMPLE_CHARACTER.id, label: 'Sample character' }];
+    const objects = [...editor.objects].sort((a, b) => Number(!!b.present) - Number(!!a.present) || String(a.name).localeCompare(String(b.name)));
+    const noun = editor.type ? editor.type.label.toLowerCase() : 'object';
+    return [...objects.map((c) => ({ id: c.id, label: `${c.name}${c.present ? ' (in the scene)' : ''}` })), { id: editor.sample.id, label: `Sample ${noun}` }];
 }
 
 function fillBar() {
     const { bar } = editor;
     const template = getCharacterTemplate(editor.templateId);
     bar.querySelector('.pp-template-editor-name').textContent = template?.name ?? '';
-    const select = bar.querySelector('select');
+    const typeSelect = bar.querySelector('[data-el="objectType"]');
+    if (typeSelect !== document.activeElement) {
+        const types = editor.types.length ? editor.types : [{ id: 'character', label: 'Character' }];
+        typeSelect.replaceChildren(new Option('Any object', ''), ...types.map((t) => new Option(t.label, t.id)));
+        if (editor.objectType && !types.some((t) => t.id === editor.objectType)) typeSelect.add(new Option(editor.objectType, editor.objectType));
+        typeSelect.value = editor.objectType;
+    }
+    const select = bar.querySelector('[data-el="preview"]');
     if (select === document.activeElement) return;
     const options = previewOptions();
     if (!options.some((o) => o.id === editor.previewId)) editor.previewId = options[0].id;
@@ -156,16 +193,22 @@ function buildBar() {
     bar.className = 'pp-template-editor-bar';
     bar.innerHTML = `
         <i class="fa-solid fa-id-badge"></i>
-        <span class="pp-template-editor-label">Character template:</span>
+        <span class="pp-template-editor-label">Card template:</span>
         <b class="pp-template-editor-name"></b>
-        <label class="pp-template-editor-preview" title="Whose values the character fields show while you edit">
-            <span>Preview</span><select class="text_pole"></select>
+        <label class="pp-template-editor-preview" title="Which objects this template is for: its palette offers that type's fields, and Character elements showing that type offer it. Any object: only the fields every object has.">
+            <span>For</span><select class="text_pole" data-el="objectType"></select>
+        </label>
+        <label class="pp-template-editor-preview" title="Whose values the fields show while you edit">
+            <span>Preview</span><select class="text_pole" data-el="preview"></select>
         </label>
         <div class="menu_button pp-template-editor-done" title="Close the template editor (changes are already saved)"><i class="fa-solid fa-check"></i><span>Done</span></div>`;
     bar.addEventListener('pointerdown', (e) => e.stopPropagation());
-    bar.querySelector('select').addEventListener('change', (e) => {
+    bar.querySelector('[data-el="preview"]').addEventListener('change', (e) => {
         editor.previewId = e.target.value;
         editor.panel.renderValues();
+    });
+    bar.querySelector('[data-el="objectType"]').addEventListener('change', (e) => {
+        if (setTemplateObjectType(editor.templateId, e.target.value)) editor.previewId = null;
     });
     bar.querySelector('.pp-template-editor-done').addEventListener('click', () => closeTemplateEditor());
     return bar;
@@ -174,7 +217,7 @@ function buildBar() {
 // Opens the editor on a template (closing any other). Turns Editing Mode on.
 export function openTemplateEditor(templateId) {
     if (!getState().enabled) {
-        notify('warning', 'Turn Pretty Panels on to edit character templates.');
+        notify('warning', 'Turn Pretty Panels on to edit card templates.');
         return false;
     }
     const template = getCharacterTemplate(templateId);
@@ -185,7 +228,7 @@ export function openTemplateEditor(templateId) {
         x: Math.max(16, Math.round((window.innerWidth - template.width) / 2)),
         y: Math.max(80, Math.round((window.innerHeight - template.height) / 3)),
     };
-    editor = { templateId, pos, previewId: null, stops: [] };
+    editor = { templateId, pos, previewId: null, objectType: template.objectType, type: null, fields: [], objects: [], sample: sampleObject(null), types: [], loaded: false, stops: [] };
     const hooks = {
         ...basePanelHooks(),
         placePanel: () => false,
@@ -221,7 +264,9 @@ export function openTemplateEditor(templateId) {
             panel.renderValues();
         }),
         onCharacterTemplatesChange(() => {
-            if (!getCharacterTemplate(templateId)) closeTemplateEditor();
+            const current = getCharacterTemplate(templateId);
+            if (!current) closeTemplateEditor();
+            else if (editor && current.objectType !== editor.objectType) void loadType();
             else fillBar();
         }),
         // Leaving Editing Mode (or turning Pretty Panels off) closes it.
@@ -231,6 +276,7 @@ export function openTemplateEditor(templateId) {
     );
     closePropertiesExcept(panel);
     panel.openProperties('panel');
+    void loadType();
     return true;
 }
 

@@ -31,7 +31,8 @@ import { getChatSetting } from '../api/get-chat-setting.js';
 import { getObjectRuntimeFields } from '../api/get-object-runtime-fields.js';
 import { setObjectNamer } from '../elements/text-format.js';
 import { objectTypeOf } from '../elements/object-defs.js';
-import { characterFieldList, characterFieldDef, objectsFieldValue } from '../elements/character-fields.js';
+import { characterFieldList, characterFieldDef, objectsFieldValue, objectFieldList } from '../elements/character-fields.js';
+import { getObjectFields } from '../api/get-object-fields.js';
 import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
 import { archivistApi, withArchivistInsights } from './archivist-link.js';
 
@@ -137,6 +138,51 @@ export async function loadCharacterFieldList() {
     } catch (err) {
         console.warn('[PrettyPanels] could not read character runtime fields (update State Engine)', err);
         return characterFieldList([], { archivist: !!archivistApi() });
+    }
+}
+
+// The fields a card template for `objectType` can bind ('' any object):
+// see character-fields.js objectFieldList. Never throws.
+// -> { type: { id, label, hasPresence } | null, fields: [...] }
+export async function loadTemplateFieldList(objectType) {
+    const archivist = !!archivistApi();
+    let type = null;
+    try {
+        type = objectType ? ((await listObjectTypes()) ?? []).find((t) => t.id === objectType) ?? { id: objectType, label: objectType, hasPresence: false } : null;
+        if (!type) return { type, fields: objectFieldList(null) };
+        const chatId = currentChatId();
+        const settingId = (chatId ? await getChatSetting(EXTENSION_ID, chatId) : null) ?? 'default';
+        const [fields, runtimeFields] = await Promise.all([
+            getObjectFields(EXTENSION_ID, settingId, type.id).catch(() => []),
+            getObjectRuntimeFields(EXTENSION_ID, settingId, type.id).catch(() => []),
+        ]);
+        return { type, fields: objectFieldList(type, { fields: fields ?? [], runtimeFields: runtimeFields ?? [], archivist }) };
+    } catch (err) {
+        console.warn(`[PrettyPanels] could not read the ${objectType || 'object'} fields (update State Engine)`, err);
+        return { type, fields: type?.id === CHARACTER_OBJECT_TYPE ? characterFieldList([], { archivist }) : objectFieldList(type) };
+    }
+}
+
+// The open chat's objects of `objectType` ('' or null: its characters), for
+// a template editor's preview. Never throws.
+export async function listPreviewObjects(objectType) {
+    if (!objectType || objectType === CHARACTER_OBJECT_TYPE) return getCharacterList();
+    const chatId = currentChatId();
+    if (!chatId) return [];
+    try {
+        return (await listObjects(EXTENSION_ID, chatId, objectType)) ?? [];
+    } catch (err) {
+        console.warn(`[PrettyPanels] could not read State Engine ${objectType} objects`, err);
+        return [];
+    }
+}
+
+// The object types State Engine knows: [{ id, label, plural, hasPresence }].
+export async function listCardObjectTypes() {
+    try {
+        return ((await listObjectTypes()) ?? []).map((t) => ({ id: t.id, label: t.label, plural: t.plural, hasPresence: !!t.hasPresence }));
+    } catch {
+        return [{ id: CHARACTER_OBJECT_TYPE, label: 'Character', plural: 'Characters', hasPresence: true }];
     }
 }
 

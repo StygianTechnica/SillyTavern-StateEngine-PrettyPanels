@@ -6,6 +6,13 @@
 // and is edited in the temporary template editor (src/panels/
 // template-editor.js) with the ordinary panel tools.
 //
+// A template has an OBJECT TYPE: '' for any object (only the fields every
+// object has), or one State Engine type - 'character', 'location', 'item'...
+// - whose own fields the palette then offers (character-fields.js
+// objectFieldList). A Character element offers the templates for the type
+// it shows, and those for any object. Templates made before types existed
+// were character templates, and stay so.
+//
 // Unlike Panel Library templates, a character template KEEPS its bindings:
 // its elements show the card's character's fields ({ char: "name" },
 // character-fields.js) and may also show variables and roles. `roles` lists
@@ -58,8 +65,24 @@ function names(store) {
     return Object.values(store.characterTemplates).map((t) => t.name);
 }
 
+// A template's object type: '' (any object) or a type id. Missing (made
+// before types): 'character'.
+const TYPE_ID = /^[a-z][a-z0-9_]{0,39}$/;
+export function templateObjectType(template) {
+    const type = template?.objectType;
+    if (type === undefined || type === null) return 'character';
+    return typeof type === 'string' && (type === '' || TYPE_ID.test(type)) ? type : '';
+}
+
+// Whether a template suits an element showing objects of `objectType`
+// (null: unknown - every template does).
+export function templateFits(template, objectType) {
+    const own = templateObjectType(template);
+    return !objectType || own === '' || own === objectType;
+}
+
 function summary(template) {
-    return { id: template.id, name: template.name, width: template.width, height: template.height };
+    return { id: template.id, name: template.name, width: template.width, height: template.height, objectType: templateObjectType(template) };
 }
 
 export function listCharacterTemplates() {
@@ -72,7 +95,7 @@ export function listCharacterTemplates() {
 // A full copy of a template: { id, name, width, height, style, widgets, ... }.
 export function getCharacterTemplate(id) {
     const template = id ? getStore().characterTemplates[id] : null;
-    return template ? { id: template.id, name: template.name, ...templateDesign(template) } : null;
+    return template ? { id: template.id, name: template.name, objectType: templateObjectType(template), ...templateDesign(template) } : null;
 }
 
 // A new template's starting point: the character's portrait above its name.
@@ -88,14 +111,17 @@ function starterDesign() {
     };
 }
 
-// Creates a template from `source` (a design), or the starter card.
+// Creates a template from `source` (a design), or the starter card, for
+// `objectType` ('' any object; default: the source's, else any object).
 // Returns its summary.
-export function createCharacterTemplate(name, source = null) {
+export function createCharacterTemplate(name, source = null, objectType = undefined) {
     const store = getStore();
     const now = Date.now();
+    const type = templateObjectType({ objectType: objectType ?? (source ? templateObjectType(source) : '') });
     const template = {
         id: generateId('ppc'),
-        name: uniqueName(name || 'Character Card', names(store)),
+        name: uniqueName(name || 'Card', names(store)),
+        objectType: type,
         createdAt: now,
         updatedAt: now,
         ...templateDesign(source ?? starterDesign()),
@@ -111,16 +137,28 @@ export function updateCharacterTemplate(id, patch) {
     const store = getStore();
     const current = store.characterTemplates[id];
     if (!current) return null;
-    const { id: _id, name: _name, createdAt: _created, ...rest } = patch;
+    const { id: _id, name: _name, createdAt: _created, objectType: _type, ...rest } = patch;
     store.characterTemplates[id] = {
         id,
         name: current.name,
+        objectType: templateObjectType(current),
         createdAt: current.createdAt,
         updatedAt: Date.now(),
         ...templateDesign({ ...current, ...rest }),
     };
     emitChange();
     return getCharacterTemplate(id);
+}
+
+// Sets which objects a template is for ('' any object).
+export function setTemplateObjectType(id, objectType) {
+    const template = getStore().characterTemplates[id];
+    const type = templateObjectType({ objectType: objectType ?? '' });
+    if (!template || templateObjectType(template) === type) return false;
+    template.objectType = type;
+    template.updatedAt = Date.now();
+    emitChange();
+    return true;
 }
 
 export function renameCharacterTemplate(id, name) {
@@ -188,7 +226,7 @@ export function exportCharacterTemplate(id) {
 export function importCharacterTemplate(data) {
     const { conflicts } = importLayoutRoles(data.roleDefinitions);
     const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'Imported Character Card';
-    const saved = createCharacterTemplate(name, data);
+    const saved = createCharacterTemplate(name, data, templateObjectType(data));
     announceRolesChange();
     return { summary: saved, conflicts };
 }

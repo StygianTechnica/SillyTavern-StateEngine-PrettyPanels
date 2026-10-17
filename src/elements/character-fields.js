@@ -237,3 +237,85 @@ export const SAMPLE_CHARACTER = Object.freeze({
         threads: ['The missing font'], secrets: ['Where the grid snaps'],
     },
 });
+
+// ---------------------------------------------------------------- any object type
+//
+// A card template has an OBJECT TYPE (character-template-library.js): ''
+// for any object, or one type ('character', 'location', 'item'...). Its
+// palette offers what that type has: every object's own fields, then the
+// type's baseline fields (State Engine getObjectFields, scope 'global'),
+// then its runtime fields - read the same way as a character's ("custom.
+// <name>" from runtime.values, anything else from the object itself).
+
+// Fields every object has: [field, label, display type].
+export const COMMON_OBJECT_FIELDS = [
+    ['name', 'Name', 'string'],
+    ['image', 'Image', 'image'],
+    ['aliases', 'Aliases', 'list'],
+    ['description', 'Description', 'text'],
+    ['introduction_snippet', 'Introduction', 'text'],
+    ['confirmed', 'Confirmed', 'boolean'],
+    ['has_image', 'Has an image', 'boolean'],
+    ['has_description', 'Has a description', 'boolean'],
+];
+const COMMON_NAMES = new Set([...COMMON_OBJECT_FIELDS.map(([f]) => f), 'present', 'id', 'type', 'related_entity_ids', 'related_memory_ids']);
+
+function displayType(def) {
+    if (def.type === 'array') return 'list';
+    if (def.type === 'number' || def.type === 'boolean') return def.type;
+    if (def.type === 'longtext' || def.kind === 'longtext') return 'text';
+    return 'string';
+}
+
+// The fields a template of `objectType` can use, for its palette.
+// type: { id, label, hasPresence } (State Engine listObjectTypes) or null
+// for any object; fields: the type's field definitions (getObjectFields);
+// runtimeFields: its runtime fields (getObjectRuntimeFields).
+// -> [{ field, label, type, group, description? }]
+export function objectFieldList(type, { fields = [], runtimeFields = [], archivist = false } = {}) {
+    if (type?.id === CHARACTER_TYPE) {
+        // The character list, plus any baseline field the setting added.
+        const list = characterFieldList(runtimeFields, { archivist });
+        const known = new Set(list.map((f) => f.field));
+        const extra = baselineOf(fields).filter((d) => !known.has(d.name)).map((d) => ({ field: d.name, label: d.label || labelFor(d.name), type: displayType(d), group: 'Character', description: d.description ?? '' }));
+        const at = list.findIndex((f) => f.group !== 'Character');
+        return at < 0 ? [...list, ...extra] : [...list.slice(0, at), ...extra, ...list.slice(at)];
+    }
+    const group = type ? type.label : 'Any object';
+    const common = COMMON_OBJECT_FIELDS.map(([field, label, t]) => ({ field, label, type: t, group }));
+    if (!type || type.hasPresence) common.splice(3, 0, { field: 'present', label: 'In the scene', type: 'boolean', group, description: type ? '' : 'Only objects with presence (characters, creatures...) are ever in the scene.' });
+    if (!type) return common;
+    const baseline = baselineOf(fields).map((d) => ({ field: d.name, label: d.label || labelFor(d.name), type: displayType(d), group, description: d.description ?? '' }));
+    const runtime = runtimeFields.map((f) => ({
+        field: `${CUSTOM_PREFIX}${f.name}`, label: labelFor(f.name), type: runtimeType(f.type), group: 'Runtime state', description: f.description ?? '',
+    }));
+    const icons = runtimeFields.filter((f) => f.type === 'enum').map((f) => ({
+        field: `${ICON_PREFIX}${f.name}`, label: `${labelFor(f.name)} (icon)`, type: 'image', group: 'Runtime state',
+        description: `The image set for the current ${f.name.replace(/_/g, ' ')} (Object Manager > Runtime fields > Images).`,
+    }));
+    return [...common, ...baseline, ...runtime, ...icons];
+}
+
+const CHARACTER_TYPE = 'character';
+const baselineOf = (fields) => (fields ?? []).filter((d) => d?.scope === 'global' && typeof d.name === 'string' && !COMMON_NAMES.has(d.name) && isCharacterField(d.name));
+
+// The object the template editor previews with when the chat has none of
+// the template's type: every offered field filled.
+export function sampleObject(type, list = []) {
+    if (!type || type.id === CHARACTER_TYPE) {
+        return type ? SAMPLE_CHARACTER : { ...SAMPLE_CHARACTER, id: 'pp-sample-object', name: 'Sample Object', description: 'A stand-in used to preview card templates.', type: '' };
+    }
+    const label = type.label || labelFor(type.id);
+    const out = {
+        id: `pp-sample-${type.id}`, type: type.id, name: `Sample ${label}`, aliases: ['the sample'], image: '',
+        description: `A stand-in ${label.toLowerCase()} used to preview card templates.`, introduction_snippet: `A sample ${label.toLowerCase()} comes into view.`,
+        confirmed: true, present: true, runtime: { present: true, values: {}, images: {} },
+    };
+    for (const f of list) {
+        if (COMMON_NAMES.has(f.field) || f.field.startsWith(ICON_PREFIX)) continue;
+        const value = f.type === 'list' ? [`Sample ${f.label.toLowerCase()}`] : f.type === 'number' ? 3 : f.type === 'boolean' ? true : `Sample ${f.label.toLowerCase()}`;
+        if (f.field.startsWith(CUSTOM_PREFIX)) out.runtime.values[f.field.slice(CUSTOM_PREFIX.length)] = value;
+        else out[f.field] = value;
+    }
+    return out;
+}

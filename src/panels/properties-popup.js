@@ -30,14 +30,14 @@
 // through `hooks`; nothing is written here.
 
 import { VariablePicker, ElementPalette, RolePicker, CharacterFieldPicker } from '../ui/variable-picker.js';
-import { listCharacterTemplates, getCharacterTemplate, createCharacterTemplate, onCharacterTemplatesChange } from '../library/character-template-library.js';
-import { openTemplateEditor } from './template-editor.js';
+import { listCharacterTemplates, getCharacterTemplate, createCharacterTemplate, onCharacterTemplatesChange, templateFits } from '../library/character-template-library.js';
+import { openTemplateEditor, onTemplateEditorFields } from './template-editor.js';
 import { promptText, notify } from '../ui/dialogs.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
 import { ANCHOR_MODES, ANCHORS, anchorLabel } from './anchors.js';
 import {
-    loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles, loadCharacterFieldList,
+    loadCatalog, getCatalog, findVariable, onCatalogChange, getRole, getRoleList, onRolesChange, refreshRoles,
 } from '../chat/variable-service.js';
 import { listLayoutRoles } from '../library/role-library.js';
 import { objectTypeOf } from '../elements/object-defs.js';
@@ -273,7 +273,8 @@ export class PanelPropertiesPopup {
             this.stopFontWatch = fontRegistry.onChange(() => this.#refreshElement());
             this.stopThemeWatch = onThemesChange(() => this.refresh());
             this.stopTemplatesWatch = onCharacterTemplatesChange(() => this.#refreshElement());
-            if (this.templateMode) void loadCharacterFieldList().then((fields) => this.characterPicker.setFields(fields));
+            // The palette offers the template's object type's fields.
+            if (this.templateMode) this.stopFieldsWatch = onTemplateEditorFields((fields) => this.characterPicker.setFields(fields));
             void fontRegistry.load().then(() => this.#refreshElement());
             void loadCatalog();
         }
@@ -288,6 +289,7 @@ export class PanelPropertiesPopup {
         this.stopFontWatch?.();
         this.stopThemeWatch?.();
         this.stopTemplatesWatch?.();
+        this.stopFieldsWatch?.();
         closeFontPicker();
         this.el.remove();
         this.hooks.onClose();
@@ -354,7 +356,7 @@ export class PanelPropertiesPopup {
     refresh(geometry = this.panel.getRenderedGeometry()) {
         if (!this.el.isConnected) return;
         const { record } = this.panel;
-        this.el.querySelector('.pp-properties-title').textContent = this.templateMode ? `Character template: ${record.name}` : record.name;
+        this.el.querySelector('.pp-properties-title').textContent = this.templateMode ? `Card template: ${record.name}` : record.name;
         this.el.querySelector('[data-field="name"]').textContent = record.name;
         this.el.querySelector('[data-field="position"]').textContent = `${geometry.x}, ${geometry.y}`;
         this.el.querySelector('[data-field="size"]').textContent = `${geometry.width} × ${geometry.height}`;
@@ -539,8 +541,8 @@ export class PanelPropertiesPopup {
         if (element.binding.char) {
             info.title = '';
             info.textContent = this.templateMode
-                ? `Character field · each card shows its own character's ${elementLabel({ ...element, labelOverride: '' }, null)} (the editor previews one)`
-                : 'Character field · only a character template\'s cards have a character - here it shows nothing';
+                ? `Object field · each card shows its own object's ${elementLabel({ ...element, labelOverride: '' }, null)} (the editor previews one)`
+                : 'Object field · only a card template\'s cards have an object - here it shows nothing';
             return;
         }
         if (element.binding.role) {
@@ -637,9 +639,14 @@ export class PanelPropertiesPopup {
         const options = normalizeCharacterOptions(element.character);
         const select = this.el.querySelector('[data-el="charTemplate"]');
         if (select !== document.activeElement) {
-            const templates = listCharacterTemplates();
-            select.replaceChildren(new Option('Built-in card', ''), ...templates.map((t) => new Option(`${t.name} (${t.width} × ${t.height})`, t.id)));
-            if (options.templateId && !templates.some((t) => t.id === options.templateId)) select.add(new Option('(deleted template)', options.templateId));
+            // The templates for the type of object the element shows, and
+            // those for any object.
+            const all = listCharacterTemplates();
+            const templates = all.filter((t) => templateFits(t, objectTypeOf(def)));
+            select.replaceChildren(new Option('Built-in card', ''), ...templates.map((t) => new Option(`${t.name} (${t.width} × ${t.height})${t.objectType ? '' : ' · any object'}`, t.id)));
+            const chosen = options.templateId && !templates.some((t) => t.id === options.templateId) ? all.find((t) => t.id === options.templateId) : null;
+            if (chosen) select.add(new Option(`${chosen.name} (for ${chosen.objectType || 'any object'})`, chosen.id));
+            else if (options.templateId && !templates.some((t) => t.id === options.templateId)) select.add(new Option('(deleted template)', options.templateId));
             select.value = options.templateId ?? '';
         }
         this.el.querySelector('[data-action="char-template-edit"]').disabled = !options.templateId || !getCharacterTemplate(options.templateId);
@@ -1235,7 +1242,7 @@ export class PanelPropertiesPopup {
                 <dt>Size</dt><dd data-field="size"></dd>
             </dl>
             <div class="pp-locked-note"><i class="fa-solid fa-lock"></i> Locked - unlock to move, resize or edit.</div>
-            <small class="pp-field-info" data-template-only>A character template: drawn once per character in a Character element. Bind elements to the card's character (the Character tab below), to variables or to roles. Changes save as you go; Done (above the template) closes the editor.</small>
+            <small class="pp-field-info" data-template-only>A card template: drawn once per object in a Character element. Bind elements to the card's object (the Character tab below - the fields of the type set above the template), to variables or to roles. Changes save as you go; Done (above the template) closes the editor.</small>
             <div class="pp-properties-actions" data-template-hide>
                 <button type="button" class="menu_button pp-properties-button" data-action="lock" title="Lock Panel: no moving, resizing or editing">
                     <i class="fa-solid fa-lock-open"></i><span>Unlocked</span>
@@ -1479,11 +1486,11 @@ export class PanelPropertiesPopup {
                 <div data-for-types="character">
                     <div class="pp-field-caption">Object Cards</div>
                     <label class="pp-field"><span>Template</span>
-                        <select class="text_pole" data-el="charTemplate" title="The character template each card is drawn with (Pretty Panels drawer → Character Templates)"></select>
+                        <select class="text_pole" data-el="charTemplate" title="The card template each card is drawn with (Pretty Panels drawer → Character Templates) - those for this type of object, and those for any object"></select>
                     </label>
                     <div class="pp-properties-actions">
                         <button type="button" class="menu_button pp-properties-button" data-action="char-template-edit" title="Edit this template in the template editor"><i class="fa-solid fa-pen"></i><span>Edit template</span></button>
-                        <button type="button" class="menu_button pp-properties-button" data-action="char-template-new" title="Create a new character template for this element and edit it"><i class="fa-solid fa-plus"></i><span>New template</span></button>
+                        <button type="button" class="menu_button pp-properties-button" data-action="char-template-new" title="Create a new card template for the type of object this element shows, and edit it"><i class="fa-solid fa-plus"></i><span>New template</span></button>
                     </div>
                     <label class="pp-field" data-el="charTilingRow"><span>Tiling</span>
                         <select class="text_pole" data-el="charTiling" title="How the cards of a list are laid out">
@@ -1909,9 +1916,12 @@ export class PanelPropertiesPopup {
             if (id) openTemplateEditor(id);
         });
         el.querySelector('[data-action="char-template-new"]').addEventListener('click', async () => {
-            const name = await promptText('Name for the new character template:', 'Character Card');
+            const selected = this.#selected();
+            const objectType = (selected ? objectTypeOf(this.#def(selected)) : null) ?? '';
+            const name = await promptText('Name for the new card template:', objectType ? `${objectType.charAt(0).toUpperCase()}${objectType.slice(1)} Card` : 'Card');
             if (!name) return;
-            const created = createCharacterTemplate(name);
+            // Made for the type of object the element shows.
+            const created = createCharacterTemplate(name, null, objectType);
             this.#changeCharacter({ templateId: created.id });
             notify('success', `Created "${created.name}". Edit it in the template editor - changes show on the cards as you go.`);
             openTemplateEditor(created.id);
