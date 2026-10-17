@@ -22,7 +22,7 @@
 import { getCharacterTemplate } from '../library/character-template-library.js';
 import { buildCharacterCard, fallbackIcon, withoutPersona } from './character-card.js';
 import { characterEntry, characterFieldValue } from './character-fields.js';
-import { bindingRef, isCharRef, charFieldOfRef, isVariableElement, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions } from './element-model.js';
+import { bindingRef, isCharRef, charFieldOfRef, isVariableElement, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, drawsOnCard, cardTemplateId } from './element-model.js';
 import { buildElementContent, renderElementContent } from './element-view.js';
 import { applyPanelTheme } from '../themes/theme-apply.js';
 import { currentChatId } from '../chat/variable-service.js';
@@ -35,14 +35,31 @@ export function templateEntry(element, character, getValue) {
     return isCharRef(ref) ? characterEntry(character, charFieldOfRef(ref)) : getValue(ref);
 }
 
+// How deep card drawing is: above 0 while a template card is being drawn.
+// A Character element on a card (the card's character's related people,
+// "char:relations.people") draws BUILT-IN cards only - never a template -
+// so cards never hold cards that hold cards.
+let cardDepth = 0;
+
+
 // Draws `template`'s elements into `canvas` for `character`. A portrait
 // (the image field) the character has none for shows its fallback icon.
-// Character elements are not drawn inside a card (no cards in cards).
+// A Character element is drawn only for the card's own object's people
+// (built-in cards, no templates - see cardDepth).
 // context.drawerOpen: the card's drawer is open (a toggle's icon turns over).
 export function renderTemplateElements(canvas, template, character, { getValue, theme, context }) {
     canvas.replaceChildren();
+    cardDepth += 1;
+    try {
+        drawTemplateElements(canvas, template, character, { getValue, theme, context });
+    } finally {
+        cardDepth -= 1;
+    }
+}
+
+function drawTemplateElements(canvas, template, character, { getValue, theme, context }) {
     const elements = template.widgets
-        .filter((w) => isVariableElement(w) && w.type !== ELEMENT_TYPE_CHARACTER)
+        .filter((w) => isVariableElement(w) && drawsOnCard(w))
         .map((element, index) => ({ element, index }))
         .sort((a, b) => (a.element.zIndex ?? 0) - (b.element.zIndex ?? 0) || a.index - b.index)
         .map(({ element }) => element);
@@ -176,7 +193,7 @@ document.addEventListener('keydown', (e) => {
 // cardOptions are the built-in card's (presence, aliases, text case).
 export function renderCharacterTiles(host, element, ids, list, services) {
     const options = normalizeCharacterOptions(element.character);
-    const template = getCharacterTemplate(options.templateId);
+    const template = getCharacterTemplate(cardTemplateId(element, cardDepth));
     const chosen = withoutPersona((Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id), services.getCharacter, list && services.cardOptions?.hideUser);
     host.replaceChildren();
     host.className = `pp-element-value pp-character-tiles pp-tiling-${list ? options.tiling : 'single'}${template ? '' : ' pp-character-builtin'}`;

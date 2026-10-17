@@ -27,6 +27,15 @@
 //              story threads and the secrets it knows - read from the
 //              character's `archivist` field (src/chat/archivist-link.js).
 //              Offered only while Archivist is installed.
+//   relations  "relations.<name>": the character's relationships - the ones
+//              the user wrote in Scenario Builder first, then the story's
+//              (Archivist) for the other pairs: a list of lines ("Niamh -
+//              ally (friendly)"), the names, the friendly and hostile ones,
+//              a count, and "relations.people" - the related characters as
+//              objects, drawn as cards by a Character element on the card.
+//              Cards inside a card always use the built-in card, never a
+//              template (character-tiles.js), so a relationship list never
+//              recurses.
 //
 // Outside a template there is no character, so a character field has no
 // value there.
@@ -61,7 +70,61 @@ const BUILT_IN_RUNTIME = ['thought', 'mood', 'intent'];
 const CUSTOM_PREFIX = 'custom.';
 const ICON_PREFIX = 'icon.';
 const ARCHIVIST_PREFIX = 'archivist.';
-const FIELD_PATTERN = /^(?:[a-z_]+|(?:custom|icon|archivist)\.[a-z][a-z0-9_]{0,39})$/;
+const RELATIONS_PREFIX = 'relations.';
+const FIELD_PATTERN = /^(?:[a-z_]+|(?:custom|icon|archivist|relations)\.[a-z][a-z0-9_]{0,39})$/;
+
+// Relationship kinds that read as friendly or hostile when there is no
+// polarity to go by (the ones the user wrote).
+const FRIENDLY_KINDS = new Set(['ally', 'friend', 'family', 'sibling', 'spouse / partner', 'lover', 'mentor of', 'student of', 'protects', 'admires', 'loves', 'serves', 'leads', 'parent of', 'child of', 'member of']);
+const HOSTILE_KINDS = new Set(['rival', 'enemy', 'hates', 'fears', 'distrusts', 'owes']);
+
+// [name, label, display type, description]
+const RELATION_FIELDS = [
+    ['list', 'Relationships', 'list', 'One line per relationship: "Niamh - ally (friendly)"'],
+    ['names', 'Related (names)', 'list', 'The names of everyone they have a relationship with'],
+    ['friends', 'Friends and allies', 'list', 'Those they are on good terms with'],
+    ['foes', 'Rivals and enemies', 'list', 'Those they are on bad terms with'],
+    ['count', 'Number of relationships', 'number', 'How many relationships they have'],
+    ['people', 'Related characters (cards)', 'list', 'The related characters as objects - a Character element on the card draws them as small built-in cards'],
+];
+
+// Pure: a character's relationships, the user's first (Scenario Builder's
+// authoredRelations), then the story's (archivist.relationships) for the
+// other pairs. -> [{ id, name, kind, feeling, polarity, text, source }]
+export function relationsOfObject(character) {
+    const out = [];
+    const seen = new Set();
+    const keyOf = (id, name) => id || String(name ?? '').trim().toLowerCase();
+    for (const r of character?.authoredRelations ?? []) {
+        const key = keyOf(r.otherId, r.otherName);
+        if (!key || seen.has(key) || !(r.otherName || r.otherId)) continue;
+        seen.add(key);
+        const kind = String(r.kind ?? '').trim();
+        out.push({ id: r.otherId ?? null, name: r.otherName || named(r.otherId), kind, feeling: '', polarity: FRIENDLY_KINDS.has(kind) ? 1 : (HOSTILE_KINDS.has(kind) ? -1 : 0), text: r.note ?? '', source: 'yours' });
+    }
+    for (const r of character?.archivist?.relationships ?? []) {
+        const key = keyOf(r.other?.id, r.other?.name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push({ id: r.other?.id ?? null, name: r.other?.name ?? '', kind: String(r.type ?? '').trim(), feeling: r.polarity_label ?? '', polarity: Number(r.polarity) || 0, text: r.text ?? '', source: 'story' });
+    }
+    return out;
+}
+
+function relationValue(character, name) {
+    const list = relationsOfObject(character);
+    const line = (r) => `${r.name}${r.kind ? ` - ${r.kind}` : ''}${r.feeling ? ` (${r.feeling})` : ''}`;
+    const some = (xs) => (xs.length ? xs : undefined);
+    switch (name) {
+        case 'list': return some(list.map(line));
+        case 'names': return some(list.map((r) => r.name));
+        case 'friends': return some(list.filter((r) => r.polarity > 0).map(line));
+        case 'foes': return some(list.filter((r) => r.polarity < 0).map(line));
+        case 'count': return list.length;
+        case 'people': return some(list.filter((r) => r.id && OBJECT_ID.test(r.id)).map((r) => r.id));
+        default: return undefined;
+    }
+}
 
 // [field, label, display type, how to read it from the insights, description]
 const ARCHIVIST_FIELDS = [
@@ -123,7 +186,8 @@ export function characterFieldList(runtimeFields = [], { archivist = false } = {
     const memory = archivist ? ARCHIVIST_FIELDS.map(([name, label, type, , description]) => ({
         field: `${ARCHIVIST_PREFIX}${name}`, label, type, group: 'Archivist (memory)', description,
     })) : [];
-    return [...identity, ...runtime, ...icons, ...memory];
+    const relations = RELATION_FIELDS.map(([name, label, type, description]) => ({ field: `${RELATIONS_PREFIX}${name}`, label, type, group: 'Relationships', description }));
+    return [...identity, ...runtime, ...icons, ...relations, ...memory];
 }
 
 // A display definition for a character field (the shape a variable's has):
@@ -132,6 +196,13 @@ export function characterFieldDef(field) {
     if (RENAMED_FIELDS[field]) return { ...characterFieldDef(RENAMED_FIELDS[field]), name: `char:${field}`, characterField: field };
     if (field.startsWith(ICON_PREFIX)) {
         return { name: `char:${field}`, type: 'image', label: `${labelFor(field.slice(ICON_PREFIX.length))} (icon)`, characterField: field };
+    }
+    if (field.startsWith(RELATIONS_PREFIX)) {
+        const name = field.slice(RELATIONS_PREFIX.length);
+        const known = RELATION_FIELDS.find(([n]) => n === name);
+        // The related characters are objects: a Character element draws them.
+        if (name === 'people') return { name: `char:${field}`, type: 'array', itemType: 'object', itemObjectType: 'character', label: known[1], characterField: field };
+        return { name: `char:${field}`, type: known?.[2] ?? 'list', label: known?.[1] ?? labelFor(name), characterField: field };
     }
     if (field.startsWith(ARCHIVIST_PREFIX)) {
         const known = ARCHIVIST_FIELDS.find(([name]) => name === field.slice(ARCHIVIST_PREFIX.length));
@@ -152,6 +223,7 @@ export function characterFieldValue(character, field) {
     if (BUILT_IN_RUNTIME.includes(field)) return character.runtime?.values?.[field] ?? undefined;
     if (field.startsWith(CUSTOM_PREFIX)) return shownRuntime(character.runtime?.values?.[field.slice(CUSTOM_PREFIX.length)]);
     if (field.startsWith(ICON_PREFIX)) return character.runtime?.images?.[field.slice(ICON_PREFIX.length)] ?? undefined;
+    if (field.startsWith(RELATIONS_PREFIX)) return relationValue(character, field.slice(RELATIONS_PREFIX.length));
     if (field.startsWith(ARCHIVIST_PREFIX)) {
         const read = ARCHIVIST_FIELDS.find(([name]) => name === field.slice(ARCHIVIST_PREFIX.length))?.[3];
         const value = read && character.archivist ? read(character.archivist) : undefined;
@@ -235,7 +307,11 @@ export const SAMPLE_CHARACTER = Object.freeze({
         arc: 'From a blank box to a finished card.', feeling: 'hopeful',
         relationship: { type: 'friend', polarity: 2, polarity_label: 'close', intensity: 'medium', trend: 'warming', text: 'Trusts you with every template.', view: 'theirs' },
         threads: ['The missing font'], secrets: ['Where the grid snaps'],
+        relationships: [
+            { other: { id: null, name: 'Sample Rival' }, type: 'rival', polarity: -1, polarity_label: 'wary', intensity: 'medium', trend: 'stable', text: 'Competes for every margin.', view: 'theirs' },
+        ],
     },
+    authoredRelations: [{ otherId: null, otherName: 'Sample Friend', kind: 'ally', note: 'Checks the layouts together.', direction: 'out' }],
 });
 
 // ---------------------------------------------------------------- any object type

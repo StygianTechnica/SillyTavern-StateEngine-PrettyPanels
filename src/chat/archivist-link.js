@@ -47,8 +47,11 @@ function isEntity(entity, who) {
 // ({ id?, name, aliases? } - the user's persona): { summary, traits, habits,
 // stressors, motivations, arc, feeling, relationship: { type, polarity,
 // polarity_label, intensity, trend, text, view } | null, threads: [titles
-// of its open or active threads], secrets: [secrets it knows] }, or null
-// when the view says nothing about it.
+// of its open or active threads], secrets: [secrets it knows],
+// relationships: [{ other: { id, name }, type, polarity, polarity_label,
+// intensity, trend, text, view }] - every relationship it is part of, its
+// own view of the other where the story shows one ('theirs'), else the
+// other's view of it ('about') }, or null when the view says nothing about it.
 //
 // The relationship is the character's own view of the persona when the
 // memories show it (view 'theirs'), else the persona's view of the
@@ -67,7 +70,25 @@ export function characterInsights(view, character, persona) {
     const secrets = (view.world?.secret ?? [])
         .filter((w) => w.status !== 'disproven' && (w.known_by ?? []).some((e) => isEntity(e, character)))
         .map((w) => w.name);
-    if (!profile && !relationship && threads.length === 0 && secrets.length === 0) return null;
+    // Every relationship it is part of: its own view of each other one, else
+    // the other's view of it.
+    const relationships = [];
+    const seen = new Set();
+    for (const r of (view.relationships ?? [])) {
+        if (!isEntity(r.from, character) || isEntity(r.to, character)) continue;
+        const key = r.to?.id || nameKey(r.to?.name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        relationships.push(storyRelation(r, r.to, 'theirs'));
+    }
+    for (const r of (view.relationships ?? [])) {
+        if (!isEntity(r.to, character) || isEntity(r.from, character)) continue;
+        const key = r.from?.id || nameKey(r.from?.name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        relationships.push(storyRelation(r, r.from, 'about'));
+    }
+    if (!profile && !relationship && threads.length === 0 && secrets.length === 0 && relationships.length === 0) return null;
     return {
         summary: profile?.summary ?? '',
         traits: profile?.traits ?? [],
@@ -87,7 +108,46 @@ export function characterInsights(view, character, persona) {
         } : null,
         threads,
         secrets,
+        relationships,
     };
+}
+
+function storyRelation(r, other, view) {
+    return {
+        other: { id: other?.id ?? null, name: other?.name ?? '' },
+        type: r.type ?? '', polarity: r.polarity, polarity_label: r.polarity_label ?? '',
+        intensity: r.intensity ?? '', trend: r.trend ?? '', text: r.text ?? '', view,
+    };
+}
+
+// ---- the relationships the user wrote, in Scenario Builder
+
+export function scenarioBuilderApi() {
+    try {
+        return globalThis.window?.StateEngineScenarioBuilder ?? null;
+    } catch {
+        return null;
+    }
+}
+
+// `characters` with each one's AUTHORED relationships (Scenario Builder's
+// getRelationships, optional) attached as `authoredRelations`:
+// [{ otherId, otherName, kind, note, direction }]. They take precedence
+// over the story's for a pair (character-fields.js relationsOfObject).
+// Unchanged without Scenario Builder. Never throws.
+export async function withAuthoredRelations(characters) {
+    const api = scenarioBuilderApi();
+    if (typeof api?.getRelationships !== 'function' || characters.size === 0) return characters;
+    const next = new Map();
+    for (const [id, character] of characters) {
+        try {
+            const list = await api.getRelationships(id);
+            next.set(id, Array.isArray(list) && list.length ? { ...character, authoredRelations: list } : character);
+        } catch {
+            next.set(id, character);
+        }
+    }
+    return next;
 }
 
 // The user's persona as a relationship target: its character object when

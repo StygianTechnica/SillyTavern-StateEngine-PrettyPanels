@@ -443,3 +443,17 @@ export function clampElementGeometry({ x, y, width, height }, bodyWidth, bodyHei
         height: h,
     };
 }
+
+// Cards inside cards (src/elements/character-tiles.js): a Character element
+// may be drawn on a template card only when it shows a field of the card's
+// own object (its related people, "char:relations.people").
+export function drawsOnCard(element) {
+    return element?.type !== ELEMENT_TYPE_CHARACTER || isCharRef(bindingRef(element.binding));
+}
+
+// The template a Character element draws with at card depth `depth` (0: on
+// a panel): none inside a card - those are built-in cards, so a card never
+// holds cards that hold cards.
+export function cardTemplateId(element, depth = 0) {
+    return depth > 0 ? null : normalizeCharacterOptions(element?.character).templateId;
+}

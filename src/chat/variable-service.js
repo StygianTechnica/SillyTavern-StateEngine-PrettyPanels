@@ -34,7 +34,7 @@ import { objectTypeOf } from '../elements/object-defs.js';
 import { characterFieldList, characterFieldDef, objectsFieldValue, objectFieldList } from '../elements/character-fields.js';
 import { getObjectFields } from '../api/get-object-fields.js';
 import { CHARACTER_OBJECT_TYPE } from '../elements/object-defs.js';
-import { archivistApi, withArchivistInsights } from './archivist-link.js';
+import { archivistApi, withArchivistInsights, withAuthoredRelations } from './archivist-link.js';
 
 // The catalog group holding Pretty Panels' own variables. Always "active"
 // (there is no preset to activate for it).
@@ -234,7 +234,7 @@ async function loadCharacters(chatId) {
     if (!chatId) return new Map();
     try {
         const list = new Map(((await listObjects(EXTENSION_ID, chatId, CHARACTER_OBJECT_TYPE)) ?? []).map((c) => [c.id, c]));
-        return await withArchivistInsights(chatId, list);
+        return await withAuthoredRelations(await withArchivistInsights(chatId, list));
     } catch (err) {
         console.warn('[PrettyPanels] could not read State Engine characters (update State Engine for object support)', err);
         return new Map();

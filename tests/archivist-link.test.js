@@ -31,6 +31,10 @@ describe('characterInsights', () => {
             relationship: { type: 'mentor', polarity: 2, polarity_label: 'close', intensity: 'high', trend: 'warming', text: 'Lucian looks out for Sam.', view: 'theirs' },
             threads: ['The manager job'],
             secrets: ['The debt'],
+            relationships: [
+                { other: { id: null, name: 'Sam' }, type: 'mentor', polarity: 2, polarity_label: 'close', intensity: 'high', trend: 'warming', text: 'Lucian looks out for Sam.', view: 'theirs' },
+                { other: { id: 'chr_gavin', name: 'Gavin' }, type: 'rival', polarity: -1, polarity_label: 'wary', intensity: 'medium', trend: '', text: '', view: 'theirs' },
+            ],
         });
     });
 
@@ -70,7 +74,9 @@ describe('withArchivistInsights', () => {
         const out = await withArchivistInsights('chat-1', new Map([[lucian.id, lucian], [gavin.id, gavin]]));
         expect(window.StateEngineArchivist.getCompiledMemory).toHaveBeenCalledWith('chat-1');
         expect(out.get('chr_lucian').archivist.relationship.type).toBe('rival');
-        expect(out.get('chr_gavin').archivist).toBeUndefined();
+        // The persona has no profile of its own - only the relationships others hold toward it.
+        expect(out.get('chr_gavin').archivist.summary).toBe('');
+        expect(out.get('chr_gavin').archivist.relationships.map((r) => r.other.name)).toEqual(['Lucian']);
     });
 
     it('leaves characters alone without Archivist', async () => {
