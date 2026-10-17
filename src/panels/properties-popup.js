@@ -700,11 +700,18 @@ export class PanelPropertiesPopup {
         const character = { ...normalizeCharacterOptions(element.character), ...patch };
         const change = { character };
         const template = patch.templateId ? getCharacterTemplate(patch.templateId) : null;
-        if (template && this.#def(element)?.type === 'object') {
+        const kind = this.#def(element)?.type;
+        if (template && kind === 'object') {
             Object.assign(change, clampElementGeometry(
                 { x: element.x, y: element.y, width: template.width, height: template.height },
                 this.panel.body.clientWidth, this.panel.body.clientHeight, 'width',
             ));
+        } else if (template && kind === 'array' && (character.tiling === 'column' || character.tiling === 'row')) {
+            // A column is as wide as a card (a row as tall), so cards fit across.
+            const geometry = character.tiling === 'column'
+                ? { x: element.x, y: element.y, width: Math.max(element.width, template.width), height: element.height }
+                : { x: element.x, y: element.y, width: element.width, height: Math.max(element.height, template.height) };
+            Object.assign(change, clampElementGeometry(geometry, this.panel.body.clientWidth, this.panel.body.clientHeight, 'width'));
         }
         this.hooks.onElementChange(element.id, change);
     }

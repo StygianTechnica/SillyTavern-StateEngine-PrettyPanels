@@ -250,4 +250,21 @@ export function renderCharacterTiles(host, element, ids, list, services) {
         }
         host.append(card);
     }
+    if (template && list) fitCardsToHost(host, template, options.tiling);
+}
+
+// A column (or row) of template cards wider (or taller) than its element:
+// the cards are scaled down to fit across, so the list never scrolls
+// sideways for a few pixels. Once the list is on the page.
+function fitCardsToHost(host, template, tiling) {
+    if (tiling !== 'column' && tiling !== 'row') return;
+    const fit = () => {
+        if (!host.isConnected) return;
+        const room = tiling === 'column' ? host.clientWidth : host.clientHeight;
+        const size = tiling === 'column' ? template.width : template.height;
+        const scale = room > 0 && room < size ? room / size : 1;
+        for (const card of host.querySelectorAll(':scope > .pp-template-card')) card.style.zoom = scale < 1 ? String(Math.round(scale * 1000) / 1000) : '';
+    };
+    if (host.isConnected) fit();
+    else requestAnimationFrame(fit);
 }

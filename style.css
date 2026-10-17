@@ -2911,6 +2911,10 @@ body.pp-editing .pp-character-card {
 .pp-character-tiles.pp-tiling-row { flex-wrap: nowrap; }
 .pp-character-tiles.pp-tiling-column,
 .pp-character-tiles.pp-character-builtin.pp-tiling-single { flex-direction: column; flex-wrap: nowrap; }
+/* A column scrolls down only, a row across only: a card a little wider
+   (or taller) than the element is scaled to fit (character-tiles.js). */
+.pp-character-tiles.pp-tiling-column { overflow-x: hidden; overflow-y: auto; }
+.pp-character-tiles.pp-tiling-row { overflow-y: hidden; overflow-x: auto; }
 .pp-character-tiles > * { flex: 0 0 auto; }
 .pp-character-tiles.pp-character-builtin.pp-tiling-column > .pp-character-card { width: 100%; }
 
