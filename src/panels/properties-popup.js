@@ -32,6 +32,7 @@
 import { VariablePicker, ElementPalette, RolePicker, CharacterFieldPicker } from '../ui/variable-picker.js';
 import { listCharacterTemplates, getCharacterTemplate, createCharacterTemplate, onCharacterTemplatesChange, templateFits } from '../library/character-template-library.js';
 import { openTemplateEditor, onTemplateEditorFields } from './template-editor.js';
+import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT, MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../storage/design.js';
 import { promptText, notify } from '../ui/dialogs.js';
 import { openFontPicker, closeFontPicker } from '../ui/font-picker.js';
 import { fontRegistry } from '../fonts/font-registry.js';
@@ -274,7 +275,14 @@ export class PanelPropertiesPopup {
             this.stopThemeWatch = onThemesChange(() => this.refresh());
             this.stopTemplatesWatch = onCharacterTemplatesChange(() => this.#refreshElement());
             // The palette offers the template's object type's fields.
-            if (this.templateMode) this.stopFieldsWatch = onTemplateEditorFields((fields) => this.characterPicker.setFields(fields));
+            if (this.templateMode) {
+                this.stopFieldsWatch = onTemplateEditorFields((fields) => {
+                    this.characterPicker.setFields(fields);
+                    this.templateFields = fields;
+                    const element = this.#selected();
+                    if (element) this.#refreshBindingMode(element);
+                });
+            }
             void fontRegistry.load().then(() => this.#refreshElement());
             void loadCatalog();
         }
@@ -359,7 +367,13 @@ export class PanelPropertiesPopup {
         this.el.querySelector('.pp-properties-title').textContent = this.templateMode ? `Card template: ${record.name}` : record.name;
         this.el.querySelector('[data-field="name"]').textContent = record.name;
         this.el.querySelector('[data-field="position"]').textContent = `${geometry.x}, ${geometry.y}`;
-        this.el.querySelector('[data-field="size"]').textContent = `${geometry.width} × ${geometry.height}`;
+        // Width and height, typed in (the inputs keep what is being typed).
+        const locked = this.panel.record.locked === true;
+        for (const [key, value] of [['panelWidth', geometry.width], ['panelHeight', geometry.height]]) {
+            const input = this.el.querySelector(`[data-el="${key}"]`);
+            if (input !== document.activeElement) input.value = String(Math.round(value));
+            input.disabled = locked || (key === 'panelWidth' && this.panel.el.classList.contains('pp-docked-row'));
+        }
 
         const lockButton = this.el.querySelector('[data-action="lock"]');
         lockButton.classList.toggle('pp-active', record.locked);
@@ -662,6 +676,22 @@ export class PanelPropertiesPopup {
             : 'Cards keep the template\'s size; what doesn\'t fit scrolls. Outside Editing Mode, click a card to open the Object Manager.';
     }
 
+    // The panel's size from the Size inputs: kept to its minimum (a card
+    // template's is smaller) and to the window.
+    #resizePanel() {
+        if (this.panel.record.locked) return;
+        const geometry = this.panel.getRenderedGeometry();
+        const [minWidth, minHeight] = this.templateMode ? [MIN_CARD_WIDTH, MIN_CARD_HEIGHT] : [MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT];
+        const read = (key, fallback, min, max) => {
+            const n = this.el.querySelector(`[data-el="${key}"]`).valueAsNumber;
+            return Number.isFinite(n) ? Math.round(Math.min(Math.max(n, min), Math.max(min, max))) : fallback;
+        };
+        const width = read('panelWidth', geometry.width, minWidth, window.innerWidth - geometry.x);
+        const height = read('panelHeight', geometry.height, minHeight, window.innerHeight - geometry.y);
+        this.panel.hooks.onGeometryCommit(this.panel, { ...geometry, width, height });
+        this.refresh();
+    }
+
     // Sets a Character element's options. Choosing a template for a single
     // character sizes the element to one card.
     #changeCharacter(patch) {
@@ -880,10 +910,14 @@ export class PanelPropertiesPopup {
     // dropdown: the roles whose type this element can show, by public name
     // (with the namespace only when two roles share a name), the id on hover.
     #refreshBindingMode(element) {
-        const mode = element.binding?.role ? 'role' : (element.binding?.name ? 'variable' : (this.bindingMode ?? 'variable'));
+        // "This card's object" is only for a card template's elements.
+        const chosen = this.bindingMode === 'object' && !this.templateMode ? null : this.bindingMode;
+        const mode = element.binding?.char ? 'object' : element.binding?.role ? 'role' : (element.binding?.name ? 'variable' : (chosen ?? (this.templateMode ? 'object' : 'variable')));
         const typeField = this.el.querySelector('[data-el="bindingType"]');
+        for (const option of typeField.querySelectorAll('[data-template-only-option]')) option.hidden = !this.templateMode;
         if (typeField !== document.activeElement) typeField.value = mode;
         for (const node of this.el.querySelectorAll('[data-binding-mode]')) node.hidden = node.dataset.bindingMode !== mode;
+        if (mode === 'object') this.#fillBindingFields(element);
         const select = this.el.querySelector('[data-el="bindingRole"]');
         if (select === document.activeElement) return;
         const needs = roleTypeForElement(element.type);
@@ -900,6 +934,37 @@ export class PanelPropertiesPopup {
         if (current && !roles.some((r) => r.id === current)) select.add(new Option(`${rolePublicName(current)} (not defined)`, current));
         select.value = current;
         select.title = current || 'Roles this element can show';
+    }
+
+    // The Field dropdown: the card's object's fields, grouped as the
+    // palette groups them (the template's type: its fields, runtime state,
+    // relationships...). A Character element lists the fields that hold
+    // objects first - those it can draw as cards.
+    #fillBindingFields(element) {
+        const select = this.el.querySelector('[data-el="bindingField"]');
+        if (select === document.activeElement) return;
+        const fields = this.templateFields ?? [];
+        const current = element.binding?.char ?? '';
+        const holdsObjects = (f) => f.field === 'relations.people' || f.type === 'list' || /factions|members|owner|location/.test(f.field);
+        const ordered = element.type === ELEMENT_TYPE_CHARACTER ? [...fields.filter(holdsObjects), ...fields.filter((f) => !holdsObjects(f))] : fields;
+        const groups = new Map();
+        for (const f of ordered) {
+            const group = element.type === ELEMENT_TYPE_CHARACTER && holdsObjects(f) ? 'Holding objects' : f.group;
+            if (!groups.has(group)) groups.set(group, []);
+            groups.get(group).push(f);
+        }
+        select.replaceChildren(new Option(fields.length ? '— choose a field —' : 'Loading the fields…', ''), ...[...groups].map(([label, list]) => {
+            const group = document.createElement('optgroup');
+            group.label = label;
+            for (const f of list) {
+                const option = new Option(f.label, f.field);
+                option.title = `char:${f.field}${f.description ? `\n${f.description}` : ''}`;
+                group.append(option);
+            }
+            return group;
+        }));
+        if (current && !fields.some((f) => f.field === current)) select.add(new Option(`${current} (not a field of this type)`, current));
+        select.value = current;
     }
 
     #applyTypeVisibility(type) {
@@ -1239,7 +1304,11 @@ export class PanelPropertiesPopup {
             <dl class="pp-properties-fields">
                 <dt>Name</dt><dd data-field="name"></dd>
                 <dt>Position</dt><dd data-field="position"></dd>
-                <dt>Size</dt><dd data-field="size"></dd>
+                <dt>Size</dt><dd class="pp-size-fields">
+                    <input type="number" class="text_pole pp-size-input" data-el="panelWidth" min="1" step="1" title="Width in pixels" aria-label="Width">
+                    <span>×</span>
+                    <input type="number" class="text_pole pp-size-input" data-el="panelHeight" min="1" step="1" title="Height in pixels" aria-label="Height">
+                </dd>
             </dl>
             <div class="pp-locked-note"><i class="fa-solid fa-lock"></i> Locked - unlock to move, resize or edit.</div>
             <small class="pp-field-info" data-template-only>A card template: drawn once per object in a Character element. Bind elements to the card's object (the Character tab below - the fields of the type set above the template), to variables or to roles. Changes save as you go; Done (above the template) closes the editor.</small>
@@ -1404,9 +1473,10 @@ export class PanelPropertiesPopup {
                     </select>
                 </label>
                 <label class="pp-field" data-for-types="${BOUND_TYPES}"><span>Binding type</span>
-                    <select class="text_pole" data-el="bindingType" title="Bind to a variable, or to a role (whichever variable each chat assigns to it)">
+                    <select class="text_pole" data-el="bindingType" title="Bind to a variable, to a role (whichever variable each chat assigns to it), or - on a card template - to a field of the card's own object">
                         <option value="variable">Variable</option>
                         <option value="role">Role</option>
+                        <option value="object" data-template-only-option>This card's object</option>
                     </select>
                 </label>
                 <div data-for-types="${BOUND_TYPES}">
@@ -1415,6 +1485,9 @@ export class PanelPropertiesPopup {
                     </label>
                     <label class="pp-field" data-binding-mode="role"><span>Role</span>
                         <select class="text_pole" data-el="bindingRole"></select>
+                    </label>
+                    <label class="pp-field" data-binding-mode="object"><span>Field</span>
+                        <select class="text_pole" data-el="bindingField" title="A field of each card's own object - the fields of the type set above the template"></select>
                     </label>
                 </div>
                 <small class="pp-field-info" data-el="binding-info" data-for-types="${BOUND_TYPES}"></small>
@@ -1906,7 +1979,14 @@ export class PanelPropertiesPopup {
         field('bindingRole').addEventListener('change', (e) => {
             this.#change({ binding: e.target.value ? { role: e.target.value } : null });
         });
+        // A field of the card's own object ("char:<field>").
+        field('bindingField').addEventListener('change', (e) => {
+            this.#change({ binding: e.target.value ? { char: e.target.value } : null });
+        });
         field('charTemplate').addEventListener('change', (e) => this.#changeCharacter({ templateId: e.target.value || null }));
+        for (const key of ['panelWidth', 'panelHeight']) {
+            el.querySelector(`[data-el="${key}"]`).addEventListener('change', () => this.#resizePanel());
+        }
         field('charTiling').addEventListener('change', (e) => this.#changeCharacter({ tiling: e.target.value }));
         field('charGap').addEventListener('input', (e) => {
             if (Number.isFinite(e.target.valueAsNumber)) this.#changeCharacter({ gap: Math.round(e.target.valueAsNumber) });

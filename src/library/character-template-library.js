@@ -21,7 +21,7 @@
 
 import { NAMESPACE } from '../constants.js';
 import { getStore, save, generateId, uniqueName, emitLibraryChange, clone } from '../storage/store.js';
-import { pickDesign } from '../storage/design.js';
+import { pickDesign, MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../storage/design.js';
 import { KIND, makePayload } from './format.js';
 import { createVariableElement, isVariableElement, bindingRef, parseRoleId, isCharRef } from '../elements/element-model.js';
 import { clockImageVariables } from '../elements/clock.js';
@@ -47,7 +47,7 @@ export function onCharacterTemplatesChange(listener) {
 
 // What a character template holds: the design without placement.
 function templateDesign(source) {
-    const { x: _x, y: _y, anchorMode: _mode, anchorTarget: _target, ...design } = pickDesign(source);
+    const { x: _x, y: _y, anchorMode: _mode, anchorTarget: _target, ...design } = pickDesign(source, { width: MIN_CARD_WIDTH, height: MIN_CARD_HEIGHT });
     return { ...design, roles: rolesOf(design.widgets) };
 }
 

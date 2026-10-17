@@ -3274,3 +3274,7 @@ body.pp-editing .pp-element[data-flag-badge]:not(.pp-element-flag-hidden)::after
     cursor: grabbing;
     opacity: 1;
 }
+
+/* Panel size, typed in (properties pane). */
+.pp-size-fields { display: flex; align-items: center; gap: 4px; margin: 0; }
+.pp-size-fields .pp-size-input { width: 5.5em; margin: 0; padding: 1px 4px; }

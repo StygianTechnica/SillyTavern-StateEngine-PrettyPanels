@@ -69,3 +69,12 @@ describe('card template object types', () => {
         expect(templateFits({ objectType: 'character' }, null)).toBe(true);
     });
 });
+
+describe('card template size', () => {
+    it('may be as small as a portrait, unlike a layout panel', async () => {
+        const { pickDesign, MIN_PANEL_WIDTH, MIN_CARD_WIDTH } = await import('../src/storage/design.js');
+        expect(pickDesign({ width: 40, height: 40 }).width).toBe(MIN_PANEL_WIDTH);
+        expect(pickDesign({ width: 40, height: 40 }, { width: MIN_CARD_WIDTH, height: 24 })).toMatchObject({ width: 40, height: 40 });
+        expect(pickDesign({ width: 10, height: 10 }, { width: MIN_CARD_WIDTH, height: 24 })).toMatchObject({ width: 24, height: 24 });
+    });
+});

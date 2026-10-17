@@ -70,9 +70,10 @@ export function buildCharacterCard(id, character, options) {
         card.append(fallbackIcon({ id, name: '?' }));
         const name = document.createElement('span');
         name.className = 'pp-character-name';
-        name.textContent = 'Unknown character';
+        // A card can show any object; an id this chat cannot find is shown as such.
+        name.textContent = /^chr_/.test(id) ? 'Unknown character' : 'Unknown object';
         card.append(name);
-        card.title = `${id}: not a character of this chat or its setting`;
+        card.title = `${id}: not an object of this chat or its setting`;
         return card;
     }
     card.append(portrait(character));

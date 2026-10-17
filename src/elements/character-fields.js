@@ -33,9 +33,9 @@
 //              ally (friendly)"), the names, the friendly and hostile ones,
 //              a count, and "relations.people" - the related characters as
 //              objects, drawn as cards by a Character element on the card.
-//              Cards inside a card always use the built-in card, never a
-//              template (character-tiles.js), so a relationship list never
-//              recurses.
+//              A card inside a card may use its own template one level
+//              deep, never one already being drawn (character-tiles.js),
+//              so a relationship list never recurses.
 //
 // Outside a template there is no character, so a character field has no
 // value there.
@@ -267,8 +267,38 @@ function named(value) {
     return typeof value === 'string' && OBJECT_ID.test(value) ? objectDisplayName(value) ?? value : value;
 }
 
+// State Engine's id prefixes, by object type (its registry's idPrefix).
+const TYPE_BY_PREFIX = { chr: 'character', loc: 'location', fac: 'faction', itm: 'item', crt: 'creature', lor: 'lore', qst: 'quest', scn: 'scene', evt: 'event' };
+
+// A field's value as stored - object ids kept as ids (characterFieldValue
+// shows them by name). undefined for the computed fields.
+function storedValue(character, field) {
+    field = RENAMED_FIELDS[field] ?? field;
+    if (field.startsWith(CUSTOM_PREFIX)) return character.runtime?.values?.[field.slice(CUSTOM_PREFIX.length)];
+    if ([ICON_PREFIX, ARCHIVIST_PREFIX, RELATIONS_PREFIX].some((p) => field.startsWith(p)) || BUILT_IN_RUNTIME.includes(field)) return undefined;
+    if (character.runtime?.values && field in character.runtime.values) return character.runtime.values[field];
+    if (!character.runtime && character.startValues && field in character.startValues) return character.startValues[field];
+    return character[field];
+}
+
+// When a field holds other objects (a character's factions, an item's
+// owner): { ids, list, type } - the ids as stored, whether it is a list,
+// and the objects' type from their id prefix. null otherwise.
+export function objectRefsOf(character, field) {
+    if (!character) return null;
+    const value = storedValue(character, field);
+    const list = Array.isArray(value);
+    const ids = (list ? value : [value]).filter((v) => typeof v === 'string' && v);
+    if (!ids.length || !ids.every((v) => OBJECT_ID.test(v))) return null;
+    const types = [...new Set(ids.map((v) => TYPE_BY_PREFIX[v.slice(0, 3)]).filter(Boolean))];
+    return { ids, list, type: types.length === 1 ? types[0] : null };
+}
+
 // The variable service's { value, def } shape for a character field, or
-// undefined when the character has no value for it.
+// undefined when the character has no value for it. A field holding other
+// objects keeps their ids, with a definition saying what they are - a text
+// element shows them by name (text-format.js), a Character element draws
+// them as cards.
 export function characterEntry(character, field) {
     // An icon with no image for the current value (none set for it, no value
     // yet) shows the value as text rather than nothing.
@@ -278,6 +308,13 @@ export function characterEntry(character, field) {
         const name = field.slice(ICON_PREFIX.length);
         const word = characterFieldValue(character, BUILT_IN_RUNTIME.includes(name) ? name : `${CUSTOM_PREFIX}${name}`);
         return word === undefined ? undefined : { value: word, def: { ...characterFieldDef(field), type: 'string' } };
+    }
+    const refs = field.startsWith(RELATIONS_PREFIX) ? null : objectRefsOf(character, field);
+    if (refs?.type) {
+        const def = characterFieldDef(field);
+        return refs.list
+            ? { value: refs.ids, def: { ...def, type: 'array', itemType: 'object', itemObjectType: refs.type } }
+            : { value: refs.ids[0], def: { ...def, type: 'object', objectType: refs.type } };
     }
     const value = characterFieldValue(character, field);
     return value === undefined ? undefined : { value, def: characterFieldDef(field) };

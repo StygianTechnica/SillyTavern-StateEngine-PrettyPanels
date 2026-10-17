@@ -20,6 +20,11 @@ export const DEFAULT_PANEL_WIDTH = 280;
 export const DEFAULT_PANEL_HEIGHT = 180;
 export const MIN_PANEL_WIDTH = 80;
 export const MIN_PANEL_HEIGHT = 48;
+// A card template (character-template-library.js) is drawn many times
+// inside another panel, often as small as its portrait: its own, much
+// smaller minimum.
+export const MIN_CARD_WIDTH = 24;
+export const MIN_CARD_HEIGHT = 24;
 
 function finite(value, fallback) {
     return Number.isFinite(value) ? value : fallback;
@@ -33,12 +38,14 @@ function list(value) {
     return Array.isArray(value) ? clone(value) : [];
 }
 
-export function pickDesign(source = {}) {
+// `min`: { width, height } - the smallest size allowed (a panel's, unless
+// given: a card template's is smaller).
+export function pickDesign(source = {}, min = {}) {
     return {
         x: finite(source.x, 0),
         y: finite(source.y, 0),
-        width: Math.max(MIN_PANEL_WIDTH, finite(source.width, DEFAULT_PANEL_WIDTH)),
-        height: Math.max(MIN_PANEL_HEIGHT, finite(source.height, DEFAULT_PANEL_HEIGHT)),
+        width: Math.max(min.width ?? MIN_PANEL_WIDTH, finite(source.width, DEFAULT_PANEL_WIDTH)),
+        height: Math.max(min.height ?? MIN_PANEL_HEIGHT, finite(source.height, DEFAULT_PANEL_HEIGHT)),
         // Placed flush against the window's right / bottom edge: it stays
         // there at any window size (src/panels/viewport-fit.js).
         stickRight: source.stickRight === true,

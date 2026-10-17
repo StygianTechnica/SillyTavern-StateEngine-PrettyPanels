@@ -451,9 +451,17 @@ export function drawsOnCard(element) {
     return element?.type !== ELEMENT_TYPE_CHARACTER || isCharRef(bindingRef(element.binding));
 }
 
-// The template a Character element draws with at card depth `depth` (0: on
-// a panel): none inside a card - those are built-in cards, so a card never
-// holds cards that hold cards.
-export function cardTemplateId(element, depth = 0) {
-    return depth > 0 ? null : normalizeCharacterOptions(element?.character).templateId;
+// How many card templates may be drawn inside one another: a card on a
+// panel, and cards on that card. Deeper than that, cards are built-in ones.
+export const MAX_CARD_NESTING = 2;
+
+// The template a Character element draws with, inside the templates being
+// drawn (`within`: their ids, outermost first; [] on a panel): its own,
+// unless that would draw a template inside itself (a loop) or nest deeper
+// than MAX_CARD_NESTING - then none, the built-in card.
+export function cardTemplateId(element, within = []) {
+    const id = normalizeCharacterOptions(element?.character).templateId;
+    const stack = Array.isArray(within) ? within : [];
+    if (!id || stack.length >= MAX_CARD_NESTING || stack.includes(id)) return null;
+    return id;
 }

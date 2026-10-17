@@ -35,25 +35,26 @@ export function templateEntry(element, character, getValue) {
     return isCharRef(ref) ? characterEntry(character, charFieldOfRef(ref)) : getValue(ref);
 }
 
-// How deep card drawing is: above 0 while a template card is being drawn.
-// A Character element on a card (the card's character's related people,
-// "char:relations.people") draws BUILT-IN cards only - never a template -
-// so cards never hold cards that hold cards.
-let cardDepth = 0;
+// The templates being drawn, outermost first: a Character element on a
+// card (its object's factions, its related people) may use a template of
+// its own, one level deep, never one already being drawn - so card drawing
+// always ends (element-model.js cardTemplateId).
+const drawing = [];
 
 
 // Draws `template`'s elements into `canvas` for `character`. A portrait
 // (the image field) the character has none for shows its fallback icon.
-// A Character element is drawn only for the card's own object's people
-// (built-in cards, no templates - see cardDepth).
+// A Character element is drawn only for a field of the card's own object
+// (its factions, its related people), with its own template one level
+// deep at most - see `drawing`.
 // context.drawerOpen: the card's drawer is open (a toggle's icon turns over).
 export function renderTemplateElements(canvas, template, character, { getValue, theme, context }) {
     canvas.replaceChildren();
-    cardDepth += 1;
+    drawing.push(template.id);
     try {
         drawTemplateElements(canvas, template, character, { getValue, theme, context });
     } finally {
-        cardDepth -= 1;
+        drawing.pop();
     }
 }
 
@@ -193,7 +194,7 @@ document.addEventListener('keydown', (e) => {
 // cardOptions are the built-in card's (presence, aliases, text case).
 export function renderCharacterTiles(host, element, ids, list, services) {
     const options = normalizeCharacterOptions(element.character);
-    const template = getCharacterTemplate(cardTemplateId(element, cardDepth));
+    const template = getCharacterTemplate(cardTemplateId(element, drawing));
     const chosen = withoutPersona((Array.isArray(ids) ? ids : [ids]).filter((id) => typeof id === 'string' && id), services.getCharacter, list && services.cardOptions?.hideUser);
     host.replaceChildren();
     host.className = `pp-element-value pp-character-tiles pp-tiling-${list ? options.tiling : 'single'}${template ? '' : ' pp-character-builtin'}`;

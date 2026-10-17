@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relationsOfObject, characterFieldValue, characterFieldDef, characterFieldList, SAMPLE_CHARACTER } from '../src/elements/character-fields.js';
+import { relationsOfObject, characterFieldValue, characterFieldDef, characterFieldList, SAMPLE_CHARACTER, characterEntry, objectRefsOf } from '../src/elements/character-fields.js';
 import { characterInsights } from '../src/chat/archivist-link.js';
 import { drawsOnCard, cardTemplateId } from '../src/elements/element-model.js';
 import { isObjectCardDefinition } from '../src/elements/object-defs.js';
@@ -59,8 +59,27 @@ describe('cards inside cards', () => {
         expect(drawsOnCard({ type: 'character', binding: { variable: 'se__scene_characters' } })).toBe(false);
         expect(drawsOnCard({ type: 'text', binding: { char: 'name' } })).toBe(true);
     });
-    it('never use a template, so they never recurse', () => {
-        expect(cardTemplateId(people, 0)).toBe('ppc_x');
-        expect(cardTemplateId(people, 1)).toBeNull();
+    it('use their own template one level deep, never in a loop', () => {
+        // On a panel, and on one card: its own template.
+        expect(cardTemplateId(people, [])).toBe('ppc_x');
+        expect(cardTemplateId(people, ['ppc_outer'])).toBe('ppc_x');
+        // Never a template inside itself, and never deeper than two.
+        expect(cardTemplateId(people, ['ppc_x'])).toBeNull();
+        expect(cardTemplateId(people, ['ppc_a', 'ppc_b'])).toBeNull();
+    });
+});
+
+describe('object fields on a card', () => {
+    const remus = { id: 'chr_remus', name: 'Remus', runtime: { values: { factions: ['fac_redhaven', 'fac_wardens'], mood: 'Calm' } }, owner: 'chr_x' };
+    it('keep their ids, marked as the objects they are, so a card element can draw them', () => {
+        expect(characterEntry(remus, 'factions')).toEqual({ value: ['fac_redhaven', 'fac_wardens'], def: expect.objectContaining({ type: 'array', itemType: 'object', itemObjectType: 'faction' }) });
+        expect(isObjectCardDefinition(characterEntry(remus, 'factions').def)).toBe(true);
+        expect(objectRefsOf(remus, 'faction')).toEqual({ ids: ['fac_redhaven', 'fac_wardens'], list: true, type: 'faction' });
+        expect(characterEntry(remus, 'owner').def).toMatchObject({ type: 'object', objectType: 'character' });
+    });
+    it('leave other fields as they were', () => {
+        expect(objectRefsOf(remus, 'mood')).toBeNull();
+        expect(characterEntry(remus, 'mood').value).toBe('Calm');
+        expect(characterEntry(remus, 'relations.list')).toBeUndefined();
     });
 });

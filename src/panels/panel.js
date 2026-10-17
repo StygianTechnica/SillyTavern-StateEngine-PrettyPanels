@@ -13,7 +13,7 @@
 //   .pp-panel (stored bounds) > .pp-panel-box (visible, Panel Styling)
 //     > .pp-panel-body (padding) > .pp-panel-canvas (elements; `this.body`)
 
-import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../storage/design.js';
+import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT, MIN_CARD_WIDTH, MIN_CARD_HEIGHT } from '../storage/design.js';
 import { fitToViewport } from './viewport-fit.js';
 import { isVariableElement } from '../elements/element-model.js';
 import { ElementView } from '../elements/element-view.js';
@@ -711,8 +711,10 @@ export class Panel {
                 const grid = this.gridSize();
                 const right = softSnap(origin.x + origin.width + dx, grid);
                 const bottom = softSnap(origin.y + origin.height + dy, grid);
-                const width = clamp(right - origin.x, MIN_PANEL_WIDTH, window.innerWidth - origin.x);
-                const height = clamp(bottom - origin.y, MIN_PANEL_HEIGHT, window.innerHeight - origin.y);
+                // A card template may be as small as its portrait.
+                const [minWidth, minHeight] = this.isTemplateEditor ? [MIN_CARD_WIDTH, MIN_CARD_HEIGHT] : [MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT];
+                const width = clamp(right - origin.x, minWidth, window.innerWidth - origin.x);
+                const height = clamp(bottom - origin.y, minHeight, window.innerHeight - origin.y);
                 // A panel docked in the chat column spans its width: only
                 // its height can change.
                 if (!this.el.classList.contains('pp-docked-row')) this.el.style.width = `${Math.round(width)}px`;
