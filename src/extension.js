@@ -9,6 +9,7 @@
 // data in src/chat/, UI wiring in src/ui/.
 
 import { ensureStateEngineAvailable, warnStateEngineMissing } from './api/dependency-check.js';
+import { installOverflowTooltips } from './ui/overflow-tooltips.js';
 import { claimNamespace } from './api/namespace.js';
 import { registerWithStateEngine } from './api/registration.js';
 import { declareCapabilities } from './api/capabilities.js';
@@ -48,6 +49,8 @@ const CAPABILITIES = ['ui.panel'];
 // this shows one popup and returns - no namespace is claimed, no
 // registration or capability call is ever attempted.
 export async function initExtension() {
+    // Cut-off text shows in full on hover (src/ui/overflow-tooltips.js).
+    installOverflowTooltips();
     const available = await ensureStateEngineAvailable();
     if (!available) {
         warnStateEngineMissing();

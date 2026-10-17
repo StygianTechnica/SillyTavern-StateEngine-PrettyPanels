@@ -88,10 +88,15 @@ export function chooseFromList({ title, items, emptyText = 'Nothing here yet.' }
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'pp-modal-item';
-            button.innerHTML = '<i></i><span class="pp-modal-item-label"></span><span class="pp-modal-item-detail"></span>';
+            // The name in full on its own line, the detail (aliases...) below
+            // it - a long alias list never crowds the name out.
+            button.innerHTML = '<i></i><span class="pp-modal-item-text"><span class="pp-modal-item-label"></span><span class="pp-modal-item-detail"></span></span>';
             button.querySelector('i').className = `fa-solid ${item.icon ?? 'fa-table-columns'}`;
             button.querySelector('.pp-modal-item-label').textContent = item.label;
-            button.querySelector('.pp-modal-item-detail').textContent = item.detail ?? '';
+            const detail = button.querySelector('.pp-modal-item-detail');
+            detail.textContent = item.detail ?? '';
+            detail.hidden = !item.detail;
+            button.title = [item.label, item.detail].filter(Boolean).join('\n');
             button.addEventListener('click', () => finish(item.value));
             listEl.appendChild(button);
         }
