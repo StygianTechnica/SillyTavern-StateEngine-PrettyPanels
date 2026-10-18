@@ -54,11 +54,12 @@ function previewCharacter() {
 
 const fieldListeners = new Set();
 
-// Called with the palette fields whenever the open editor's object type
-// is read (the properties pane's Character palette).
+// Called with the palette fields, and the object type (null: any object),
+// whenever the open editor's object type is read (the properties pane's
+// object palette).
 export function onTemplateEditorFields(listener) {
     fieldListeners.add(listener);
-    if (editor?.loaded) listener(editor.fields);
+    if (editor?.loaded) listener(editor.fields, editor.type);
     return () => fieldListeners.delete(listener);
 }
 
@@ -74,7 +75,7 @@ async function loadType() {
     Object.assign(editor, { objectType, type, fields, objects: objectType ? objects : [], sample: sampleObject(type, fields), types, loaded: true });
     fillBar();
     editor.panel.renderValues();
-    for (const listener of fieldListeners) listener(fields);
+    for (const listener of fieldListeners) listener(fields, type);
 }
 
 // The generated icon a card shows for a character without an image
@@ -191,17 +192,23 @@ function buildBackdrop(templateId) {
 function buildBar() {
     const bar = document.createElement('div');
     bar.className = 'pp-template-editor-bar';
+    // Two rows - the name and Done, then the pickers - so long names and
+    // option labels show whole.
     bar.innerHTML = `
-        <i class="fa-solid fa-id-badge"></i>
-        <span class="pp-template-editor-label">Card template:</span>
-        <b class="pp-template-editor-name"></b>
-        <label class="pp-template-editor-preview" title="Which objects this template is for: its palette offers that type's fields, and Character elements showing that type offer it. Any object: only the fields every object has.">
-            <span>For</span><select class="text_pole" data-el="objectType"></select>
-        </label>
-        <label class="pp-template-editor-preview" title="Whose values the fields show while you edit">
-            <span>Preview</span><select class="text_pole" data-el="preview"></select>
-        </label>
-        <div class="menu_button pp-template-editor-done" title="Close the template editor (changes are already saved)"><i class="fa-solid fa-check"></i><span>Done</span></div>`;
+        <div class="pp-template-editor-row">
+            <i class="fa-solid fa-id-badge"></i>
+            <span class="pp-template-editor-label">Card template:</span>
+            <b class="pp-template-editor-name"></b>
+            <div class="menu_button pp-template-editor-done" title="Close the template editor (changes are already saved)"><i class="fa-solid fa-check"></i><span>Done</span></div>
+        </div>
+        <div class="pp-template-editor-row">
+            <label class="pp-template-editor-preview" title="Which objects this template is for: its palette offers that type's fields, and Character elements showing that type offer it. Any object: only the fields every object has.">
+                <span>For</span><select class="text_pole" data-el="objectType"></select>
+            </label>
+            <label class="pp-template-editor-preview" title="Whose values the fields show while you edit">
+                <span>Preview</span><select class="text_pole" data-el="preview"></select>
+            </label>
+        </div>`;
     bar.addEventListener('pointerdown', (e) => e.stopPropagation());
     bar.querySelector('[data-el="preview"]').addEventListener('change', (e) => {
         editor.previewId = e.target.value;
@@ -226,7 +233,8 @@ export function openTemplateEditor(templateId) {
     if (!getState().editingMode) setEditingMode(true);
     const pos = {
         x: Math.max(16, Math.round((window.innerWidth - template.width) / 2)),
-        y: Math.max(80, Math.round((window.innerHeight - template.height) / 3)),
+        // Room above for the two-row bar.
+        y: Math.max(110, Math.round((window.innerHeight - template.height) / 3)),
     };
     editor = { templateId, pos, previewId: null, objectType: template.objectType, type: null, fields: [], objects: [], sample: sampleObject(null), types: [], loaded: false, stops: [] };
     const hooks = {

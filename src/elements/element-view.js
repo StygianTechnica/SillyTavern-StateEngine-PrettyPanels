@@ -9,8 +9,8 @@
 // rather than writing anything itself.
 
 import {
-    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, ELEMENT_TYPE_TOGGLE,
-    elementLabel, bindingRef, rolePublicName, isElementVisible, normalizeToggleOptions,
+    MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON,
+    elementLabel, bindingRef, rolePublicName, isElementVisible, normalizeToggleOptions, normalizeIconOptions,
 } from './element-model.js';
 import { renderCharacterTiles } from './character-tiles.js';
 import { getValue as liveValue, getImage as liveImage } from '../chat/variable-service.js';
@@ -126,6 +126,11 @@ export function renderElementContent(container, stored, entry, theme = null, con
         renderToggle(container, element, context.drawerOpen === true);
         return;
     }
+    container.classList.toggle('pp-kind-icon', element.type === ELEMENT_TYPE_ICON);
+    if (element.type === ELEMENT_TYPE_ICON) {
+        renderIcon(container, element);
+        return;
+    }
 
     container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
@@ -232,6 +237,25 @@ function renderToggle(container, element, open) {
     if (options.color) container.style.setProperty('--pp-toggle-color', options.color);
     else container.style.removeProperty('--pp-toggle-color');
     setTitles(container, 'Drawer toggle - opens and closes the drawer (outside Editing Mode). Set the compact area in Panel Properties.', open ? 'Close' : 'Open');
+}
+
+// An Icon: one Font Awesome icon and nothing else - a bullet point, a
+// divider ornament.
+function renderIcon(container, element) {
+    container.classList.remove('pp-kind-widget', 'pp-kind-free-text', 'pp-kind-shape', 'pp-kind-character', 'pp-kind-image', 'pp-element-unbound', 'pp-element-missing');
+    applyElementStyle(container, {});
+    container.querySelector('.pp-element-label').hidden = true;
+    const options = normalizeIconOptions(element.icon);
+    const icon = document.createElement('i');
+    icon.className = `pp-icon-glyph ${iconClass(options.icon) ?? 'fa-solid fa-circle'}`;
+    const valueEl = container.querySelector('.pp-element-value');
+    valueEl.className = 'pp-element-value';
+    valueEl.replaceChildren(icon);
+    container.dataset.iconAlign = options.align;
+    container.style.setProperty('--pp-icon-size', `${options.size}px`);
+    if (options.color) container.style.setProperty('--pp-icon-color', options.color);
+    else container.style.removeProperty('--pp-icon-color');
+    setTitles(container, `Icon: ${options.icon}`);
 }
 
 // A Character element: its variable's character(s) as cards of its

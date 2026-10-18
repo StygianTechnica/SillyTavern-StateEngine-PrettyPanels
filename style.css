@@ -2990,11 +2990,15 @@ body.pp-editing .pp-panel.pp-template-editor {
     left: 0;
     bottom: 100%;
     margin-bottom: 8px;
+    /* Its own width, not the template's - a card may be portrait-sized. */
+    width: max-content;
+    min-width: 22rem;
+    max-width: min(40rem, calc(100vw - 32px));
+    box-sizing: border-box;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 6px;
-    padding: 4px 8px;
-    white-space: nowrap;
+    padding: 6px 10px;
     font-size: 0.85em;
     pointer-events: auto;
     color: var(--SmartThemeBodyColor);
@@ -3004,11 +3008,14 @@ body.pp-editing .pp-panel.pp-template-editor {
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
-.pp-template-editor-bar > i { color: var(--SmartThemeQuoteColor); }
-.pp-template-editor-label { opacity: 0.75; }
-.pp-template-editor-preview { display: flex; align-items: center; gap: 4px; margin: 0 0 0 6px; }
-.pp-template-editor-preview .text_pole { margin: 0; padding: 1px 4px; max-width: 12em; }
-.pp-template-editor-done { margin: 0; display: flex; align-items: center; gap: 4px; }
+.pp-template-editor-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.pp-template-editor-row > i { color: var(--SmartThemeQuoteColor); }
+.pp-template-editor-label { opacity: 0.75; white-space: nowrap; }
+.pp-template-editor-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.pp-template-editor-preview { display: flex; align-items: center; gap: 4px; margin: 0; flex: 1 1 10em; min-width: 0; }
+.pp-template-editor-preview > span { white-space: nowrap; }
+.pp-template-editor-preview .text_pole { margin: 0; padding: 1px 4px; flex: 1 1 auto; min-width: 8em; max-width: 100%; }
+.pp-template-editor-done { margin: 0 0 0 auto; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 
 /* Properties pane: layout-only controls are hidden in the template editor,
    template-only ones everywhere else. */
@@ -3126,6 +3133,31 @@ body:not(.pp-editing) .pp-element.pp-kind-toggle:hover .pp-toggle-icon {
 /* Template card elements take no clicks - except a toggle. */
 .pp-template-card .pp-element.pp-kind-toggle {
     pointer-events: auto;
+}
+
+/* An Icon: one icon on its own (a bullet point), placed across its box. */
+.pp-element.pp-kind-icon {
+    padding: 0;
+}
+.pp-element.pp-kind-icon > .pp-element-label,
+.pp-element.pp-kind-icon > .pp-element-icon,
+.pp-element.pp-kind-icon > .pp-widget,
+.pp-element.pp-kind-icon > .pp-shape {
+    display: none;
+}
+.pp-element.pp-kind-icon > .pp-element-value {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+.pp-element.pp-kind-icon[data-icon-align="left"] > .pp-element-value { justify-content: flex-start; }
+.pp-element.pp-kind-icon[data-icon-align="right"] > .pp-element-value { justify-content: flex-end; }
+.pp-icon-glyph {
+    font-size: var(--pp-icon-size, 10px);
+    line-height: 1;
+    color: var(--pp-icon-color, var(--ppt-accent, var(--SmartThemeQuoteColor)));
 }
 
 /* Visible by flag: hidden outside Editing Mode; faded with a badge in it. */

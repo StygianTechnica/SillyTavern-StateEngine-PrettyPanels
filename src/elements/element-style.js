@@ -102,6 +102,8 @@ export const ICON_SUGGESTIONS = [
     'location-dot', 'map', 'compass', 'user', 'users', 'skull', 'fire', 'droplet', 'leaf',
     'flask', 'wand-magic-sparkles', 'khanda', 'hand-fist', 'brain', 'eye', 'face-smile',
     'face-angry', 'battery-half', 'box', 'scroll', 'book', 'key', 'lock', 'flag', 'bell',
+    // Bullets (the Icon element).
+    'circle', 'square', 'diamond', 'caret-right', 'angle-right', 'chevron-right', 'arrow-right', 'check', 'minus',
 ];
 
 function clampNumber(value, [min, max]) {

@@ -8,7 +8,7 @@
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
 //                              'gauge-circle' | 'gauge-semicircle' |
 //                              'composite-bar' | 'shape' | 'free-text' |
-//                              'analogClock' | 'character'
+//                              'analogClock' | 'character' | 'toggle' | 'icon'
 //     x, y, width, height,     position/size inside the panel body, px
 //     binding: { name }        a fully-qualified State Engine variable name,
 //            | { role }        or a State Engine role ("scene.title") - shows
@@ -40,6 +40,8 @@
 //                              opacity
 //     toggle,                  Drawer Toggle only: { icon, color, size } - opens
 //                              and closes its panel's drawer (src/panels/drawer.js)
+//     icon,                    Icon only: { icon, color, size, align } - one
+//                              Font Awesome icon, nothing else (a bullet point)
 //     visibleWhen,             { flag, invert } or null: shown only while the
 //                              flag (a boolean variable or role ref) is on -
 //                              or, with invert, off. Pretty Panels never
@@ -83,11 +85,12 @@ export const ELEMENT_TYPE_SHAPE = 'shape';
 export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
 export const ELEMENT_TYPE_CHARACTER = 'character';
 export const ELEMENT_TYPE_TOGGLE = 'toggle';
+export const ELEMENT_TYPE_ICON = 'icon';
 // How a Character element lays out a list of cards.
 export const CHARACTER_TILINGS = [['grid', 'Grid'], ['row', 'Row'], ['column', 'Column']];
 export const CHARACTER_GAP_LIMITS = [0, 64];
 // Types that show no variable.
-const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TOGGLE]);
+const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON]);
 export const MAX_FREE_TEXT_LENGTH = 2000;
 const LEGACY_TYPE_VARIABLE = 'variable';
 
@@ -101,6 +104,7 @@ export const ELEMENT_TYPES = [
     ['analogClock', 'Analog Clock'],
     ['character', 'Object Cards'],
     ['free-text', 'Free Text'],
+    ['icon', 'Icon'],
     ['shape', 'Shape'],
     ['toggle', 'Drawer Toggle'],
 ];
@@ -119,6 +123,7 @@ export const DEFAULT_TYPE_SIZES = {
     'analogClock': [120, 120],
     'character': [240, 160],
     'toggle': [28, 28],
+    'icon': [24, 24],
 };
 
 // A new element's zIndex, per type. Image variable elements (text bound
@@ -136,6 +141,7 @@ export const DEFAULT_Z_INDEX = {
     'analogClock': 3,
     'character': 2,
     'toggle': 5,
+    'icon': 2,
 };
 export const IMAGE_Z_INDEX = 1;
 export const TITLE_Z_INDEX = 4;
@@ -336,6 +342,7 @@ export function normalizeVariableElement(element) {
         clock: object(element.clock),
         ...(type === ELEMENT_TYPE_CHARACTER ? { character: normalizeCharacterOptions(element.character) } : {}),
         ...(type === ELEMENT_TYPE_TOGGLE ? { toggle: normalizeToggleOptions(element.toggle) } : {}),
+        ...(type === ELEMENT_TYPE_ICON ? { icon: normalizeIconOptions(element.icon) } : {}),
         visibleWhen: normalizeVisibleWhen(element.visibleWhen),
     };
 }
@@ -351,6 +358,23 @@ export function normalizeToggleOptions(raw) {
         icon: typeof options.icon === 'string' && options.icon.trim() ? options.icon.trim() : 'chevron-down',
         color: typeof options.color === 'string' ? options.color : '',
         size: Math.min(TOGGLE_SIZE_LIMITS[1], Math.max(TOGGLE_SIZE_LIMITS[0], size)),
+    };
+}
+
+export const ICON_ELEMENT_SIZE_LIMITS = [4, 160];
+export const ICON_ELEMENT_ALIGNMENTS = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
+
+// An Icon's look: a Font Awesome icon (default a small dot - a bullet),
+// its colour (blank: the theme's accent), size (px) and where it sits
+// across its box.
+export function normalizeIconOptions(raw) {
+    const options = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const size = Number.isFinite(options.size) ? Math.round(options.size) : 10;
+    return {
+        icon: typeof options.icon === 'string' && options.icon.trim() ? options.icon.trim() : 'circle',
+        color: typeof options.color === 'string' ? options.color : '',
+        size: Math.min(ICON_ELEMENT_SIZE_LIMITS[1], Math.max(ICON_ELEMENT_SIZE_LIMITS[0], size)),
+        align: ICON_ELEMENT_ALIGNMENTS.some(([id]) => id === options.align) ? options.align : 'center',
     };
 }
 
@@ -410,6 +434,7 @@ export function localName(qualifiedName) {
 export function elementLabel(element, def) {
     if (element.type === ELEMENT_TYPE_SHAPE) return 'Shape';
     if (element.type === ELEMENT_TYPE_FREE_TEXT) return 'Text';
+    if (element.type === ELEMENT_TYPE_ICON) return 'Icon';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
     if (element.binding?.role) return rolePublicName(element.binding.role);

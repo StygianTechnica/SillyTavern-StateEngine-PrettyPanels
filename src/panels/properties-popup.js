@@ -48,7 +48,7 @@ import {
     bindingRef, bindingFromRef, rolePublicName, roleTypeForElement, ELEMENT_TYPES, DEFAULT_TYPE_SIZES, MAX_FREE_TEXT_LENGTH, elementLabel, localName, clampElementGeometry,
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
     CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isObjectCardDefinition,
-    TOGGLE_SIZE_LIMITS, CHAR_REF_PREFIX, roleRef,
+    TOGGLE_SIZE_LIMITS, ICON_ELEMENT_SIZE_LIMITS, ICON_ELEMENT_ALIGNMENTS, ELEMENT_TYPE_ICON, CHAR_REF_PREFIX, roleRef,
 } from '../elements/element-model.js';
 import { normalizeCompact } from './drawer.js';
 import { DISPLAY_MODES, DISPLAY_TRIGGERS, DISPLAY_ANIMATIONS, DISPLAY_LIMITS, normalizeDisplay } from './panel-display.js';
@@ -276,7 +276,10 @@ export class PanelPropertiesPopup {
             this.stopTemplatesWatch = onCharacterTemplatesChange(() => this.#refreshElement());
             // The palette offers the template's object type's fields.
             if (this.templateMode) {
-                this.stopFieldsWatch = onTemplateEditorFields((fields) => {
+                this.stopFieldsWatch = onTemplateEditorFields((fields, type) => {
+                    // The tab is named for the type: "Location", "Item"... or "Object".
+                    const tab = this.el.querySelector('[data-palette="character"]');
+                    if (tab) tab.textContent = type?.label ?? 'Object';
                     this.characterPicker.setFields(fields);
                     this.templateFields = fields;
                     const element = this.#selected();
@@ -624,6 +627,7 @@ export class PanelPropertiesPopup {
         this.#fillWidget(element);
         this.#fillShape(element);
         this.#fillToggle(element);
+        this.#fillIcon(element);
         this.#fillVisible(element);
         this.#fillClock(element);
         this.#fillCharacter(element, def);
@@ -644,6 +648,15 @@ export class PanelPropertiesPopup {
         this.#fillValue('toggle', 'size', element.toggle?.size);
         const icon = this.preview.querySelector('.pp-toggle-icon');
         this.#fillColor('toggle', 'color', element.toggle?.color, icon ? getComputedStyle(icon).color : '#888888');
+    }
+
+    #fillIcon(element) {
+        if (element.type !== ELEMENT_TYPE_ICON) return;
+        this.#fillValue('icon', 'icon', element.icon?.icon ?? '');
+        this.#fillValue('icon', 'size', element.icon?.size);
+        this.#fillValue('icon', 'align', element.icon?.align ?? 'center');
+        const glyph = this.preview.querySelector('.pp-icon-glyph');
+        this.#fillColor('icon', 'color', element.icon?.color, glyph ? getComputedStyle(glyph).color : '#888888');
     }
 
     // Character Cards rows (a Character element): the template list (the
@@ -1164,7 +1177,7 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
-        if (scope === 'widget' || scope === 'shape' || scope === 'clock' || scope === 'toggle') {
+        if (scope === 'widget' || scope === 'shape' || scope === 'clock' || scope === 'toggle' || scope === 'icon') {
             const settings = { ...element[scope] };
             if (value === null || value === '' || value === undefined) delete settings[key];
             else settings[key] = value;
@@ -1195,6 +1208,7 @@ export class PanelPropertiesPopup {
         if (scope === 'shape') return SHAPE_LIMITS[key] ?? null;
         if (scope === 'clock') return CLOCK_LIMITS[key] ?? null;
         if (scope === 'toggle') return key === 'size' ? TOGGLE_SIZE_LIMITS : null;
+        if (scope === 'icon') return key === 'size' ? ICON_ELEMENT_SIZE_LIMITS : null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
@@ -1593,6 +1607,18 @@ export class PanelPropertiesPopup {
                     ${numberRow('Size', 'toggle', 'size', TOGGLE_SIZE_LIMITS)}
                 `, 'pp-subsection')}
                 </div>
+                <div data-for-types="icon">
+                ${sectionMarkup('icon', 'Icon Properties', '', `
+                    <div class="pp-style-row"><span>Icon</span>
+                        <div class="pp-style-controls">
+                            <input type="text" class="text_pole" data-style="icon:icon" placeholder="circle" autocomplete="off" title="A Font Awesome icon name - circle, caret-right, diamond, check..." />
+                        </div>
+                    </div>
+                    ${colorRow('Color', 'icon', 'color')}
+                    ${numberRow('Size', 'icon', 'size', ICON_ELEMENT_SIZE_LIMITS)}
+                    ${selectRow('Align', 'icon', 'align', ICON_ELEMENT_ALIGNMENTS)}
+                `, 'pp-subsection')}
+                </div>
                 <div data-for-types="shape">
                 ${sectionMarkup('shape', 'Shape Properties', '', `
                     ${selectRow('Shape', 'shape', 'kind', SHAPE_KINDS)}
@@ -1801,7 +1827,7 @@ export class PanelPropertiesPopup {
             <div class="pp-palette-toggle" role="tablist">
                 <button type="button" class="menu_button pp-palette-tab" data-palette="variables" role="tab">Variables</button>
                 <button type="button" class="menu_button pp-palette-tab" data-palette="roles" role="tab">Roles</button>
-                <button type="button" class="menu_button pp-palette-tab" data-palette="character" role="tab" data-template-only>Character</button>
+                <button type="button" class="menu_button pp-palette-tab" data-palette="character" role="tab" data-template-only>Object</button>
             </div>
             <div class="pp-properties-picker"></div>
             <div class="pp-properties-role-picker"></div>
@@ -1836,6 +1862,7 @@ export class PanelPropertiesPopup {
         el.querySelector('[data-style="element:icon"]').setAttribute('list', iconList.id);
         el.querySelector('[data-style="widget:icon"]').setAttribute('list', iconList.id);
         el.querySelector('[data-style="toggle:icon"]').setAttribute('list', iconList.id);
+        el.querySelector('[data-style="icon:icon"]').setAttribute('list', iconList.id);
 
         el.querySelector('.pp-properties-shapes').appendChild(this.shapes.el);
         el.querySelector('.pp-properties-picker').appendChild(this.picker.el);
