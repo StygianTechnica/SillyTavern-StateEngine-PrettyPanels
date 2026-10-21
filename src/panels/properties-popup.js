@@ -29,6 +29,7 @@
 // survives closing and reopening the popup. Every change is reported
 // through `hooks`; nothing is written here.
 
+import { listActions, findAction } from '../chat/extension-actions.js';
 import { VariablePicker, ElementPalette, RolePicker, CharacterFieldPicker } from '../ui/variable-picker.js';
 import { listCharacterTemplates, getCharacterTemplate, createCharacterTemplate, onCharacterTemplatesChange, templateFits } from '../library/character-template-library.js';
 import { openTemplateEditor, onTemplateEditorFields } from './template-editor.js';
@@ -49,6 +50,7 @@ import {
     isUnboundType, isImageDefinition, IMAGE_FITS, IMAGE_CLIP_SHAPES, IMAGE_RADIUS_LIMITS, IMAGE_BORDER_WIDTH_LIMITS, IMAGE_DEFAULTS,
     CHARACTER_TILINGS, CHARACTER_GAP_LIMITS, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, isObjectCardDefinition,
     TOGGLE_SIZE_LIMITS, ICON_ELEMENT_SIZE_LIMITS, ICON_ELEMENT_ALIGNMENTS, ELEMENT_TYPE_ICON, CHAR_REF_PREFIX, roleRef,
+    ELEMENT_TYPE_ACTION, ACTION_SIZE_LIMITS, normalizeActionOptions,
 } from '../elements/element-model.js';
 import { normalizeCompact } from './drawer.js';
 import { DISPLAY_MODES, DISPLAY_TRIGGERS, DISPLAY_ANIMATIONS, DISPLAY_LIMITS, normalizeDisplay } from './panel-display.js';
@@ -266,6 +268,8 @@ export class PanelPropertiesPopup {
 
     open() {
         if (!this.el.isConnected) {
+            // Extensions that offer actions may have loaded since.
+            this.shapes.refreshActions();
             document.body.appendChild(this.el);
             document.addEventListener('keydown', this.onKeyDown);
             this.stopCatalogWatch = onCatalogChange((catalog) => this.#applyCatalog(catalog));
@@ -628,6 +632,7 @@ export class PanelPropertiesPopup {
         this.#fillShape(element);
         this.#fillToggle(element);
         this.#fillIcon(element);
+        this.#fillAction(element);
         this.#fillVisible(element);
         this.#fillClock(element);
         this.#fillCharacter(element, def);
@@ -657,6 +662,35 @@ export class PanelPropertiesPopup {
         this.#fillValue('icon', 'align', element.icon?.align ?? 'center');
         const glyph = this.preview.querySelector('.pp-icon-glyph');
         this.#fillColor('icon', 'color', element.icon?.color, glyph ? getComputedStyle(glyph).color : '#888888');
+    }
+
+    // Action Button rows: the actions extensions offer now (one this button
+    // names but nobody offers stays listed, marked missing), icon, label,
+    // show label, colour and size.
+    #fillAction(element) {
+        if (element.type !== ELEMENT_TYPE_ACTION) return;
+        const options = normalizeActionOptions(element.action);
+        const select = this.#styleField('action', 'ref');
+        if (select !== document.activeElement) {
+            const actions = listActions();
+            select.replaceChildren(new Option(actions.length ? 'Choose an action…' : 'No extension offers actions', ''));
+            for (const a of actions) select.add(new Option(`${a.providerName}: ${a.label}${a.scope === 'object' ? ' (on a card)' : ''}`, a.ref));
+            if (options.ref && !actions.some((a) => a.ref === options.ref)) select.add(new Option(`${options.ref} (not available)`, options.ref));
+            select.value = options.ref;
+        }
+        const action = options.ref ? findAction(options.ref) : null;
+        const hint = this.el.querySelector('[data-el="actionHint"]');
+        hint.textContent = !action ? ''
+            : action.scope === 'object' ? `${action.description || action.label}. On a card template it acts on that card's object; on a panel it has nothing to act on.`
+                : action.description || action.label;
+        this.#fillValue('action', 'icon', options.icon);
+        this.#styleField('action', 'icon').placeholder = action?.icon || 'hand-pointer';
+        this.#fillValue('action', 'label', options.label);
+        this.#styleField('action', 'label').placeholder = action?.label || 'Label';
+        this.#fillValue('action', 'showLabel', options.showLabel);
+        this.#fillValue('action', 'size', options.size);
+        const glyph = this.preview.querySelector('.pp-action-glyph');
+        this.#fillColor('action', 'color', options.color, glyph ? getComputedStyle(glyph).color : '#888888');
     }
 
     // Character Cards rows (a Character element): the template list (the
@@ -1177,7 +1211,7 @@ export class PanelPropertiesPopup {
         }
         const element = this.#selected();
         if (!element) return;
-        if (scope === 'widget' || scope === 'shape' || scope === 'clock' || scope === 'toggle' || scope === 'icon') {
+        if (scope === 'widget' || scope === 'shape' || scope === 'clock' || scope === 'toggle' || scope === 'icon' || scope === 'action') {
             const settings = { ...element[scope] };
             if (value === null || value === '' || value === undefined) delete settings[key];
             else settings[key] = value;
@@ -1209,6 +1243,7 @@ export class PanelPropertiesPopup {
         if (scope === 'clock') return CLOCK_LIMITS[key] ?? null;
         if (scope === 'toggle') return key === 'size' ? TOGGLE_SIZE_LIMITS : null;
         if (scope === 'icon') return key === 'size' ? ICON_ELEMENT_SIZE_LIMITS : null;
+        if (scope === 'action') return key === 'size' ? ACTION_SIZE_LIMITS : null;
         if (key === 'fontSize') return FONT_SIZE_LIMITS;
         if (key === 'iconSize') return ICON_SIZE_LIMITS;
         if (key === 'backgroundOpacity') return BACKGROUND_OPACITY_LIMITS;
@@ -1617,6 +1652,29 @@ export class PanelPropertiesPopup {
                     ${colorRow('Color', 'icon', 'color')}
                     ${numberRow('Size', 'icon', 'size', ICON_ELEMENT_SIZE_LIMITS)}
                     ${selectRow('Align', 'icon', 'align', ICON_ELEMENT_ALIGNMENTS)}
+                `, 'pp-subsection')}
+                </div>
+                <div data-for-types="action">
+                ${sectionMarkup('action', 'Action Properties', '', `
+                    <div class="pp-style-row"><span>Action</span>
+                        <div class="pp-style-controls">
+                            <select class="text_pole" data-style="action:ref"></select>
+                        </div>
+                    </div>
+                    <small class="pp-field-info" data-el="actionHint"></small>
+                    <div class="pp-style-row"><span>Icon</span>
+                        <div class="pp-style-controls">
+                            <input type="text" class="text_pole" data-style="action:icon" autocomplete="off" title="A Font Awesome icon name - blank: the action's own" />
+                        </div>
+                    </div>
+                    <div class="pp-style-row"><span>Label</span>
+                        <div class="pp-style-controls">
+                            <input type="text" class="text_pole" data-style="action:label" autocomplete="off" title="The tooltip, and the text beside the icon when shown - blank: the action's own" />
+                        </div>
+                    </div>
+                    ${checkRow('Show the label beside the icon', 'action', 'showLabel')}
+                    ${colorRow('Color', 'action', 'color')}
+                    ${numberRow('Size', 'action', 'size', ACTION_SIZE_LIMITS)}
                 `, 'pp-subsection')}
                 </div>
                 <div data-for-types="shape">

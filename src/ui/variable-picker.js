@@ -6,6 +6,7 @@
 // ElementPalette offers the unbound elements (free text, shapes) the
 // same way.
 
+import { listActions } from '../chat/extension-actions.js';
 import { localName } from '../elements/element-model.js';
 import { SHAPE_KINDS } from '../elements/shapes.js';
 
@@ -67,35 +68,70 @@ const PALETTE_ITEMS = [
     ['icon', 'Icon', 'fa-star', 'Icon - one Font Awesome icon on its own, for bullet points and ornaments'],
     ['analogClock', 'Clock', 'fa-clock', 'Analog clock - drop a datetime variable on it to show that time'],
     ['toggle', 'Toggle', 'fa-chevron-down', 'Drawer toggle - opens and closes the panel\'s drawer (set its compact area in Panel Properties)'],
+    ['action', 'Action', 'fa-hand-pointer', 'Action button - runs something another extension offers; choose which in its properties'],
     ...SHAPE_KINDS.map(([kind, label, icon]) => [kind, label, icon, `${label} shape - shapes sit behind text and other elements`]),
 ];
 
 // The "Add" row above the variable list: drag free text or a shape onto
-// a panel, or click it to add it to this panel.
+// a panel, or click it to add it to this panel. Below it, one row per
+// extension that offers actions (Scenario Builder: open a page, leave the
+// scene, open the map) - each an Action Button ready to drop; refreshActions()
+// re-reads them (the popup calls it as it opens).
 export class ElementPalette {
     // hooks: { onPick(kind), onDrop(kind, clientX, clientY), dropTargetAt(clientX, clientY) }
-    // kind: 'free-text' | 'icon' | 'analogClock' | 'toggle' | a shape kind ('rectangle', 'ellipse', 'line')
+    // kind: 'free-text' | 'icon' | 'analogClock' | 'toggle' | 'action' | 'action:<ref>' |
+    // a shape kind ('rectangle', 'ellipse', 'line')
     constructor(hooks) {
+        this.hooks = hooks;
         this.el = document.createElement('div');
-        this.el.className = 'pp-shape-palette';
-        this.el.innerHTML = '<span class="pp-shape-palette-caption">Add</span>';
-        for (const [kind, label, icon, hint] of PALETTE_ITEMS) {
-            const item = document.createElement('div');
-            item.className = 'pp-picker-item pp-shape-palette-item';
-            item.title = `${hint}. Drag onto a panel, or click to add it here.`;
-            item.innerHTML = `<i class="fa-solid ${icon}"></i><span></span>`;
-            item.querySelector('span').textContent = label;
-            bindPaletteDrag(item, label, {
-                onClick: () => hooks.onPick(kind),
-                onDrop: (x, y) => hooks.onDrop(kind, x, y),
-                // Always added, never dropped "onto" an element.
-                dropTargetAt: (x, y) => {
-                    const target = hooks.dropTargetAt(x, y);
-                    return target ? { panel: target.panel } : null;
-                },
-            });
-            this.el.appendChild(item);
+        this.el.className = 'pp-palette-rows';
+        this.main = document.createElement('div');
+        this.main.className = 'pp-shape-palette';
+        this.main.innerHTML = '<span class="pp-shape-palette-caption">Add</span>';
+        for (const [kind, label, icon, hint] of PALETTE_ITEMS) this.main.appendChild(this.#item(kind, label, icon, hint));
+        this.actions = document.createElement('div');
+        this.el.append(this.main, this.actions);
+        this.refreshActions();
+    }
+
+    refreshActions() {
+        this.actions.replaceChildren();
+        const byProvider = new Map();
+        for (const action of listActions()) {
+            if (!byProvider.has(action.providerName)) byProvider.set(action.providerName, []);
+            byProvider.get(action.providerName).push(action);
         }
+        for (const [name, list] of byProvider) {
+            const row = document.createElement('div');
+            row.className = 'pp-shape-palette pp-action-palette';
+            const caption = document.createElement('span');
+            caption.className = 'pp-shape-palette-caption';
+            caption.textContent = name;
+            row.appendChild(caption);
+            for (const a of list) {
+                const hint = `${a.label}${a.description ? ` - ${a.description}` : ''}${a.scope === 'object' ? ' (put it on a card template: it acts on the card\'s object)' : ''}`;
+                row.appendChild(this.#item(`action:${a.ref}`, a.label, `fa-${a.icon}`, hint));
+            }
+            this.actions.appendChild(row);
+        }
+    }
+
+    #item(kind, label, icon, hint) {
+        const item = document.createElement('div');
+        item.className = 'pp-picker-item pp-shape-palette-item';
+        item.title = `${hint}. Drag onto a panel, or click to add it here.`;
+        item.innerHTML = `<i class="fa-solid ${icon}"></i><span></span>`;
+        item.querySelector('span').textContent = label;
+        bindPaletteDrag(item, label, {
+            onClick: () => this.hooks.onPick(kind),
+            onDrop: (x, y) => this.hooks.onDrop(kind, x, y),
+            // Always added, never dropped "onto" an element.
+            dropTargetAt: (x, y) => {
+                const target = this.hooks.dropTargetAt(x, y);
+                return target ? { panel: target.panel } : null;
+            },
+        });
+        return item;
     }
 }
 

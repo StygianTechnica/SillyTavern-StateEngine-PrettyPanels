@@ -20,6 +20,7 @@
 // state is per chat, per session.
 
 import { getCharacterTemplate } from '../library/character-template-library.js';
+import { runAction } from '../chat/extension-actions.js';
 import { buildCharacterCard, fallbackIcon, withoutPersona } from './character-card.js';
 import { characterEntry, characterFieldValue } from './character-fields.js';
 import { bindingRef, isCharRef, charFieldOfRef, isVariableElement, ELEMENT_TYPE_CHARACTER, normalizeCharacterOptions, drawsOnCard, cardTemplateId } from './element-model.js';
@@ -218,13 +219,18 @@ export function renderCharacterTiles(host, element, ids, list, services) {
             : buildCharacterCard(id, character, services.cardOptions);
         card.dataset.characterId = id;
         if (template) {
-            card.title = character ? `${character.name}\nClick to open the Object Manager.` : `${id}: not an object of this chat or its setting`;
-            // A Drawer Toggle opens or closes the card; anywhere else opens
-            // the Object Manager. In Editing Mode a click selects the
-            // element instead.
+            card.title = character ? `${character.name}\nClick to open it.` : `${id}: not an object of this chat or its setting`;
+            // A Drawer Toggle opens or closes the card; an Action Button runs
+            // its action on the card's object; anywhere else opens the
+            // object. In Editing Mode a click selects the element instead.
             const onClick = (e) => {
                 if (document.body.classList.contains('pp-editing')) return;
                 e.stopPropagation();
+                const action = e.target.closest('.pp-kind-action');
+                if (action) {
+                    void runAction(action.dataset.actionRef, id);
+                    return;
+                }
                 if (drawers && e.target.closest('.pp-kind-toggle')) {
                     toggleDrawer(key);
                     if (isDrawerOpen(key)) showFloating(key, card, template, services.getCharacter(id), services, onClick);

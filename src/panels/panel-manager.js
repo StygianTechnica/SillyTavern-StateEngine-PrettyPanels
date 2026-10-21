@@ -67,7 +67,7 @@ import { showGuides, clearGuides } from '../ui/guides.js';
 import { DEFAULT_PANEL_WIDTH, DEFAULT_PANEL_HEIGHT, pickDesign } from '../storage/design.js';
 import {
     isVariableElement, DEFAULT_ELEMENT_WIDTH, DEFAULT_ELEMENT_HEIGHT, DEFAULT_TYPE_SIZES, ELEMENT_TYPE_SHAPE,
-    ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
+    ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON, ELEMENT_TYPE_ACTION, IMAGE_DEFAULTS, IMAGE_Z_INDEX, isImageDefinition, createVariableElement,
     bindingRef, bindingFromRef, isObjectCardDefinition, ELEMENT_TYPE_CHARACTER, isCharRef,
 } from '../elements/element-model.js';
 import { getCharacterTemplate, templateBindings, onCharacterTemplatesChange } from '../library/character-template-library.js';
@@ -1065,9 +1065,12 @@ export function addPaletteElement(panel, kind, at = null) {
     const y = Math.max(0, Math.min(Math.round(at ? softSnap(at.y, grid) : 0), bodyHeight - height));
     const element = type === ELEMENT_TYPE_FREE_TEXT
         ? createVariableElement({ type, x, y, width, height, content: 'Text', showLabel: false })
-        : type === ELEMENT_TYPE_ANALOG_CLOCK || type === ELEMENT_TYPE_TOGGLE || type === ELEMENT_TYPE_ICON
-            ? createVariableElement({ type, x, y, width, height, showLabel: false })
-            : createVariableElement({ type, x, y, width, height, shape: { kind } });
+        : type === ELEMENT_TYPE_ACTION
+            // 'action:<ref>' comes ready to run that action.
+            ? createVariableElement({ type, x, y, width, height, showLabel: false, action: { ref: kind.startsWith('action:') ? kind.slice('action:'.length) : '' } })
+            : type === ELEMENT_TYPE_ANALOG_CLOCK || type === ELEMENT_TYPE_TOGGLE || type === ELEMENT_TYPE_ICON
+                ? createVariableElement({ type, x, y, width, height, showLabel: false })
+                : createVariableElement({ type, x, y, width, height, shape: { kind } });
     saveWidgets(panel, [...panel.record.widgets, element]);
     panel.selectElement(element.id);
     return element;
@@ -1075,6 +1078,7 @@ export function addPaletteElement(panel, kind, at = null) {
 
 // The element type a palette item adds.
 function paletteType(kind) {
+    if (kind === ELEMENT_TYPE_ACTION || String(kind).startsWith('action:')) return ELEMENT_TYPE_ACTION;
     if (kind === ELEMENT_TYPE_FREE_TEXT || kind === ELEMENT_TYPE_ANALOG_CLOCK || kind === ELEMENT_TYPE_TOGGLE || kind === ELEMENT_TYPE_ICON) return kind;
     return ELEMENT_TYPE_SHAPE;
 }

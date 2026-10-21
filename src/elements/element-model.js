@@ -8,7 +8,8 @@
 //     id, type,                'text' | 'bar-horizontal' | 'bar-vertical' |
 //                              'gauge-circle' | 'gauge-semicircle' |
 //                              'composite-bar' | 'shape' | 'free-text' |
-//                              'analogClock' | 'character' | 'toggle' | 'icon'
+//                              'analogClock' | 'character' | 'toggle' | 'icon' |
+//                              'action'
 //     x, y, width, height,     position/size inside the panel body, px
 //     binding: { name }        a fully-qualified State Engine variable name,
 //            | { role }        or a State Engine role ("scene.title") - shows
@@ -42,6 +43,12 @@
 //                              and closes its panel's drawer (src/panels/drawer.js)
 //     icon,                    Icon only: { icon, color, size, align } - one
 //                              Font Awesome icon, nothing else (a bullet point)
+//     action,                  Action Button only: { ref, icon, label, showLabel,
+//                              color, size } - runs an action another extension
+//                              offers (src/chat/extension-actions.js; ref
+//                              "<provider>:<action>"); on a card template it
+//                              acts on the card's object. Blank icon/label: the
+//                              action's own
 //     visibleWhen,             { flag, invert } or null: shown only while the
 //                              flag (a boolean variable or role ref) is on -
 //                              or, with invert, off. Pretty Panels never
@@ -86,11 +93,12 @@ export const ELEMENT_TYPE_FREE_TEXT = 'free-text';
 export const ELEMENT_TYPE_CHARACTER = 'character';
 export const ELEMENT_TYPE_TOGGLE = 'toggle';
 export const ELEMENT_TYPE_ICON = 'icon';
+export const ELEMENT_TYPE_ACTION = 'action';
 // How a Character element lays out a list of cards.
 export const CHARACTER_TILINGS = [['grid', 'Grid'], ['row', 'Row'], ['column', 'Column']];
 export const CHARACTER_GAP_LIMITS = [0, 64];
 // Types that show no variable.
-const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON]);
+const UNBOUND_TYPES = new Set([ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON, ELEMENT_TYPE_ACTION]);
 export const MAX_FREE_TEXT_LENGTH = 2000;
 const LEGACY_TYPE_VARIABLE = 'variable';
 
@@ -107,6 +115,7 @@ export const ELEMENT_TYPES = [
     ['icon', 'Icon'],
     ['shape', 'Shape'],
     ['toggle', 'Drawer Toggle'],
+    ['action', 'Action Button'],
 ];
 const TYPE_IDS = new Set(ELEMENT_TYPES.map(([id]) => id));
 
@@ -124,6 +133,7 @@ export const DEFAULT_TYPE_SIZES = {
     'character': [240, 160],
     'toggle': [28, 28],
     'icon': [24, 24],
+    'action': [32, 32],
 };
 
 // A new element's zIndex, per type. Image variable elements (text bound
@@ -142,6 +152,7 @@ export const DEFAULT_Z_INDEX = {
     'character': 2,
     'toggle': 5,
     'icon': 2,
+    'action': 5,
 };
 export const IMAGE_Z_INDEX = 1;
 export const TITLE_Z_INDEX = 4;
@@ -343,6 +354,7 @@ export function normalizeVariableElement(element) {
         ...(type === ELEMENT_TYPE_CHARACTER ? { character: normalizeCharacterOptions(element.character) } : {}),
         ...(type === ELEMENT_TYPE_TOGGLE ? { toggle: normalizeToggleOptions(element.toggle) } : {}),
         ...(type === ELEMENT_TYPE_ICON ? { icon: normalizeIconOptions(element.icon) } : {}),
+        ...(type === ELEMENT_TYPE_ACTION ? { action: normalizeActionOptions(element.action) } : {}),
         visibleWhen: normalizeVisibleWhen(element.visibleWhen),
     };
 }
@@ -375,6 +387,25 @@ export function normalizeIconOptions(raw) {
         color: typeof options.color === 'string' ? options.color : '',
         size: Math.min(ICON_ELEMENT_SIZE_LIMITS[1], Math.max(ICON_ELEMENT_SIZE_LIMITS[0], size)),
         align: ICON_ELEMENT_ALIGNMENTS.some(([id]) => id === options.align) ? options.align : 'center',
+    };
+}
+
+export const ACTION_SIZE_LIMITS = [8, 72];
+
+// An Action Button: which action ("<provider>:<action>", '' = none chosen
+// yet), its icon and label (blank: the action's own), whether the label
+// shows beside the icon, its colour (blank: the theme's accent) and size.
+export function normalizeActionOptions(raw) {
+    const options = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const size = Number.isFinite(options.size) ? Math.round(options.size) : 16;
+    const str = (v) => (typeof v === 'string' ? v.trim() : '');
+    return {
+        ref: /^[\w-]+:[\w-]+$/.test(str(options.ref)) ? str(options.ref) : '',
+        icon: str(options.icon),
+        label: str(options.label).slice(0, 60),
+        showLabel: options.showLabel === true,
+        color: typeof options.color === 'string' ? options.color : '',
+        size: Math.min(ACTION_SIZE_LIMITS[1], Math.max(ACTION_SIZE_LIMITS[0], size)),
     };
 }
 
@@ -435,6 +466,7 @@ export function elementLabel(element, def) {
     if (element.type === ELEMENT_TYPE_SHAPE) return 'Shape';
     if (element.type === ELEMENT_TYPE_FREE_TEXT) return 'Text';
     if (element.type === ELEMENT_TYPE_ICON) return 'Icon';
+    if (element.type === ELEMENT_TYPE_ACTION) return 'Action';
     if (element.labelOverride) return element.labelOverride;
     if (def?.label) return def.label;
     if (element.binding?.role) return rolePublicName(element.binding.role);

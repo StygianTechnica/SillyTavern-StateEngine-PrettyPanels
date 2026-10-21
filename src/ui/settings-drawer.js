@@ -12,6 +12,7 @@ import { initLayoutRolesDrawer } from './layout-roles-drawer.js';
 import { initLayoutPanelsDrawer } from './layout-panels-drawer.js';
 import { initAtmosphereDrawer } from './atmosphere-drawer.js';
 import { openThemeEditor } from './theme-editor.js';
+import { opensObjectsInExtension, setOpensObjectsInExtension } from '../chat/extension-actions.js';
 
 // SillyTavern resolves extension templates relative to
 // public/scripts/extensions/, i.e. "third-party/<folder name>". Derived
@@ -51,6 +52,10 @@ export async function addSettingsDrawer() {
     editButtonBox.checked = isEditButtonShown();
     editButtonBox.addEventListener('change', (e) => setEditButtonShown(e.target.checked));
     onEditButtonChange(() => { editButtonBox.checked = isEditButtonShown(); });
+
+    const openInBox = document.getElementById('pp_open_in_extension');
+    openInBox.checked = opensObjectsInExtension();
+    openInBox.addEventListener('change', (e) => setOpensObjectsInExtension(e.target.checked));
 
     const snapBox = document.getElementById('pp_snap_to_grid');
     const sizeInput = document.getElementById('pp_grid_size');

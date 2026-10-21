@@ -10,7 +10,7 @@
 
 import {
     MIN_ELEMENT_WIDTH, MIN_ELEMENT_HEIGHT, ELEMENT_TYPE_TEXT, ELEMENT_TYPE_SHAPE, ELEMENT_TYPE_FREE_TEXT, ELEMENT_TYPE_CHARACTER, ELEMENT_TYPE_TOGGLE, ELEMENT_TYPE_ICON,
-    elementLabel, bindingRef, rolePublicName, isElementVisible, normalizeToggleOptions, normalizeIconOptions,
+    ELEMENT_TYPE_ACTION, elementLabel, bindingRef, rolePublicName, isElementVisible, normalizeToggleOptions, normalizeIconOptions, normalizeActionOptions,
 } from './element-model.js';
 import { renderCharacterTiles } from './character-tiles.js';
 import { getValue as liveValue, getImage as liveImage } from '../chat/variable-service.js';
@@ -20,7 +20,7 @@ import { renderClock, ELEMENT_TYPE_ANALOG_CLOCK } from './clock.js';
 import { formatText, formatPlainText, normalizeFormat, valueKind, applyTextCase } from './text-format.js';
 import { renderCharacters } from './character-card.js';
 import { getCharacter } from '../chat/variable-service.js';
-import { openObjectManager } from '../ui/object-manager.js';
+import { openObject, runAction, findAction } from '../chat/extension-actions.js';
 import { applyElementStyle, iconClass } from './element-style.js';
 import { softSnap } from '../panels/snap.js';
 import { isColor } from '../panels/panel-style.js';
@@ -131,6 +131,12 @@ export function renderElementContent(container, stored, entry, theme = null, con
         renderIcon(container, element);
         return;
     }
+    container.classList.toggle('pp-kind-action', element.type === ELEMENT_TYPE_ACTION);
+    if (element.type === ELEMENT_TYPE_ACTION) {
+        renderAction(container, element);
+        return;
+    }
+    delete container.dataset.actionRef;
 
     container.classList.remove('pp-kind-image');
     container.classList.toggle('pp-kind-shape', element.type === ELEMENT_TYPE_SHAPE);
@@ -205,7 +211,7 @@ export function renderElementContent(container, stored, entry, theme = null, con
             showAliases: options.characterAliases,
             hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
-            onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
+            onOpen: (id) => void openObject(id),
         });
         return;
     }
@@ -258,6 +264,39 @@ function renderIcon(container, element) {
     setTitles(container, `Icon: ${options.icon}`);
 }
 
+// An Action Button: the icon (and, if asked, the label) of an action
+// another extension offers (src/chat/extension-actions.js). The click is
+// handled by the panel (ElementView) or, on a card, by the card - which
+// passes its object along.
+function renderAction(container, element) {
+    container.classList.remove('pp-kind-widget', 'pp-kind-free-text', 'pp-kind-shape', 'pp-kind-character', 'pp-kind-image', 'pp-element-unbound', 'pp-element-missing');
+    applyElementStyle(container, {});
+    container.querySelector('.pp-element-label').hidden = true;
+    const options = normalizeActionOptions(element.action);
+    const action = options.ref ? findAction(options.ref) : null;
+    const label = options.label || action?.label || '';
+    const icon = document.createElement('i');
+    icon.className = `pp-action-glyph ${iconClass(options.icon || action?.icon || 'hand-pointer') ?? 'fa-solid fa-hand-pointer'}`;
+    const valueEl = container.querySelector('.pp-element-value');
+    valueEl.className = 'pp-element-value';
+    valueEl.replaceChildren(icon);
+    if (options.showLabel && label) {
+        const text = document.createElement('span');
+        text.className = 'pp-action-label';
+        text.textContent = label;
+        valueEl.append(text);
+    }
+    container.dataset.actionRef = options.ref;
+    container.classList.toggle('pp-action-missing', !action);
+    container.style.setProperty('--pp-action-size', `${options.size}px`);
+    if (options.color) container.style.setProperty('--pp-action-color', options.color);
+    else container.style.removeProperty('--pp-action-color');
+    const what = !options.ref ? 'No action chosen yet - pick one in its properties'
+        : !action ? `${options.ref} - the extension that offers it is not installed or not ready`
+            : `${label}${action.description ? ` - ${action.description}` : ''}${action.scope === 'object' ? ' (on a card: acts on its object)' : ''}`;
+    setTitles(container, `Action: ${what}`, label);
+}
+
 // A Character element: its variable's character(s) as cards of its
 // template (character-tiles.js), or the built-in card.
 function renderCharacterElement(container, element, entry) {
@@ -277,13 +316,13 @@ function renderCharacterElement(container, element, entry) {
     const { textCase, value: options } = normalizeFormat(element.format);
     renderCharacterTiles(valueEl, element, entry.value, def?.type === 'array' || Array.isArray(entry.value), {
         getCharacter, getValue: liveValue, getImage: liveImage,
-        onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
+        onOpen: (id) => void openObject(id),
         cardOptions: {
             showPresence: options.characterPresence,
             showAliases: options.characterAliases,
             hideUser: options.characterHideUser,
             caseText: (text) => applyTextCase(text, textCase),
-            onOpen: (id) => void openObjectManager({ characterId: id, view: 'chat' }),
+            onOpen: (id) => void openObject(id),
         },
     });
 }
@@ -334,9 +373,15 @@ export class ElementView {
         // A Drawer Toggle opens and closes the panel's drawer - outside
         // Editing Mode (in it, a click selects the element like any other).
         this.el.addEventListener('click', (e) => {
-            if (this.element.type !== ELEMENT_TYPE_TOGGLE || document.body.classList.contains('pp-editing')) return;
-            e.stopPropagation();
-            this.panel.toggleDrawer?.();
+            if (document.body.classList.contains('pp-editing')) return;
+            if (this.element.type === ELEMENT_TYPE_TOGGLE) {
+                e.stopPropagation();
+                this.panel.toggleDrawer?.();
+            } else if (this.element.type === ELEMENT_TYPE_ACTION) {
+                // An Action Button on a panel: no card, so no object.
+                e.stopPropagation();
+                void runAction(normalizeActionOptions(this.element.action).ref);
+            }
         });
         this.update(element);
     }

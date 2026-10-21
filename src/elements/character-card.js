@@ -104,7 +104,7 @@ export function buildCharacterCard(id, character, options) {
         body.append(aliases);
     }
     card.append(body);
-    card.title = `${character.name}${character.aliases.length ? ` (${character.aliases.join(', ')})` : ''}\n${character.id}${character.scope === 'chat' ? ' - this chat only' : ''}\nClick to open the Object Manager.`;
+    card.title = `${character.name}${character.aliases.length ? ` (${character.aliases.join(', ')})` : ''}\n${character.id}${character.scope === 'chat' ? ' - this chat only' : ''}\nClick to open it.`;
     card.addEventListener('click', (e) => {
         // In Editing Mode a click selects the element instead.
         if (document.body.classList.contains('pp-editing')) return;

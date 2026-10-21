@@ -3135,6 +3135,48 @@ body:not(.pp-editing) .pp-element.pp-kind-toggle:hover .pp-toggle-icon {
     pointer-events: auto;
 }
 
+/* An Action Button: an extension's action - an icon, and its label if asked. */
+.pp-element.pp-kind-action {
+    padding: 0;
+}
+.pp-element.pp-kind-action > .pp-element-label,
+.pp-element.pp-kind-action > .pp-element-icon,
+.pp-element.pp-kind-action > .pp-widget,
+.pp-element.pp-kind-action > .pp-shape {
+    display: none;
+}
+.pp-element.pp-kind-action > .pp-element-value {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.pp-action-glyph {
+    font-size: var(--pp-action-size, 16px);
+    line-height: 1;
+    color: var(--pp-action-color, var(--ppt-accent, var(--SmartThemeQuoteColor)));
+}
+.pp-action-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pp-element.pp-action-missing .pp-action-glyph {
+    opacity: 0.4;
+}
+body:not(.pp-editing) .pp-element.pp-kind-action {
+    cursor: pointer;
+}
+body:not(.pp-editing) .pp-element.pp-kind-action:hover .pp-action-glyph {
+    filter: brightness(1.25);
+}
+/* Template card elements take no clicks - except a toggle and an action. */
+.pp-template-card .pp-element.pp-kind-action {
+    pointer-events: auto;
+}
+
 /* An Icon: one icon on its own (a bullet point), placed across its box. */
 .pp-element.pp-kind-icon {
     padding: 0;
